@@ -1,5 +1,12 @@
-import React, { useMemo } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  FlatList,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { useNavigation } from "@react-navigation/native";
 
 import ScreenTemplate from "./ScreenTemplate";
@@ -12,6 +19,7 @@ const DUMMY_MARKETS = [
     volume: "$2.7k Vol.",
     price: 58.83,
     change: 13.8,
+    sport: "Football",
   },
   {
     id: "chiefs-jets",
@@ -19,6 +27,7 @@ const DUMMY_MARKETS = [
     volume: "$1.9k Vol.",
     price: 42.15,
     change: -4.2,
+    sport: "Football",
   },
   {
     id: "lakers-celtics",
@@ -26,6 +35,7 @@ const DUMMY_MARKETS = [
     volume: "$3.4k Vol.",
     price: 65.22,
     change: 7.5,
+    sport: "Basketball",
   },
   {
     id: "ufc-289-main",
@@ -33,69 +43,73 @@ const DUMMY_MARKETS = [
     volume: "$4.1k Vol.",
     price: 71.4,
     change: 9.1,
+    sport: "MMA",
   },
 ];
 
-const PORTFOLIO_PERFORMANCE = [12540, 12610, 12780, 12420, 12950, 13120, 13385];
+function toNumber(value, fallback = 0) {
+  if (typeof value === "number") {
+    return value;
+  }
 
-function formatCurrency(value) {
-  return `$${value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  if (value === null || value === undefined || value === "") {
+    return fallback;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function PortfolioHeader({ summary }) {
-  const { value, change, changePct } = summary;
-  const positive = change >= 0;
-  const sign = positive ? "+" : "−";
+function SportFilterBar({ sports, selectedSport, onSelectSport }) {
+  if (!sports || sports.length === 0) {
+    return null;
+  }
 
   return (
-    <View style={styles.portfolioCard}>
-      <View style={styles.portfolioHeaderRow}>
-        <View>
-          <Text style={styles.portfolioLabel}>Portfolio value</Text>
-          <Text style={styles.portfolioValue}>{formatCurrency(value)}</Text>
-        </View>
-        <View
-          style={[
-            styles.portfolioChip,
-            positive
-              ? styles.portfolioChipPositive
-              : styles.portfolioChipNegative,
+    <View style={styles.filterContainer}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterScrollContent}
+      >
+        <Pressable
+          style={({ pressed }) => [
+            styles.filterChip,
+            selectedSport === "all" && styles.filterChipActive,
+            pressed && styles.filterChipPressed,
           ]}
+          onPress={() => onSelectSport("all")}
         >
           <Text
             style={[
-              styles.portfolioChipText,
-              positive
-                ? styles.portfolioChipTextPositive
-                : styles.portfolioChipTextNegative,
+              styles.filterChipText,
+              selectedSport === "all" && styles.filterChipTextActive,
             ]}
           >
-            {sign}
-            {formatCurrency(Math.abs(change))} ({sign}
-            {Math.abs(changePct).toFixed(1)}%)
+            All Sports
           </Text>
-        </View>
-      </View>
-      <View style={styles.portfolioSubtitleRow}>
-        <Text style={styles.portfolioSubtitle}>
-          Performance past 7 sessions
-        </Text>
-        <Text style={styles.portfolioDateLabel}>Updated just now</Text>
-      </View>
-      <View style={styles.portfolioChart}>
-        <View style={styles.portfolioChartLine} />
-        <View
-          style={[
-            styles.portfolioChartDot,
-            positive
-              ? styles.portfolioChartDotPositive
-              : styles.portfolioChartDotNegative,
-          ]}
-        />
-      </View>
+        </Pressable>
+        {sports.map((sport) => (
+          <Pressable
+            key={sport}
+            style={({ pressed }) => [
+              styles.filterChip,
+              selectedSport === sport && styles.filterChipActive,
+              pressed && styles.filterChipPressed,
+            ]}
+            onPress={() => onSelectSport(sport)}
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                selectedSport === sport && styles.filterChipTextActive,
+              ]}
+            >
+              {sport}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
     </View>
   );
 }
@@ -133,19 +147,132 @@ function MarketCard({ title, volume, price, change, onPress }) {
 }
 
 export default function HomeScreen() {
-  const data = useMemo(() => DUMMY_MARKETS, []);
-  const portfolioSummary = useMemo(() => {
-    const first = PORTFOLIO_PERFORMANCE[0];
-    const latest = PORTFOLIO_PERFORMANCE[PORTFOLIO_PERFORMANCE.length - 1];
-    const change = latest - first;
-    const changePct = (change / first) * 100;
+  const [remoteMarkets, setRemoteMarkets] = useState([]);
+  const [sportFilters, setSportFilters] = useState(null);
+  const [selectedSport, setSelectedSport] = useState("all");
 
-    return {
-      value: latest,
-      change,
-      changePct,
-    };
-  }, []);
+  const marketsEndpoint = process.env.EXPO_PUBLIC_MARKETS_URL ?? "";
+  const filtersEndpoint = process.env.EXPO_PUBLIC_API_URL
+    ? `${process.env.EXPO_PUBLIC_API_URL}/api/sports/filters`
+    : "http://localhost:5001/api/sports/filters";
+  // Fetch markets
+  useEffect(() => {
+    if (!marketsEndpoint) {
+      return;
+    }
+
+    const controller = new AbortController();
+    async function fetchMarkets() {
+      try {
+        const response = await fetch(marketsEndpoint, {
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Markets request failed: ${response.status}`);
+        }
+
+        const payload = await response.json();
+        const markets = Array.isArray(payload) ? payload : payload?.markets;
+        if (Array.isArray(markets)) {
+          setRemoteMarkets(markets);
+        } else {
+          console.warn("Unexpected markets payload shape", payload);
+          setRemoteMarkets([]);
+        }
+      } catch (error) {
+        if (error.name !== "AbortError") {
+          console.error("Unable to fetch markets", error);
+        }
+      }
+    }
+
+    fetchMarkets();
+
+    return () => controller.abort();
+  }, [marketsEndpoint]);
+
+  // Fetch sport filters
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function fetchSportFilters() {
+      try {
+        const response = await fetch(filtersEndpoint, {
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Filters request failed: ${response.status}`);
+        }
+
+        const data = await response.json();
+        setSportFilters(data);
+      } catch (error) {
+        if (error.name !== "AbortError") {
+          console.error("Unable to fetch sport filters", error);
+        }
+      }
+    }
+
+    fetchSportFilters();
+
+    return () => controller.abort();
+  }, [filtersEndpoint]);
+
+  // Normalize markets data
+  const normalizedMarkets = useMemo(() => {
+    if (remoteMarkets.length === 0) {
+      return DUMMY_MARKETS;
+    }
+
+    return remoteMarkets.map((market, index) => ({
+      id: market.id ?? market.ticker ?? `remote-${index}`,
+      title: market.title ?? market.name ?? "Market",
+      volume:
+        typeof market.volume === "number"
+          ? `$${market.volume.toLocaleString()} Vol.`
+          : market.volume ?? "",
+      price: toNumber(
+        market.last_price ??
+          market.price ??
+          market.lastPrice ??
+          market.last_trade_price ??
+          market.lastTradePrice
+      ),
+      change: toNumber(
+        market.change_pct ??
+          market.changePct ??
+          market.change ??
+          market.percent_change ??
+          market.percentChange
+      ),
+      sport: market.sport ?? market.category ?? "Other",
+    }));
+  }, [remoteMarkets]);
+
+  // Extract available sports from filters
+  const availableSports = useMemo(() => {
+    if (!sportFilters?.filters_by_sports) {
+      return [];
+    }
+
+    return Object.keys(sportFilters.filters_by_sports).filter(
+      (sport) => sport !== "All sports"
+    );
+  }, [sportFilters]);
+
+  // Filter markets by selected sport
+  const filteredMarkets = useMemo(() => {
+    if (selectedSport === "all") {
+      return normalizedMarkets;
+    }
+
+    return normalizedMarkets.filter(
+      (market) => market.sport?.toLowerCase() === selectedSport.toLowerCase()
+    );
+  }, [normalizedMarkets, selectedSport]);
+
   const navigation = useNavigation();
 
   return (
@@ -154,7 +281,7 @@ export default function HomeScreen() {
       description="Watch the markets you follow at a glance."
     >
       <FlatList
-        data={data}
+        data={filteredMarkets}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <MarketCard
@@ -166,8 +293,16 @@ export default function HomeScreen() {
             }
           />
         )}
-        ListHeaderComponent={<PortfolioHeader summary={portfolioSummary} />}
-        ListHeaderComponentStyle={styles.listHeader}
+        ListHeaderComponent={
+          <View style={styles.listHeader}>
+            <SportFilterBar
+              sports={availableSports}
+              selectedSport={selectedSport}
+              onSelectSport={setSelectedSport}
+            />
+          </View>
+        }
+        stickyHeaderIndices={availableSports.length > 0 ? [0] : undefined}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       />
@@ -176,102 +311,44 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  listHeader: {
-    marginBottom: Spacing.xxl,
-  },
   listContent: {
     paddingBottom: Spacing.xxl,
   },
-  portfolioCard: {
+  listHeader: {
+    marginBottom: Spacing.lg,
+    backgroundColor: Colors.background,
+    paddingBottom: Spacing.md,
+  },
+  filterContainer: {
+    marginBottom: Spacing.sm,
+    backgroundColor: Colors.background,
+  },
+  filterScrollContent: {
+    paddingRight: Spacing.lg,
+  },
+  filterChip: {
     backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.xl,
+    borderRadius: BorderRadius.full,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    marginRight: Spacing.sm,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  portfolioHeaderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: Spacing.lg,
+  filterChipActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
   },
-  portfolioLabel: {
+  filterChipPressed: {
+    opacity: 0.7,
+  },
+  filterChipText: {
     ...Typography.label,
-    marginBottom: Spacing.xs,
-  },
-  portfolioValue: {
-    ...Typography.heroPrice,
-    fontSize: 32,
-  },
-  portfolioChip: {
-    borderRadius: BorderRadius.md,
-    paddingVertical: Spacing.xs,
-    paddingHorizontal: Spacing.lg,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  portfolioChipPositive: {
-    backgroundColor: "rgba(47, 221, 127, 0.14)",
-  },
-  portfolioChipNegative: {
-    backgroundColor: "rgba(242, 107, 107, 0.14)",
-  },
-  portfolioChipText: {
-    fontSize: 13,
+    color: Colors.textSecondary,
     fontWeight: "600",
   },
-  portfolioChipTextPositive: {
-    color: Colors.primary,
-  },
-  portfolioChipTextNegative: {
-    color: Colors.danger,
-  },
-  portfolioSubtitleRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: Spacing.md,
-  },
-  portfolioSubtitle: {
-    ...Typography.body,
-    color: Colors.textSecondary,
-  },
-  portfolioDateLabel: {
-    ...Typography.caption,
-    color: Colors.textTertiary,
-  },
-  portfolioChart: {
-    height: 140,
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    justifyContent: "flex-end",
-    paddingBottom: Spacing.lg,
-    paddingHorizontal: Spacing.md,
-  },
-  portfolioChartLine: {
-    height: 90,
-    borderRadius: 90,
-    backgroundColor: Colors.primary,
-    marginHorizontal: -80,
-    opacity: 0.22,
-  },
-  portfolioChartDot: {
-    position: "absolute",
-    right: Spacing.lg,
-    bottom: Spacing.xl,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 2,
-    borderColor: Colors.background,
-  },
-  portfolioChartDotPositive: {
-    backgroundColor: Colors.primary,
-  },
-  portfolioChartDotNegative: {
-    backgroundColor: Colors.danger,
+  filterChipTextActive: {
+    color: Colors.background,
   },
   card: {
     backgroundColor: Colors.surface,
