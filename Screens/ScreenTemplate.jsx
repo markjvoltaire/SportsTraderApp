@@ -5,7 +5,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Colors, Spacing, Typography } from "../constants/theme";
 
-export default function ScreenTemplate({ title, description, children }) {
+export default function ScreenTemplate({
+  title,
+  description,
+  header,
+  children,
+}) {
   const isFocused = useIsFocused();
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(12)).current;
@@ -51,8 +56,16 @@ export default function ScreenTemplate({ title, description, children }) {
           },
         ]}
       >
-        <Text style={styles.title}>{title}</Text>
-        {description ? <Text style={styles.body}>{description}</Text> : null}
+        {header ? (
+          <View style={styles.headerContainer}>{header}</View>
+        ) : (
+          <>
+            {title ? <Text style={styles.title}>{title}</Text> : null}
+            {description ? (
+              <Text style={styles.body}>{description}</Text>
+            ) : null}
+          </>
+        )}
         {children ? <View style={styles.children}>{children}</View> : null}
       </Animated.View>
     </SafeAreaView>
@@ -79,6 +92,9 @@ const styles = StyleSheet.create({
   },
   content: {
     alignSelf: "stretch",
+  },
+  headerContainer: {
+    marginBottom: Spacing.lg,
   },
   children: {
     marginTop: Spacing.sm,

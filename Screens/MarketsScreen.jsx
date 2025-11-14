@@ -6,8 +6,7 @@ export default function MarketsScreen() {
   return (
     <ScreenTemplate
       title="Markets"
-      description="Check live odds and trade positions."
+      description="Browse all available markets."
     />
   );
 }
-

@@ -26,11 +26,12 @@ function HomeStackScreen() {
 export default function App() {
   return (
     <NavigationContainer>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <Tab.Navigator
         screenOptions={{
           headerShown: false,
           tabBarStyle: styles.tabBar,
+          tabBarItemStyle: styles.tabItem,
           tabBarActiveTintColor: Colors.primary,
           tabBarInactiveTintColor: Colors.textTertiary,
           tabBarLabelStyle: styles.tabLabel,
@@ -46,12 +47,27 @@ export default function App() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: Colors.background,
-    borderTopColor: Colors.border,
-    borderTopWidth: 1,
-    height: 68,
+    position: "absolute",
+    left: Spacing.xl,
+    right: Spacing.xl,
+    bottom: Spacing.xl,
+    height: 72,
+    borderRadius: 32,
+    backgroundColor: Colors.glassSurface,
+    borderTopWidth: 0,
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
+    paddingHorizontal: Spacing.md,
     paddingBottom: Spacing.sm,
     paddingTop: Spacing.sm,
+    shadowColor: "rgba(30, 41, 59, 0.18)",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.2,
+    shadowRadius: 24,
+    elevation: 18,
+  },
+  tabItem: {
+    marginHorizontal: Spacing.xs,
   },
   tabLabel: {
     ...Typography.caption,

@@ -6,8 +6,7 @@ export default function PortfolioScreen() {
   return (
     <ScreenTemplate
       title="Portfolio"
-      description="Track your holdings and performance."
+      description="Review your positions and performance."
     />
   );
 }
-

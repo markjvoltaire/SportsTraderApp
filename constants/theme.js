@@ -6,71 +6,84 @@
 // Color Palette
 export const Colors = {
   // Primary surfaces
-  background: '#070b11',      // Soft midnight
-  surface: '#11161f',         // Card backgrounds
-  surfaceAlt: '#161c27',      // Elevated surfaces kept muted
+  background: "#FFFFFF",
+  surface: "#F9F7FF",
+  surfaceAlt: "#F2EDFF",
 
   // Accent
-  primary: '#2fdd7f',         // Fresh success green
-  primaryDark: '#25c46d',
-  primaryLight: '#4be894',
-  danger: '#f26b6b',
-  warning: '#ffb347',
+  primary: "#8B5CF6",
+  primaryDark: "#6D28D9",
+  primaryLight: "#A78BFA",
+  primaryGradient: ["#8B5CF6", "#A78BFA"],
+  accentGradient: ["#7C3AED", "#C4B5FD"],
+  success: "#34D399",
+  successMuted: "rgba(52, 211, 153, 0.16)",
+  danger: "#F87171",
+  dangerMuted: "rgba(248, 113, 113, 0.16)",
+  warning: "#FBBF24",
 
   // Text
-  textPrimary: '#f5f7fb',
-  textSecondary: '#c7ced9',
-  textTertiary: '#8a94a6',
-  textMuted: '#657084',
+  textPrimary: "#111827",
+  textSecondary: "#374151",
+  textTertiary: "#6B7280",
+  textMuted: "#9CA3AF",
 
-  // Borders
-  border: 'rgba(255,255,255,0.05)',
-  borderFocus: 'rgba(255,255,255,0.12)',
+  // Glass & borders
+  glassSurface: "rgba(255, 255, 255, 0.68)",
+  glassBorder: "rgba(139, 92, 246, 0.18)",
+  border: "rgba(17, 24, 39, 0.06)",
+  borderFocus: "rgba(139, 92, 246, 0.4)",
 };
 
 // Typography Scale
 export const Typography = {
   heroPrice: {
-    fontSize: 40,
-    fontWeight: '700',
+    fontSize: 56,
+    fontWeight: "700",
     color: Colors.textPrimary,
+    letterSpacing: 0.4,
   },
   pageTitle: {
-    fontSize: 32,
-    fontWeight: '700',
+    fontSize: 40,
+    fontWeight: "700",
     color: Colors.textPrimary,
+    letterSpacing: 0.2,
   },
   sectionTitle: {
-    fontSize: 24,
-    fontWeight: '600',
+    fontSize: 32,
+    fontWeight: "600",
     color: Colors.textPrimary,
+    letterSpacing: 0.15,
   },
   cardTitle: {
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: 22,
+    fontWeight: "600",
     color: Colors.textPrimary,
   },
   bodyLarge: {
-    fontSize: 16,
-    fontWeight: '400',
-    color: Colors.textPrimary,
+    fontSize: 18,
+    fontWeight: "500",
+    color: Colors.textSecondary,
+    lineHeight: 26,
   },
   body: {
-    fontSize: 14,
-    fontWeight: '400',
+    fontSize: 16,
+    fontWeight: "400",
     color: Colors.textSecondary,
+    lineHeight: 24,
   },
   caption: {
-    fontSize: 12,
-    fontWeight: '400',
+    fontSize: 13,
+    fontWeight: "400",
     color: Colors.textTertiary,
+    lineHeight: 18,
   },
   label: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
     color: Colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    letterSpacing: 1.6,
   },
 };
 
@@ -80,42 +93,49 @@ export const Spacing = {
   sm: 8,
   md: 12,
   lg: 16,
-  xl: 20,
-  xxl: 24,
-  xxxl: 32,
+  xl: 24,
+  xxl: 32,
+  xxxl: 48,
 };
 
 // Border Radius
 export const BorderRadius = {
-  sm: 8,   // Small chips
-  md: 12,  // Buttons
-  lg: 18,  // Cards
-  xl: 24,  // Large containers, CTAs
+  sm: 12, // Small chips
+  md: 16, // Buttons
+  lg: 20, // Cards
+  xl: 28, // Large containers, CTAs
   round: 999, // Fully rounded
 };
 
 // Shadow/Glow Effects
 export const Shadows = {
   primaryGlow: {
-    shadowColor: 'transparent',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    elevation: 0,
+    shadowColor: "rgba(139, 92, 246, 0.45)",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.45,
+    shadowRadius: 28,
+    elevation: 24,
   },
   cardShadow: {
-    shadowColor: 'transparent',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    elevation: 0,
+    shadowColor: "rgba(15, 23, 42, 0.1)",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    elevation: 18,
   },
   subtleShadow: {
-    shadowColor: 'transparent',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    elevation: 0,
+    shadowColor: "rgba(15, 23, 42, 0.08)",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  glassShadow: {
+    shadowColor: "rgba(124, 58, 237, 0.35)",
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 0.25,
+    shadowRadius: 32,
+    elevation: 26,
   },
 };
 
@@ -123,11 +143,11 @@ export const Shadows = {
 export const Animations = {
   fadeIn: {
     duration: 280,
-    easing: 'ease-out',
+    easing: "ease-out",
   },
   fadeOut: {
     duration: 180,
-    easing: 'ease-in',
+    easing: "ease-in",
   },
   buttonPress: {
     duration: 100,
@@ -140,7 +160,7 @@ export const Animations = {
   },
   chartLoad: {
     duration: 600,
-    easing: 'ease-out',
+    easing: "ease-out",
     delay: 200,
   },
 };
@@ -156,31 +176,47 @@ export const CommonStyles = {
   // Primary CTA Button
   primaryButton: {
     backgroundColor: Colors.primary,
-    borderRadius: BorderRadius.xl,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    alignItems: 'center',
+    borderRadius: BorderRadius.round,
+    paddingVertical: 16,
+    paddingHorizontal: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: Shadows.primaryGlow.shadowColor,
+    shadowOffset: Shadows.primaryGlow.shadowOffset,
+    shadowOpacity: Shadows.primaryGlow.shadowOpacity,
+    shadowRadius: Shadows.primaryGlow.shadowRadius,
+    elevation: Shadows.primaryGlow.elevation,
   },
   primaryButtonText: {
-    color: '#041010',
+    color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
+    letterSpacing: 0.5,
   },
-  
+
   // Secondary Button
   secondaryButton: {
-    backgroundColor: Colors.surfaceAlt,
-    borderRadius: BorderRadius.md,
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.round,
+    paddingVertical: 14,
+    paddingHorizontal: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Colors.border,
+    shadowColor: Shadows.subtleShadow.shadowColor,
+    shadowOffset: Shadows.subtleShadow.shadowOffset,
+    shadowOpacity: Shadows.subtleShadow.shadowOpacity,
+    shadowRadius: Shadows.subtleShadow.shadowRadius,
+    elevation: Shadows.subtleShadow.elevation,
   },
   secondaryButtonText: {
-    color: Colors.textPrimary,
-    fontSize: 14,
-    fontWeight: '600',
+    color: Colors.primary,
+    fontSize: 16,
+    fontWeight: "600",
+    letterSpacing: 0.3,
   },
-  
+
   // Card Container
   card: {
     backgroundColor: Colors.surface,
@@ -188,18 +224,42 @@ export const CommonStyles = {
     padding: Spacing.xl,
     borderWidth: 1,
     borderColor: Colors.border,
+    shadowColor: Shadows.cardShadow.shadowColor,
+    shadowOffset: Shadows.cardShadow.shadowOffset,
+    shadowOpacity: Shadows.cardShadow.shadowOpacity,
+    shadowRadius: Shadows.cardShadow.shadowRadius,
+    elevation: Shadows.cardShadow.elevation,
   },
-  
+  glassCard: {
+    backgroundColor: Colors.glassSurface,
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.xl,
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
+    shadowColor: Shadows.glassShadow.shadowColor,
+    shadowOffset: Shadows.glassShadow.shadowOffset,
+    shadowOpacity: Shadows.glassShadow.shadowOpacity,
+    shadowRadius: Shadows.glassShadow.shadowRadius,
+    elevation: Shadows.glassShadow.elevation,
+    overflow: "hidden",
+    backdropFilter: "blur(20px)",
+  },
+
   // Icon Button
   iconButton: {
     width: TouchTargets.recommended,
     height: TouchTargets.recommended,
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.surfaceAlt,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: BorderRadius.round,
+    backgroundColor: Colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1,
     borderColor: Colors.border,
+    shadowColor: Shadows.subtleShadow.shadowColor,
+    shadowOffset: Shadows.subtleShadow.shadowOffset,
+    shadowOpacity: Shadows.subtleShadow.shadowOpacity,
+    shadowRadius: Shadows.subtleShadow.shadowRadius,
+    elevation: Shadows.subtleShadow.elevation,
   },
 };
 
@@ -214,4 +274,3 @@ export default {
   TouchTargets,
   CommonStyles,
 };
-
