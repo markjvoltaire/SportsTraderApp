@@ -79,7 +79,8 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
     backgroundColor: Colors.background,
     paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.xxl,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.xxl,
   },
   title: {
     ...Typography.sectionTitle,
@@ -97,6 +98,6 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   children: {
-    marginTop: Spacing.sm,
+    marginTop: 0,
   },
 });

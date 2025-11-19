@@ -3,24 +3,27 @@
  * Centralized theme constants following fintech UX best practices
  */
 
-// Color Palette
+// Color Palette - Modern Sports Prediction Market
 export const Colors = {
   // Primary surfaces
   background: "#FFFFFF",
-  surface: "#F9F7FF",
-  surfaceAlt: "#F2EDFF",
+  surface: "#F5F5F5",
+  surfaceAlt: "#F9F9F9",
 
-  // Accent
-  primary: "#8B5CF6",
+  // Accent - Vibrant sports betting colors
+  primary: "#8B5CF6", // Vibrant purple/blue
   primaryDark: "#6D28D9",
   primaryLight: "#A78BFA",
   primaryGradient: ["#8B5CF6", "#A78BFA"],
   accentGradient: ["#7C3AED", "#C4B5FD"],
+  accentTeal: "#06B6D4", // Teal for second team
+  accentCyan: "#14B8A6",
   success: "#34D399",
   successMuted: "rgba(52, 211, 153, 0.16)",
   danger: "#F87171",
   dangerMuted: "rgba(248, 113, 113, 0.16)",
   warning: "#FBBF24",
+  flame: "#F59E0B", // Orange for flame/bets indicator
 
   // Text
   textPrimary: "#111827",
