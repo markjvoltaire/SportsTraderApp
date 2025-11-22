@@ -1,284 +1,144 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import {
-  ActivityIndicator,
-  Animated,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import React, { useEffect, useState, useMemo } from "react";
+import { FlatList, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-
 import ScreenTemplate from "./ScreenTemplate";
-import { Colors, Spacing, Typography } from "../constants/theme";
-import SearchBar from "../src/components/ui/SearchBar";
-import FilterCarousel from "../src/components/ui/FilterCarousel";
-import ErrorBanner from "../src/components/ui/ErrorBanner";
-import MarketSection from "../src/components/market/MarketSection";
-import { filterGames } from "../src/utils/marketUtils";
-import { formatTimestamp } from "../src/utils/formatters";
-
-const FEATURED_SPORTS = [
-  { sport: "nfl", label: "NFL Spotlight", chipLabel: "Football" },
-  { sport: "nba", label: "NBA Primetime", chipLabel: "Basketball" },
-  { sport: "nhl", label: "NHL Ice Picks", chipLabel: "Hockey" },
-];
-
-const FILTER_OPTIONS = [
-  { key: "trending", label: "Trending" },
-  ...FEATURED_SPORTS.map(({ sport, chipLabel }) => ({
-    key: sport,
-    label: chipLabel,
-  })),
-];
-
-const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL ??
-  process.env.API_BASE_URL ??
-  "http://localhost:3000";
-
-const WARNING_SURFACE = "rgba(251, 191, 36, 0.16)";
-const WARNING_TEXT = "#B45309";
+import GameCard from "../src/components/market/GameCard";
+import { Colors, Spacing } from "../constants/theme";
+import { SafeAreaView } from "react-native-safe-area-context";
+import API_BASE_URL from "../src/config/api";
 
 export default function HomeScreen() {
-  const [marketData, setMarketData] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState(null);
-  const [selectedFilter, setSelectedFilter] = useState("trending");
-  const sectionsOpacity = useRef(new Animated.Value(0)).current;
-  const animatingRef = useRef(false);
-  const [searchQuery, setSearchQuery] = useState("");
   const navigation = useNavigation();
-  const normalizedQuery = useMemo(
-    () => searchQuery.trim().toLowerCase(),
-    [searchQuery]
-  );
+  const [markets, setMarkets] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const fetchFeaturedMarkets = useCallback(async () => {
-    setError(null);
-    setLoading(true);
-    try {
-      const responses = await Promise.all(
-        FEATURED_SPORTS.map(async ({ sport }) => {
-          const res = await fetch(`${API_BASE_URL}/api/markets?sport=${sport}`);
-          if (!res.ok) {
-            throw new Error(
-              `Unable to load ${sport.toUpperCase()} markets (${res.status})`
-            );
-          }
-          const payload = await res.json();
+  useEffect(() => {
+    const fetchMarkets = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const response = await fetch(`${API_BASE_URL}/api/markets/685150`);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
 
-          return {
-            sport,
-            games: payload.games ?? [],
-            issues: payload.issues ?? [],
-            generatedAt: payload.generated_at,
-          };
-        })
-      );
+        setMarkets(data);
+      } catch (err) {
+        setError(err.message);
+        console.error("Error fetching markets:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-      const nextData = responses.reduce((acc, { sport, ...rest }) => {
-        acc[sport] = rest;
-        return acc;
-      }, {});
-
-      setMarketData(nextData);
-    } catch (err) {
-      setError(err.message ?? "Unable to load markets right now.");
-      setMarketData({});
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+    fetchMarkets();
   }, []);
 
-  useEffect(() => {
-    fetchFeaturedMarkets();
-  }, [fetchFeaturedMarkets]);
+  const handleGamePress = (market) => {
+    navigation.navigate("MarketDetail", { game: market });
+  };
 
-  useEffect(() => {
-    if (loading) {
-      sectionsOpacity.setValue(0);
-      return;
-    }
-    Animated.timing(sectionsOpacity, {
-      toValue: 1,
-      duration: 280,
-      useNativeDriver: true,
-    }).start();
-  }, [loading, sectionsOpacity]);
-
-  const topMarkets = useMemo(() => {
-    if (selectedFilter !== "trending") {
-      return [];
-    }
-    const combined = FEATURED_SPORTS.flatMap(
-      ({ sport }) => marketData?.[sport]?.games ?? []
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centerContainer}>
+          <Text style={styles.loadingText}>Loading market...</Text>
+        </View>
+      </SafeAreaView>
     );
-    const filtered = filterGames(combined, normalizedQuery);
-    return filtered
-      .slice()
-      .sort((a, b) => (b?.volume?.day ?? 0) - (a?.volume?.day ?? 0))
-      .slice(0, 5);
-  }, [marketData, selectedFilter, normalizedQuery]);
+  }
 
-  const sections = useMemo(() => {
-    const perSport = FEATURED_SPORTS.map((section) => ({
-      ...section,
-      games: filterGames(
-        marketData?.[section.sport]?.games ?? [],
-        normalizedQuery
-      ).slice(0, 3),
-      generatedAt: marketData?.[section.sport]?.generatedAt,
-      issues: marketData?.[section.sport]?.issues ?? [],
-    }));
-    if (selectedFilter === "trending" && topMarkets.length > 0) {
-      return [
-        {
-          sport: "all-top",
-          label: "Trending by volume",
-          games: topMarkets,
-          generatedAt: new Date().toISOString(),
-          issues: [],
-        },
-        ...perSport,
-      ];
-    }
-    return perSport;
-  }, [marketData, selectedFilter, topMarkets, normalizedQuery]);
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centerContainer}>
+          <Text style={styles.errorText}>Error: {error}</Text>
+          <Text style={styles.errorDetails}>
+            Make sure the API server is running on {API_BASE_URL}
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
-  const visibleSections = useMemo(() => {
-    if (selectedFilter === "trending") {
-      return sections;
-    }
-    return sections.filter((section) => section.sport === selectedFilter);
-  }, [sections, selectedFilter]);
+  if (!markets) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centerContainer}>
+          <Text style={styles.emptyText}>No market data available</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
-  const handleRefresh = useCallback(() => {
-    setRefreshing(true);
-    fetchFeaturedMarkets();
-  }, [fetchFeaturedMarkets]);
-
-  const handleSelectFilter = useCallback(
-    (key) => {
-      if (key === selectedFilter || animatingRef.current) {
-        return;
-      }
-      animatingRef.current = true;
-      Animated.timing(sectionsOpacity, {
-        toValue: 0,
-        duration: 150,
-        useNativeDriver: true,
-      }).start(() => {
-        setSelectedFilter(key);
-        Animated.timing(sectionsOpacity, {
-          toValue: 1,
-          duration: 220,
-          useNativeDriver: true,
-        }).start(() => {
-          animatingRef.current = false;
-        });
-      });
-    },
-    [sectionsOpacity, selectedFilter]
-  );
-
-  const sectionsWithMatches = useMemo(
-    () => visibleSections.filter((section) => section.games.length > 0),
-    [visibleSections]
-  );
-  const hasMatches = sectionsWithMatches.length > 0;
+  // Handle both single market object and array of markets
+  const marketData = Array.isArray(markets) ? markets : [markets];
 
   return (
-    <ScreenTemplate>
-      {loading ? (
-        <View style={styles.loadingState}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.loadingCopy}>Fetching live markets…</Text>
-        </View>
-      ) : (
-        <>
-          <SearchBar
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search teams, matchups, questions"
+    <SafeAreaView style={styles.container}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {marketData.map((market) => (
+          <GameCard
+            key={market.id || market.market_id}
+            market={market}
+            onPress={() => handleGamePress(market)}
           />
-
-          <FilterCarousel
-            options={FILTER_OPTIONS}
-            selectedKey={selectedFilter}
-            onSelect={handleSelectFilter}
-          />
-
-          <ScrollView
-            style={styles.scrollArea}
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            refreshControl={
-              <RefreshControl
-                tintColor={Colors.primary}
-                refreshing={refreshing}
-                onRefresh={handleRefresh}
-              />
-            }
-          >
-            <ErrorBanner message={error} />
-
-            <Animated.View style={{ opacity: sectionsOpacity }}>
-              {!hasMatches ? (
-                <Text style={styles.emptyState}>
-                  {normalizedQuery
-                    ? `No markets match "${searchQuery}".`
-                    : "No markets available for this sport right now."}
-                </Text>
-              ) : null}
-
-              {sectionsWithMatches.map((section) => (
-                <MarketSection
-                  key={section.sport}
-                  section={section}
-                  onGamePress={(game) =>
-                    navigation.navigate("MarketDetail", { game })
-                  }
-                />
-              ))}
-            </Animated.View>
-          </ScrollView>
-        </>
-      )}
-    </ScreenTemplate>
+        ))}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollArea: {
-    alignSelf: "stretch",
-    marginBottom: Spacing.xxl * 2,
+  container: {
+    flex: 1,
+    width: "100%",
+  },
+  scrollView: {
+    flex: 1,
+    width: "100%",
   },
   scrollContent: {
-    paddingBottom: 120,
+    paddingBottom: Spacing.xl,
   },
-  loadingState: {
-    alignItems: "center",
+  centerContainer: {
+    flex: 1,
     justifyContent: "center",
+    alignItems: "center",
     paddingVertical: Spacing.xxl,
+    minHeight: 200,
   },
-  loadingCopy: {
-    ...Typography.body,
+  loadingText: {
+    fontSize: 16,
     color: Colors.textSecondary,
-    marginTop: Spacing.sm,
+    marginBottom: Spacing.sm,
   },
-  emptyState: {
-    ...Typography.caption,
+  errorText: {
+    fontSize: 16,
+    color: "#EF4444",
+    marginBottom: Spacing.sm,
+    fontWeight: "600",
+  },
+  errorDetails: {
+    fontSize: 14,
     color: Colors.textTertiary,
+    textAlign: "center",
+    paddingHorizontal: Spacing.lg,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: Colors.textSecondary,
+    marginBottom: Spacing.sm,
+  },
+  emptySubtext: {
+    fontSize: 12,
+    color: Colors.textTertiary,
+    marginTop: Spacing.xs,
   },
 });

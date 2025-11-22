@@ -2,40 +2,21 @@ import React, { useMemo, useState, useEffect, useCallback } from "react";
 import {
   View,
   StyleSheet,
-  Dimensions,
   Text,
-  ScrollView,
   ActivityIndicator,
+  useWindowDimensions,
 } from "react-native";
-import {
-  Gesture,
-  GestureDetector,
-  GestureHandlerRootView,
-} from "react-native-gesture-handler";
-import {
-  Canvas,
-  Path,
-  Skia,
-  Circle,
-  Line,
-  Group,
-  LinearGradient,
-  vec,
-} from "@shopify/react-native-skia";
+import { CartesianChart, Line } from "victory-native";
+import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  useDerivedValue,
   useAnimatedReaction,
   withTiming,
   runOnJS,
+  useDerivedValue,
 } from "react-native-reanimated";
-import { getSmoothPath, scaleDataToCanvas } from "../../utils/chartUtils";
 import { Colors, Spacing, Typography } from "../../../constants/theme";
-
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const CHART_HEIGHT = 280;
-const CHART_PADDING = { top: 20, bottom: 50, left: 50, right: 20 };
 
 /**
  * Generate mock price history data for demonstration
@@ -71,242 +52,293 @@ export default function PriceHistoryChart({
   noPrice,
   yesLabel = "YES",
   noLabel = "NO",
+  yesColor,
+  noColor,
   yesTokenId,
   noTokenId,
-  width = SCREEN_WIDTH - Spacing.xl * 2,
-  height = CHART_HEIGHT,
+  yesHistory: providedYesHistory,
+  noHistory: providedNoHistory,
+  loading: providedLoading,
+  width,
+  height,
 }) {
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  // Use full screen dimensions if not provided
+  const chartWidth = width || screenWidth;
+  const chartHeight = height || screenHeight - 100; // Account for safe area and padding
   const [yesData, setYesData] = useState([]);
   const [noData, setNoData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [cursorX, setCursorX] = useState(-1);
-  const [selectedPoint, setSelectedPoint] = useState(null);
-  const scrollX = useSharedValue(0);
-  const chartWidthValue = width * 2; // 2x width for scrolling (static value)
-  const chartWidth = useSharedValue(chartWidthValue);
 
-  // Generate or fetch price history
+  // Gesture handling for cursor
+  const cursorX = useSharedValue(-1); // -1 means hidden
+  const cursorVisible = useSharedValue(false);
+  const cursorYesY = useSharedValue(0);
+  const cursorNoY = useSharedValue(0);
+  const [cursorData, setCursorData] = useState({
+    x: -1,
+    yesValue: null,
+    noValue: null,
+    yesY: 0,
+    noY: 0,
+  });
+
+  // Chart padding (matching Victory chart padding)
+  const chartPadding = { top: 20, bottom: 50, left: 50, right: 20 };
+  const plotWidth = chartWidth - chartPadding.left - chartPadding.right;
+  const plotHeight = chartHeight - chartPadding.top - chartPadding.bottom;
+
+  // Use provided history data or generate mock data as fallback
   useEffect(() => {
     const loadData = async () => {
-      setLoading(true);
+      // If loading state is provided from parent, use it
+      if (providedLoading !== undefined) {
+        setLoading(providedLoading);
+      } else {
+        setLoading(true);
+      }
+
       try {
-        // Generate mock data based on current prices
-        // In production, fetch from API using yesTokenId and noTokenId
-        const yesHistory = generateMockPriceHistory(yesPrice || 0.5, 30, 0.025);
-        const noHistory = generateMockPriceHistory(noPrice || 0.5, 30, 0.025);
+        // Use provided history data if available
+        if (providedYesHistory && providedNoHistory && providedYesHistory.length > 0 && providedNoHistory.length > 0) {
+          setYesData(providedYesHistory);
+          setNoData(providedNoHistory);
+          if (providedLoading === undefined) {
+            setLoading(false);
+          }
+        } else if (providedLoading === false && (!providedYesHistory || !providedNoHistory || providedYesHistory.length === 0 || providedNoHistory.length === 0)) {
+          // No data available and not loading - use fallback mock data
+          const yesHistory = generateMockPriceHistory(yesPrice || 0.5, 30, 0.025);
+          const noHistory = generateMockPriceHistory(noPrice || 0.5, 30, 0.025);
 
-        // Ensure they sum to 1 (market constraint)
-        yesHistory.forEach((point, i) => {
-          const sum = point.y + noHistory[i].y;
-          point.y = point.y / sum;
-          noHistory[i].y = noHistory[i].y / sum;
-        });
+          // Ensure they sum to 1 (market constraint)
+          yesHistory.forEach((point, i) => {
+            const sum = point.y + noHistory[i].y;
+            point.y = point.y / sum;
+            noHistory[i].y = noHistory[i].y / sum;
+          });
 
-        setYesData(yesHistory);
-        setNoData(noHistory);
+          setYesData(yesHistory);
+          setNoData(noHistory);
+          setLoading(false);
+        } else if (providedLoading === false) {
+          // Loading finished but no data provided - keep existing data or use fallback
+          setLoading(false);
+        }
       } catch (error) {
         console.error("Error loading price history:", error);
-      } finally {
         setLoading(false);
       }
     };
 
-    if (yesPrice !== undefined || noPrice !== undefined) {
-      loadData();
+    loadData();
+  }, [providedYesHistory, providedNoHistory, providedLoading, yesPrice, noPrice]);
+
+  // Interpolate values at a given x position (timestamp) for both lines
+  const getValuesAtX = useCallback((xPos) => {
+    if (!yesData || !noData || yesData.length === 0 || noData.length === 0) {
+      return { yesValue: null, noValue: null, yesY: 0, noY: 0 };
     }
-  }, [yesPrice, noPrice, yesTokenId, noTokenId]);
 
-  // Scale data to canvas coordinates
-  const scaledYesData = useMemo(() => {
-    if (!yesData || yesData.length === 0) return [];
-    return scaleDataToCanvas(yesData, chartWidthValue, height, CHART_PADDING);
-  }, [yesData, chartWidthValue, height]);
+    // Convert screen x to data x (timestamp)
+    const minX = Math.min(
+      yesData[0]?.x || 0,
+      noData[0]?.x || 0
+    );
+    const maxX = Math.max(
+      yesData[yesData.length - 1]?.x || 0,
+      noData[noData.length - 1]?.x || 0
+    );
 
-  const scaledNoData = useMemo(() => {
-    if (!noData || noData.length === 0) return [];
-    return scaleDataToCanvas(noData, chartWidthValue, height, CHART_PADDING);
-  }, [noData, chartWidthValue, height]);
+    // Clamp x position to plot area
+    const clampedX = Math.max(0, Math.min(plotWidth, xPos));
+    const normalizedX = clampedX / plotWidth;
+    const dataX = minX + (maxX - minX) * normalizedX;
 
-  // Generate smooth paths
-  const yesPath = useMemo(() => {
-    if (scaledYesData.length === 0) return null;
-    const pathData = getSmoothPath(scaledYesData);
-    if (!pathData) return null;
-    const path = Skia.Path.Make();
-    pathData.commands.forEach((cmd) => {
-      switch (cmd.type) {
-        case "moveTo":
-          path.moveTo(cmd.x, cmd.y);
-          break;
-        case "lineTo":
-          path.lineTo(cmd.x, cmd.y);
-          break;
-        case "cubicTo":
-          path.cubicTo(cmd.cpx1, cmd.cpy1, cmd.cpx2, cmd.cpy2, cmd.x, cmd.y);
-          break;
-      }
-    });
-    return path;
-  }, [scaledYesData]);
+    // Find closest data points and interpolate
+    const findValue = (data) => {
+      if (!data || data.length === 0) return null;
 
-  const noPath = useMemo(() => {
-    if (scaledNoData.length === 0) return null;
-    const pathData = getSmoothPath(scaledNoData);
-    if (!pathData) return null;
-    const path = Skia.Path.Make();
-    pathData.commands.forEach((cmd) => {
-      switch (cmd.type) {
-        case "moveTo":
-          path.moveTo(cmd.x, cmd.y);
-          break;
-        case "lineTo":
-          path.lineTo(cmd.x, cmd.y);
-          break;
-        case "cubicTo":
-          path.cubicTo(cmd.cpx1, cmd.cpy1, cmd.cpx2, cmd.cpy2, cmd.x, cmd.y);
-          break;
-      }
-    });
-    return path;
-  }, [scaledNoData]);
+      // Find the two points that bracket the x value
+      for (let i = 0; i < data.length - 1; i++) {
+        const point1 = data[i];
+        const point2 = data[i + 1];
 
-  // Find point at cursor X
-  const findPointAtX = useCallback(
-    (x) => {
-      if (scaledYesData.length === 0) return null;
-
-      let closestPoint = null;
-      let minDistance = Infinity;
-
-      scaledYesData.forEach((point, index) => {
-        const distance = Math.abs(point.x - x);
-        if (distance < minDistance) {
-          minDistance = distance;
-          closestPoint = {
-            yes: {
-              ...point,
-              originalY: yesData[index].y,
-              date: yesData[index].date,
-            },
-            no: scaledNoData[index]
-              ? {
-                  ...scaledNoData[index],
-                  originalY: noData[index].y,
-                  date: noData[index].date,
-                }
-              : null,
+        if (point1.x <= dataX && dataX <= point2.x) {
+          // Linear interpolation
+          const t = (dataX - point1.x) / (point2.x - point1.x);
+          return {
+            value: point1.y + (point2.y - point1.y) * t,
+            y: point1.y + (point2.y - point1.y) * t,
           };
         }
-      });
-
-      return closestPoint;
-    },
-    [scaledYesData, scaledNoData, yesData, noData]
-  );
-
-  const cursorXShared = useSharedValue(-1);
-  const cursorYesYShared = useSharedValue(-1);
-  const cursorNoYShared = useSharedValue(-1);
-  const [cursorDisplay, setCursorDisplay] = useState({
-    x: -1,
-    yesY: -1,
-    noY: -1,
-    opacity: 0,
-  });
-
-  // Handle finding closest points (runs on JS thread)
-  const findClosestPoints = useCallback(
-    (x, yesYShared, noYShared) => {
-      if (scaledYesData.length === 0 || scaledNoData.length === 0) {
-        yesYShared.value = -1;
-        noYShared.value = -1;
-        return;
       }
 
-      let closestYes = scaledYesData[0];
-      let minDistYes = Math.abs(closestYes?.x - x || Infinity);
-      scaledYesData.forEach((p) => {
-        const dist = Math.abs(p.x - x);
-        if (dist < minDistYes) {
-          minDistYes = dist;
-          closestYes = p;
-        }
-      });
+      // If outside range, return closest endpoint
+      if (dataX <= data[0].x) {
+        return { value: data[0].y, y: data[0].y };
+      }
+      if (dataX >= data[data.length - 1].x) {
+        return { value: data[data.length - 1].y, y: data[data.length - 1].y };
+      }
 
-      let closestNo = scaledNoData[0];
-      let minDistNo = Math.abs(closestNo?.x - x || Infinity);
-      scaledNoData.forEach((p) => {
-        const dist = Math.abs(p.x - x);
-        if (dist < minDistNo) {
-          minDistNo = dist;
-          closestNo = p;
-        }
-      });
+      return null;
+    };
 
-      yesYShared.value = closestYes?.y || -1;
-      noYShared.value = closestNo?.y || -1;
-    },
-    [scaledYesData, scaledNoData]
-  );
+    const yesResult = findValue(yesData);
+    const noResult = findValue(noData);
 
-  // Handle touch/press on chart
-  const gesture = useMemo(
+    if (!yesResult || !noResult) {
+      return { yesValue: null, noValue: null, yesY: 0, noY: 0 };
+    }
+
+    // Convert y value (0-1) to chart y coordinate
+    const yMin = 0;
+    const yMax = 1;
+    const yesY = chartPadding.top + plotHeight - (yesResult.y - yMin) / (yMax - yMin) * plotHeight;
+    const noY = chartPadding.top + plotHeight - (noResult.y - yMin) / (yMax - yMin) * plotHeight;
+
+    return {
+      yesValue: yesResult.value,
+      noValue: noResult.value,
+      yesY,
+      noY,
+    };
+  }, [yesData, noData, plotWidth, plotHeight, chartPadding]);
+
+  // Gesture handler - Pan for dragging cursor
+  const panGesture = useMemo(
     () =>
-      Gesture.Tap().onEnd((event) => {
-        "worklet";
-        const x = event.x + scrollX.value;
-        if (
-          x >= CHART_PADDING.left &&
-          x <= chartWidthValue - CHART_PADDING.right
-        ) {
-          cursorXShared.value = x;
-          runOnJS(findClosestPoints)(x, cursorYesYShared, cursorNoYShared);
-          runOnJS(setCursorX)(x);
-          const point = runOnJS(findPointAtX)(x);
-          runOnJS(setSelectedPoint)(point);
-        }
-      }),
-    [
-      scrollX,
-      findPointAtX,
-      findClosestPoints,
-      chartWidth,
-      cursorXShared,
-      cursorYesYShared,
-      cursorNoYShared,
-    ]
+      Gesture.Pan()
+        .onStart((event) => {
+          "worklet";
+          const touchX = event.x - chartPadding.left;
+          if (touchX >= 0 && touchX <= plotWidth) {
+            cursorX.value = touchX;
+            cursorVisible.value = true;
+          }
+        })
+        .onUpdate((event) => {
+          "worklet";
+          const touchX = event.x - chartPadding.left;
+          if (touchX >= 0 && touchX <= plotWidth) {
+            cursorX.value = touchX;
+          } else if (touchX < 0) {
+            cursorX.value = 0;
+          } else {
+            cursorX.value = plotWidth;
+          }
+        }),
+    [chartPadding.left, plotWidth]
   );
 
-  // Update cursor display position (accounting for scroll) using animated reaction
+  // Tap gesture to hide cursor when tapping outside
+  const tapGesture = useMemo(
+    () =>
+      Gesture.Tap()
+        .onEnd((event) => {
+          "worklet";
+          const touchX = event.x - chartPadding.left;
+          // Hide cursor if tapping outside the chart area
+          if (touchX < 0 || touchX > plotWidth) {
+            cursorVisible.value = false;
+            cursorX.value = -1;
+          }
+        }),
+    [chartPadding.left, plotWidth]
+  );
+
+  // Combined gesture - pan for dragging, tap for hiding
+  const combinedGesture = useMemo(
+    () => Gesture.Simultaneous(panGesture, tapGesture),
+    [panGesture, tapGesture]
+  );
+
+  // Function to update cursor data (called from worklet)
+  const updateCursorData = useCallback((xPos) => {
+    if (xPos < 0) {
+      cursorYesY.value = 0;
+      cursorNoY.value = 0;
+      setCursorData({
+        x: -1,
+        yesValue: null,
+        noValue: null,
+        yesY: 0,
+        noY: 0,
+      });
+      return;
+    }
+
+    const values = getValuesAtX(xPos);
+    cursorYesY.value = values.yesY;
+    cursorNoY.value = values.noY;
+    setCursorData({
+      x: xPos + chartPadding.left,
+      yesValue: values.yesValue,
+      noValue: values.noValue,
+      yesY: values.yesY,
+      noY: values.noY,
+    });
+  }, [getValuesAtX, chartPadding.left, cursorYesY, cursorNoY]);
+
+  // Update cursor data when cursor position changes
   useAnimatedReaction(
     () => ({
-      cursorX: cursorXShared.value,
-      scrollX: scrollX.value,
-      yesY: cursorYesYShared.value,
-      noY: cursorNoYShared.value,
+      x: cursorX.value,
+      visible: cursorVisible.value,
     }),
-    ({ cursorX, scrollX: scrollVal, yesY, noY }) => {
+    ({ x, visible }) => {
       "worklet";
-      if (cursorX < 0) {
-        runOnJS(setCursorDisplay)({ x: -1, yesY: -1, noY: -1, opacity: 0 });
-        return;
+      if (visible && x >= 0) {
+        runOnJS(updateCursorData)(x);
+      } else {
+        runOnJS(updateCursorData)(-1);
       }
-
-      const displayX = cursorX - scrollVal;
-      const opacity = displayX >= 0 && displayX <= width ? 1 : 0;
-      runOnJS(setCursorDisplay)({
-        x: displayX,
-        yesY,
-        noY,
-        opacity,
-      });
-    },
-    [width]
+    }
   );
+
+  // Combined data for Victory Native chart
+  // Victory Native expects data in format: [{ x: value, yesPrice: value, noPrice: value }]
+  const chartData = useMemo(() => {
+    if (!yesData || !noData || yesData.length === 0 || noData.length === 0) {
+      return [];
+    }
+
+    // Combine yes and no data by matching timestamps
+    const combined = [];
+    const maxLength = Math.max(yesData.length, noData.length);
+
+    for (let i = 0; i < maxLength; i++) {
+      const yesPoint = yesData[i];
+      const noPoint = noData[i];
+
+      if (yesPoint && noPoint) {
+        combined.push({
+          x: yesPoint.x, // Timestamp
+          yesPrice: yesPoint.y,
+          noPrice: noPoint.y,
+        });
+      } else if (yesPoint) {
+        combined.push({
+          x: yesPoint.x,
+          yesPrice: yesPoint.y,
+          noPrice: 1 - yesPoint.y,
+        });
+      } else if (noPoint) {
+        combined.push({
+          x: noPoint.x,
+          yesPrice: 1 - noPoint.y,
+          noPrice: noPoint.y,
+        });
+      }
+    }
+
+    return combined;
+  }, [yesData, noData]);
 
   if (loading) {
     return (
-      <View style={[styles.container, { width, height }]}>
+      <View style={[styles.container, { width: chartWidth, height: chartHeight }]}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
           <Text style={styles.loadingText}>Loading price history...</Text>
@@ -317,187 +349,165 @@ export default function PriceHistoryChart({
 
   if (yesData.length === 0 && noData.length === 0) {
     return (
-      <View style={[styles.container, { width, height }]}>
+      <View style={[styles.container, { width: chartWidth, height: chartHeight }]}>
         <Text style={styles.emptyText}>No price history available</Text>
       </View>
     );
   }
 
-  // Get Y-axis labels (0% to 100%)
-  const yLabels = [0, 0.25, 0.5, 0.75, 1];
-  const chartAreaHeight = height - CHART_PADDING.top - CHART_PADDING.bottom;
+  // Use team colors if provided, otherwise fallback to default colors
+  const yesLineColor = yesColor || Colors.success;
+  const noLineColor = noColor || Colors.danger;
+
+  // Animated cursor styles
+  const cursorAnimatedStyle = useAnimatedStyle(() => {
+    const visible = cursorVisible.value && cursorX.value >= 0;
+    return {
+      opacity: visible ? 1 : 0,
+      left: cursorX.value + chartPadding.left,
+    };
+  }, []);
+
+  const yesDotAnimatedStyle = useAnimatedStyle(() => {
+    const visible = cursorVisible.value && cursorX.value >= 0;
+    return {
+      opacity: visible ? 1 : 0,
+      top: cursorYesY.value,
+      left: cursorX.value + chartPadding.left - 6,
+    };
+  }, []);
+
+  const noDotAnimatedStyle = useAnimatedStyle(() => {
+    const visible = cursorVisible.value && cursorX.value >= 0;
+    return {
+      opacity: visible ? 1 : 0,
+      top: cursorNoY.value,
+      left: cursorX.value + chartPadding.left - 6,
+    };
+  }, []);
+
+  const tooltipAnimatedStyle = useAnimatedStyle(() => {
+    const visible = cursorVisible.value && cursorX.value >= 0;
+    return {
+      opacity: visible ? 1 : 0,
+      left: Math.max(
+        chartPadding.left,
+        Math.min(
+          chartWidth - chartPadding.right - 100,
+          (cursorX.value + chartPadding.left) - 50
+        )
+      ),
+    };
+  }, [chartWidth]);
 
   return (
-    <View style={[styles.container, { width, height }]}>
+    <GestureHandlerRootView style={[styles.container, { width: chartWidth, height: chartHeight }]}>
       {/* Legend */}
       <View style={styles.legend}>
         <View style={styles.legendItem}>
           <View
-            style={[styles.legendDot, { backgroundColor: Colors.success }]}
+            style={[styles.legendDot, { backgroundColor: yesLineColor }]}
           />
           <Text style={styles.legendText}>{yesLabel}</Text>
         </View>
         <View style={styles.legendItem}>
           <View
-            style={[styles.legendDot, { backgroundColor: Colors.danger }]}
+            style={[styles.legendDot, { backgroundColor: noLineColor }]}
           />
           <Text style={styles.legendText}>{noLabel}</Text>
         </View>
       </View>
 
-      {/* Scrollable Chart */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={true}
-        scrollEventThrottle={16}
-        onScroll={(event) => {
-          scrollX.value = event.nativeEvent.contentOffset.x;
-        }}
-        contentContainerStyle={{
-          width: chartWidthValue,
-          height: height - 40,
-        }}
-        style={styles.scrollView}
-      >
-        <GestureHandlerRootView
-          style={{ width: chartWidthValue, height: height - 40 }}
-        >
-          <GestureDetector gesture={gesture}>
-            <View style={{ width: chartWidthValue, height: height - 40 }}>
-              {/* Y-axis labels */}
-              <View style={styles.yAxisLabels}>
-                {yLabels.map((label, index) => {
-                  const y = CHART_PADDING.top + (1 - label) * chartAreaHeight;
-                  return (
-                    <Text
-                      key={`label-${index}`}
-                      style={[styles.yAxisLabel, { top: y - 6 }]}
-                    >
-                      {(label * 100).toFixed(0)}%
-                    </Text>
-                  );
-                })}
-              </View>
-
-              <Canvas style={{ width: chartWidthValue, height: height - 40 }}>
-                {/* Y-axis labels - rendered outside canvas */}
-
-                {/* Grid lines */}
-                <Group>
-                  {yLabels.map((label, index) => {
-                    const y = CHART_PADDING.top + (1 - label) * chartAreaHeight;
-                    return (
-                      <Line
-                        key={`grid-${index}`}
-                        p1={vec(CHART_PADDING.left, y)}
-                        p2={vec(chartWidthValue - CHART_PADDING.right, y)}
-                        color={Colors.border}
-                        strokeWidth={0.5}
-                      />
-                    );
-                  })}
-                </Group>
-
-                {/* YES path */}
-                {yesPath && (
-                  <Group>
-                    <LinearGradient
-                      start={vec(0, CHART_PADDING.top)}
-                      end={vec(0, height - CHART_PADDING.bottom)}
-                      colors={[Colors.success + "40", Colors.success + "00"]}
-                    />
-                    <Path
-                      path={yesPath}
-                      style="stroke"
-                      strokeWidth={2.5}
-                      color={Colors.success}
-                    />
-                  </Group>
-                )}
-
-                {/* NO path */}
-                {noPath && (
-                  <Group>
-                    <LinearGradient
-                      start={vec(0, CHART_PADDING.top)}
-                      end={vec(0, height - CHART_PADDING.bottom)}
-                      colors={[Colors.danger + "40", Colors.danger + "00"]}
-                    />
-                    <Path
-                      path={noPath}
-                      style="stroke"
-                      strokeWidth={2.5}
-                      color={Colors.danger}
-                    />
-                  </Group>
-                )}
-
-                {/* Cursor line */}
-                {cursorDisplay.x >= 0 && cursorDisplay.opacity > 0 && (
-                  <Group>
-                    <Line
-                      p1={vec(cursorDisplay.x, CHART_PADDING.top)}
-                      p2={vec(cursorDisplay.x, height - CHART_PADDING.bottom)}
-                      color={Colors.textPrimary}
-                      strokeWidth={1}
-                      opacity={0.5}
-                    />
-                    {cursorDisplay.yesY >= 0 && (
-                      <Circle
-                        cx={cursorDisplay.x}
-                        cy={cursorDisplay.yesY}
-                        r={5}
-                        color={Colors.success}
-                      />
-                    )}
-                    {cursorDisplay.noY >= 0 && (
-                      <Circle
-                        cx={cursorDisplay.x}
-                        cy={cursorDisplay.noY}
-                        r={5}
-                        color={Colors.danger}
-                      />
-                    )}
-                  </Group>
-                )}
-              </Canvas>
-            </View>
-          </GestureDetector>
-        </GestureHandlerRootView>
-      </ScrollView>
-
-      {/* Cursor info display */}
-      {selectedPoint && (
-        <View style={styles.cursorInfo}>
-          <Text style={styles.cursorDate}>
-            {selectedPoint.yes.date.toLocaleDateString(undefined, {
-              month: "short",
-              day: "numeric",
-              hour: "numeric",
-              minute: "2-digit",
-            })}
-          </Text>
-          <View style={styles.cursorPrices}>
-            <Text style={[styles.cursorPrice, { color: Colors.success }]}>
-              {yesLabel}: {formatPercent(selectedPoint.yes.originalY)}
-            </Text>
-            <Text style={[styles.cursorPrice, { color: Colors.danger }]}>
-              {noLabel}:{" "}
-              {formatPercent(
-                selectedPoint.no?.originalY || 1 - selectedPoint.yes.originalY
+      {/* Chart Container with Gesture Handler */}
+      <GestureDetector gesture={combinedGesture}>
+        <View style={styles.chartWrapper}>
+          {/* Victory Native Chart */}
+          {chartData.length > 0 && (
+            <CartesianChart
+              data={chartData}
+              xKey="x"
+              yKeys={["yesPrice", "noPrice"]}
+              domainPadding={{ top: 20, bottom: 20 }}
+              padding={chartPadding}
+            >
+              {({ points }) => (
+                <>
+                  <Line
+                    points={points.yesPrice}
+                    color={yesLineColor}
+                    strokeWidth={3}
+                    curveType="natural"
+                  />
+                  <Line
+                    points={points.noPrice}
+                    color={noLineColor}
+                    strokeWidth={3}
+                    curveType="natural"
+                  />
+                </>
               )}
-            </Text>
-          </View>
-        </View>
-      )}
+            </CartesianChart>
+          )}
 
-      {/* Instructions */}
-      {!selectedPoint && (
-        <Text style={styles.hint}>
-          Tap on the chart to see price at a point
-        </Text>
-      )}
-    </View>
+          {/* Cursor Overlay */}
+          <Animated.View
+            style={[
+              styles.cursorLine,
+              cursorAnimatedStyle,
+              { height: plotHeight, top: chartPadding.top },
+            ]}
+            pointerEvents="none"
+          />
+
+          {/* YES Team Dot */}
+          <Animated.View
+            style={[
+              styles.cursorDot,
+              {
+                backgroundColor: yesLineColor,
+              },
+              yesDotAnimatedStyle,
+            ]}
+            pointerEvents="none"
+          />
+
+          {/* NO Team Dot */}
+          <Animated.View
+            style={[
+              styles.cursorDot,
+              {
+                backgroundColor: noLineColor,
+              },
+              noDotAnimatedStyle,
+            ]}
+            pointerEvents="none"
+          />
+
+          {/* Tooltip */}
+          {cursorData.yesValue !== null && cursorData.noValue !== null && (
+            <Animated.View
+              style={[styles.tooltip, tooltipAnimatedStyle]}
+              pointerEvents="none"
+            >
+              <View style={styles.tooltipRow}>
+                <View style={[styles.tooltipDot, { backgroundColor: yesLineColor }]} />
+                <Text style={styles.tooltipLabel}>{yesLabel}:</Text>
+                <Text style={styles.tooltipValue}>
+                  {formatPercent(cursorData.yesValue)}
+                </Text>
+              </View>
+              <View style={styles.tooltipRow}>
+                <View style={[styles.tooltipDot, { backgroundColor: noLineColor }]} />
+                <Text style={styles.tooltipLabel}>{noLabel}:</Text>
+                <Text style={styles.tooltipValue}>
+                  {formatPercent(cursorData.noValue)}
+                </Text>
+              </View>
+            </Animated.View>
+          )}
+        </View>
+      </GestureDetector>
+    </GestureHandlerRootView>
   );
 }
 
@@ -510,12 +520,13 @@ function formatPercent(value) {
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
     backgroundColor: Colors.glassSurface,
-    borderRadius: Spacing.md,
     padding: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.glassBorder,
-    marginBottom: Spacing.lg,
+  },
+  chartWrapper: {
+    position: "relative",
+    flex: 1,
   },
   legend: {
     flexDirection: "row",
@@ -537,6 +548,66 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     color: Colors.textSecondary,
     fontSize: 11,
+  },
+  cursorLine: {
+    position: "absolute",
+    width: 1,
+    backgroundColor: Colors.textMuted,
+    opacity: 0.3,
+    zIndex: 10,
+  },
+  cursorDot: {
+    position: "absolute",
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: Colors.background,
+    zIndex: 11,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  tooltip: {
+    position: "absolute",
+    backgroundColor: Colors.background,
+    borderRadius: 8,
+    padding: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+    top: 10,
+    zIndex: 12,
+    minWidth: 120,
+  },
+  tooltipRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    marginBottom: Spacing.xs / 2,
+  },
+  tooltipDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  tooltipLabel: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    fontSize: 11,
+    flex: 1,
+  },
+  tooltipValue: {
+    ...Typography.caption,
+    color: Colors.textPrimary,
+    fontSize: 11,
+    fontWeight: "600",
   },
   scrollView: {
     borderRadius: Spacing.sm,
