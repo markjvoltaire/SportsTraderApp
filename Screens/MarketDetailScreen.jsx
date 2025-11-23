@@ -16,6 +16,7 @@ import {
   VictoryChart,
   VictoryAxis,
   VictoryTheme,
+  VictoryLabel,
 } from "victory-native";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -35,8 +36,27 @@ function transformMarketData(market) {
   let team1Abbreviation = null;
   let team2Abbreviation = null;
 
+  // Extract teams from awayTeam/homeTeam structure (new format)
+  if (market?.awayTeam && market?.homeTeam) {
+    const awayTeam = market.awayTeam;
+    const homeTeam = market.homeTeam;
+
+    // Use abbreviations or fallback to team names
+    team1Abbreviation = awayTeam.abbreviation || null;
+    team2Abbreviation = homeTeam.abbreviation || null;
+    team1 = awayTeam.abbreviation || awayTeam.name || "Away Team";
+    team2 = homeTeam.abbreviation || homeTeam.name || "Home Team";
+
+    // Get prices from team objects
+    team1Price = parseFloat(awayTeam.price) || 0.5;
+    team2Price = parseFloat(homeTeam.price) || 0.5;
+
+    // Get team colors based on abbreviation
+    team1Color = getTeamColor(team1Abbreviation, team1);
+    team2Color = getTeamColor(team2Abbreviation, team2);
+  }
   // Extract teams from teams array (preferred)
-  if (
+  else if (
     market?.teams &&
     Array.isArray(market.teams) &&
     market.teams.length >= 2
@@ -68,25 +88,27 @@ function transformMarketData(market) {
     }
   }
 
-  // Extract prices from outcomePrices (JSON string)
-  try {
-    if (market?.outcomePrices) {
-      const pricesStr =
-        typeof market.outcomePrices === "string"
-          ? market.outcomePrices
-          : JSON.stringify(market.outcomePrices);
-      const prices = JSON.parse(pricesStr);
+  // Extract prices from outcomePrices (JSON string) - only if not already set
+  if (team1Price === 0.5 && team2Price === 0.5) {
+    try {
+      if (market?.outcomePrices) {
+        const pricesStr =
+          typeof market.outcomePrices === "string"
+            ? market.outcomePrices
+            : JSON.stringify(market.outcomePrices);
+        const prices = JSON.parse(pricesStr);
 
-      if (Array.isArray(prices) && prices.length >= 2) {
-        team1Price = parseFloat(prices[0]) || 0.5;
-        team2Price = parseFloat(prices[1]) || 0.5;
+        if (Array.isArray(prices) && prices.length >= 2) {
+          team1Price = parseFloat(prices[0]) || 0.5;
+          team2Price = parseFloat(prices[1]) || 0.5;
+        }
       }
+    } catch (e) {
+      console.warn("Failed to parse outcomePrices:", e);
     }
-  } catch (e) {
-    console.warn("Failed to parse outcomePrices:", e);
   }
 
-  // Fallback: try to get prices from prices object
+  // Fallback: try to get prices from prices object - only if not already set
   if (team1Price === 0.5 && team2Price === 0.5 && market?.prices) {
     const priceValues = Object.values(market.prices);
     if (priceValues.length >= 2) {
@@ -226,6 +248,14 @@ const PriceHistoryChart = ({
     }));
   }, [noHistory, noPrice]);
 
+  // Calculate percentages and capture the latest chart points for label positioning
+  const yesPercent = Math.round(yesPrice * 100);
+  const noPercent = Math.round(noPrice * 100);
+  const lastYesPoint =
+    yesChartData.length > 0 ? yesChartData[yesChartData.length - 1] : null;
+  const lastNoPoint =
+    noChartData.length > 0 ? noChartData[noChartData.length - 1] : null;
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
@@ -253,7 +283,7 @@ const PriceHistoryChart = ({
               <VictoryChart
                 width={CHART_WIDTH}
                 height={CHART_HEIGHT}
-                padding={{ top: 10, bottom: 20, left: 30, right: 10 }}
+                padding={{ top: 10, bottom: 20, left: 30, right: 40 }}
                 theme={VictoryTheme.material}
               >
                 {/* X Axis */}
@@ -268,13 +298,10 @@ const PriceHistoryChart = ({
                 {/* Y Axis */}
                 <VictoryAxis
                   dependentAxis
-                  tickFormat={(t) => `${(t * 100).toFixed(0)}¢`}
                   style={{
                     axis: { stroke: "#e5e7eb" },
                     tickLabels: {
-                      fill: "#9ca3af",
-                      fontSize: 10,
-                      fontFamily: "System",
+                      fill: "transparent",
                     },
                     grid: {
                       stroke: "#f3f4f6",
@@ -317,6 +344,67 @@ const PriceHistoryChart = ({
                     easing: "quadInOut",
                   }}
                 />
+
+                {/* Percentage Labels at end of lines */}
+                {lastYesPoint && (
+                  <VictoryLabel
+                    datum={lastYesPoint}
+                    text={[yesLabel, `${yesPercent}%`]}
+                    textAnchor="start"
+                    dx={10}
+                    dy={-6}
+                    renderInPortal={false}
+                    style={[
+                      {
+                        fill: yesColor,
+                        fontSize: 12,
+                        fontWeight: "600",
+                      },
+                      {
+                        fill: yesColor,
+                        fontSize: 24,
+                        fontWeight: "700",
+                      },
+                    ]}
+                    lineHeight={[1.2, 1]}
+                    backgroundPadding={[4, 6]}
+                    backgroundStyle={{
+                      fill: "#FFFFFF",
+                      opacity: 0.95,
+                      stroke: "rgba(15, 23, 42, 0.08)",
+                    }}
+                  />
+                )}
+
+                {lastNoPoint && (
+                  <VictoryLabel
+                    datum={lastNoPoint}
+                    text={[noLabel, `${noPercent}%`]}
+                    textAnchor="start"
+                    dx={10}
+                    dy={-6}
+                    renderInPortal={false}
+                    style={[
+                      {
+                        fill: noColor,
+                        fontSize: 12,
+                        fontWeight: "600",
+                      },
+                      {
+                        fill: noColor,
+                        fontSize: 24,
+                        fontWeight: "700",
+                      },
+                    ]}
+                    lineHeight={[1.2, 1]}
+                    backgroundPadding={[4, 6]}
+                    backgroundStyle={{
+                      fill: "#FFFFFF",
+                      opacity: 0.95,
+                      stroke: "rgba(15, 23, 42, 0.08)",
+                    }}
+                  />
+                )}
               </VictoryChart>
 
               {/* Legend */}
@@ -368,6 +456,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
+    overflow: "visible",
   },
   chartContainer: {
     alignItems: "center",
@@ -412,6 +501,8 @@ export default function MarketDetailScreen() {
   const route = useRoute();
   const market = route.params?.game || route.params?.market;
 
+  console.log("route", route.params);
+
   const [yesHistory, setYesHistory] = useState(null);
   const [noHistory, setNoHistory] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -453,28 +544,37 @@ export default function MarketDetailScreen() {
         }
       }
 
-      // Also extract token IDs for matching data in response
-      let clobTokenIds = market.clobTokenIds;
-
-      // If it's a string, parse it
-      if (typeof clobTokenIds === "string") {
-        clobTokenIds = JSON.parse(clobTokenIds);
-      }
-
-      // If it's an array with at least 2 tokens
-      if (Array.isArray(clobTokenIds) && clobTokenIds.length >= 2) {
+      // Extract token IDs from awayTeam/homeTeam structure (new format)
+      if (market.awayTeam?.tokenId && market.homeTeam?.tokenId) {
         tokenIds = {
-          yesTokenId: clobTokenIds[0],
-          noTokenId: clobTokenIds[1],
+          yesTokenId: market.awayTeam.tokenId,
+          noTokenId: market.homeTeam.tokenId,
         };
-      } else if (market.prices && typeof market.prices === "object") {
-        // Fallback: try to get from prices object keys
-        const priceKeys = Object.keys(market.prices);
-        if (priceKeys.length >= 2) {
+      }
+      // Fallback: extract from clobTokenIds array
+      else {
+        let clobTokenIds = market.clobTokenIds;
+
+        // If it's a string, parse it
+        if (typeof clobTokenIds === "string") {
+          clobTokenIds = JSON.parse(clobTokenIds);
+        }
+
+        // If it's an array with at least 2 tokens
+        if (Array.isArray(clobTokenIds) && clobTokenIds.length >= 2) {
           tokenIds = {
-            yesTokenId: priceKeys[0],
-            noTokenId: priceKeys[1],
+            yesTokenId: clobTokenIds[0],
+            noTokenId: clobTokenIds[1],
           };
+        } else if (market.prices && typeof market.prices === "object") {
+          // Fallback: try to get from prices object keys
+          const priceKeys = Object.keys(market.prices);
+          if (priceKeys.length >= 2) {
+            tokenIds = {
+              yesTokenId: priceKeys[0],
+              noTokenId: priceKeys[1],
+            };
+          }
         }
       }
     } catch (e) {

@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { StyleSheet, Text, TouchableOpacity, View, Image } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, Typography } from "../../constants/theme";
 import { formatPrice, formatCurrency } from "../../utils/formatters";
@@ -88,7 +88,6 @@ function getTeamInitial(teamName) {
   return teamName[0]?.toUpperCase() || "T";
 }
 
-
 /**
  * Transform market data to display format
  */
@@ -102,8 +101,29 @@ function transformMarketData(market) {
   let team1Abbreviation = null;
   let team2Abbreviation = null;
 
+  // Extract teams from awayTeam/homeTeam structure (new format)
+  if (market?.awayTeam && market?.homeTeam) {
+    const awayTeam = market.awayTeam;
+    const homeTeam = market.homeTeam;
+
+    // Use abbreviations
+    team1Abbreviation = awayTeam.abbreviation || null;
+    team2Abbreviation = homeTeam.abbreviation || null;
+
+    // Use abbreviations as team names (they're short enough for display)
+    team1 = awayTeam.abbreviation || awayTeam.name || "Away Team";
+    team2 = homeTeam.abbreviation || homeTeam.name || "Home Team";
+
+    // Get prices from team objects
+    team1Price = parseFloat(awayTeam.price) || 0.5;
+    team2Price = parseFloat(homeTeam.price) || 0.5;
+
+    // Get team colors based on abbreviation
+    team1Color = getTeamColor(team1Abbreviation, team1);
+    team2Color = getTeamColor(team2Abbreviation, team2);
+  }
   // Extract teams from teams array (preferred)
-  if (
+  else if (
     market?.teams &&
     Array.isArray(market.teams) &&
     market.teams.length >= 2
@@ -135,25 +155,27 @@ function transformMarketData(market) {
     }
   }
 
-  // Extract prices from outcomePrices (JSON string)
-  try {
-    if (market?.outcomePrices) {
-      const pricesStr =
-        typeof market.outcomePrices === "string"
-          ? market.outcomePrices
-          : JSON.stringify(market.outcomePrices);
-      const prices = JSON.parse(pricesStr);
+  // Extract prices from outcomePrices (JSON string) - only if not already set
+  if (team1Price === 0.5 && team2Price === 0.5) {
+    try {
+      if (market?.outcomePrices) {
+        const pricesStr =
+          typeof market.outcomePrices === "string"
+            ? market.outcomePrices
+            : JSON.stringify(market.outcomePrices);
+        const prices = JSON.parse(pricesStr);
 
-      if (Array.isArray(prices) && prices.length >= 2) {
-        team1Price = parseFloat(prices[0]) || 0.5;
-        team2Price = parseFloat(prices[1]) || 0.5;
+        if (Array.isArray(prices) && prices.length >= 2) {
+          team1Price = parseFloat(prices[0]) || 0.5;
+          team2Price = parseFloat(prices[1]) || 0.5;
+        }
       }
+    } catch (e) {
+      console.warn("Failed to parse outcomePrices:", e);
     }
-  } catch (e) {
-    console.warn("Failed to parse outcomePrices:", e);
   }
 
-  // Fallback: try to get prices from prices object
+  // Fallback: try to get prices from prices object - only if not already set
   if (team1Price === 0.5 && team2Price === 0.5 && market?.prices) {
     const priceValues = Object.values(market.prices);
     if (priceValues.length >= 2) {
@@ -230,8 +252,13 @@ function transformMarketData(market) {
   };
 }
 
-export default function GameCard({ market, onPress }) {
-  if (!market) {
+export default function GameCard({ market, game, onPress }) {
+  // Support both 'market' and 'game' props for compatibility
+  const marketData = market || game;
+
+  console.log("marketData", marketData);
+
+  if (!marketData) {
     return (
       <View style={styles.card}>
         <Text style={styles.errorText}>No market data</Text>
@@ -240,41 +267,44 @@ export default function GameCard({ market, onPress }) {
   }
 
   // Transform market data
-  const marketData = useMemo(() => transformMarketData(market), [market]);
+  const transformedData = useMemo(
+    () => transformMarketData(marketData),
+    [marketData]
+  );
 
   // Extract basic fields - prioritize game start time
-  const title = market?.title || market?.question || "";
+  const title = marketData?.title || marketData?.question || "";
   const date =
-    market?.gameStartTime ||
-    market?.date ||
-    market?.eventDate ||
-    market?.startTime ||
-    market?.startDate ||
+    marketData?.gameStartTime ||
+    marketData?.date ||
+    marketData?.eventDate ||
+    marketData?.startTime ||
+    marketData?.startDate ||
     null;
   const volume =
-    market?.volume24hr ||
-    market?.volume?.day ||
-    market?.volumeNum ||
-    market?.volume ||
+    marketData?.volume24hr ||
+    marketData?.volume?.day ||
+    marketData?.volumeNum ||
+    marketData?.volume ||
     0;
 
   // Format values
   const formattedDate = formatGameDateTime(date);
   const formattedVolume = volume > 0 ? formatCurrency(volume) : "$0";
-  const team1PriceFormatted = formatPrice(marketData.team1Price);
-  const team2PriceFormatted = formatPrice(marketData.team2Price);
-  const team1Percent = Math.round(marketData.team1Price * 100);
-  const team2Percent = Math.round(marketData.team2Price * 100);
+  const team1PriceFormatted = formatPrice(transformedData.team1Price);
+  const team2PriceFormatted = formatPrice(transformedData.team2Price);
+  const team1Percent = Math.round(transformedData.team1Price * 100);
+  const team2Percent = Math.round(transformedData.team2Price * 100);
 
   // Colors for each team (from transformMarketData)
-  const team1Color = marketData.team1Color || "#9333EA"; // Default purple
-  const team2Color = marketData.team2Color || "#06B6D4"; // Default teal
+  const team1Color = transformedData.team1Color || "#9333EA"; // Default purple
+  const team2Color = transformedData.team2Color || "#06B6D4"; // Default teal
 
   return (
     <TouchableOpacity
       style={styles.card}
       activeOpacity={0.7}
-      onPress={() => onPress?.(market)}
+      onPress={() => onPress?.(marketData)}
     >
       {/* Date Row */}
       {/* <View style={styles.dateRow}>
@@ -295,11 +325,12 @@ export default function GameCard({ market, onPress }) {
           >
             <Text style={styles.teamIconText}>
               {(
-                marketData.team1Abbreviation || getTeamInitial(marketData.team1)
+                transformedData.team1Abbreviation ||
+                getTeamInitial(transformedData.team1)
               ).toUpperCase()}
             </Text>
           </View>
-          <Text style={styles.teamName}>{marketData.team1}</Text>
+          <Text style={styles.teamName}>{transformedData.team1}</Text>
         </View>
 
         {/* VS Text */}
@@ -312,11 +343,12 @@ export default function GameCard({ market, onPress }) {
           >
             <Text style={styles.teamIconText}>
               {(
-                marketData.team2Abbreviation || getTeamInitial(marketData.team2)
+                transformedData.team2Abbreviation ||
+                getTeamInitial(transformedData.team2)
               ).toUpperCase()}
             </Text>
           </View>
-          <Text style={styles.teamName}>{marketData.team2}</Text>
+          <Text style={styles.teamName}>{transformedData.team2}</Text>
         </View>
       </View>
 
@@ -354,7 +386,7 @@ export default function GameCard({ market, onPress }) {
         <View style={styles.volumeRow}>
           <Text style={[styles.volumeText, { color: team1Color }]}>
             {formattedVolume !== "$0"
-              ? `$${Math.round((volume * marketData.team1Price) / 1000)}K`
+              ? `$${Math.round((volume * transformedData.team1Price) / 1000)}K`
               : "$-"}
           </Text>
           <Text style={styles.totalVolumeText}>
@@ -362,7 +394,7 @@ export default function GameCard({ market, onPress }) {
           </Text>
           <Text style={[styles.volumeText, { color: team2Color }]}>
             {formattedVolume !== "$0"
-              ? `$${Math.round((volume * marketData.team2Price) / 1000)}K`
+              ? `$${Math.round((volume * transformedData.team2Price) / 1000)}K`
               : "$-"}
           </Text>
         </View>
@@ -374,9 +406,9 @@ export default function GameCard({ market, onPress }) {
         <TouchableOpacity
           style={styles.priceBox}
           activeOpacity={0.8}
-          onPress={() => onPress?.({ ...market, selectedSide: "yes" })}
+          onPress={() => onPress?.({ ...marketData, selectedSide: "yes" })}
         >
-          <Text style={styles.priceBoxTeam}>{marketData.team1}</Text>
+          <Text style={styles.priceBoxTeam}>{transformedData.team1}</Text>
           <Text style={[styles.priceBoxPrice, { color: team1Color }]}>
             {team1PriceFormatted}
           </Text>
@@ -386,9 +418,9 @@ export default function GameCard({ market, onPress }) {
         <TouchableOpacity
           style={styles.priceBox}
           activeOpacity={0.8}
-          onPress={() => onPress?.({ ...market, selectedSide: "no" })}
+          onPress={() => onPress?.({ ...marketData, selectedSide: "no" })}
         >
-          <Text style={styles.priceBoxTeam}>{marketData.team2}</Text>
+          <Text style={styles.priceBoxTeam}>{transformedData.team2}</Text>
           <Text style={[styles.priceBoxPrice, { color: team2Color }]}>
             {team2PriceFormatted}
           </Text>
@@ -449,11 +481,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: Spacing.xs,
-  },
-  teamIconImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
   },
   teamIconText: {
     fontSize: 18,
