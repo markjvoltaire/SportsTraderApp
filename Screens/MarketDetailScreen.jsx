@@ -20,8 +20,8 @@ import {
 } from "victory-native";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
-const CHART_WIDTH = SCREEN_WIDTH - 32; // Minimal padding for screen edges
-const CHART_HEIGHT = SCREEN_HEIGHT * 0.2; // Use 20% of screen height
+const CHART_WIDTH = SCREEN_WIDTH - 10; // Minimal padding for screen edges
+const CHART_HEIGHT = SCREEN_HEIGHT * 0.3; // Use 20% of screen height
 
 /**
  * Transform market data to display format
@@ -283,7 +283,7 @@ const PriceHistoryChart = ({
               <VictoryChart
                 width={CHART_WIDTH}
                 height={CHART_HEIGHT}
-                padding={{ top: 10, bottom: 20, left: 30, right: 40 }}
+                padding={{ top: 30, bottom: 35, left: 30, right: 70 }}
                 theme={VictoryTheme.material}
               >
                 {/* X Axis */}
@@ -317,7 +317,7 @@ const PriceHistoryChart = ({
                   style={{
                     data: {
                       stroke: yesColor,
-                      strokeWidth: 3,
+                      strokeWidth: 0.8,
                     },
                   }}
                   interpolation="natural"
@@ -334,7 +334,7 @@ const PriceHistoryChart = ({
                   style={{
                     data: {
                       stroke: noColor,
-                      strokeWidth: 3,
+                      strokeWidth: 0.8,
                     },
                   }}
                   interpolation="natural"

@@ -1,4 +1,10 @@
-import { StyleSheet, Text, View, ScrollView } from "react-native";
+import {
+  StyleSheet,
+  Text,
+  View,
+  ScrollView,
+  RefreshControl,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import React, { useEffect, useState } from "react";
 import { useNavigation } from "@react-navigation/native";
@@ -63,43 +69,50 @@ export default function HomeScreen() {
   const navigation = useNavigation();
   const [markets, setMarkets] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [selectedFilter, setSelectedFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-        // Build query parameters
-        const params = new URLSearchParams();
-        if (selectedFilter !== "all") {
-          params.append("sport", selectedFilter);
-        }
-
-        const queryString = params.toString();
-        const url = `${API_BASE_URL}/api/markets/gameWinners${
-          queryString ? `?${queryString}` : ""
-        }`;
-
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const jsonData = await response.json();
-        setMarkets(jsonData);
-      } catch (err) {
-        setError(err.message);
-        console.error("Error fetching data:", err);
-      } finally {
-        setLoading(false);
+      // Build query parameters
+      const params = new URLSearchParams();
+      if (selectedFilter !== "all") {
+        params.append("sport", selectedFilter);
       }
-    };
 
+      const queryString = params.toString();
+      const url = `${API_BASE_URL}/api/markets/gameWinners${
+        queryString ? `?${queryString}` : ""
+      }`;
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const jsonData = await response.json();
+      setMarkets(jsonData);
+    } catch (err) {
+      setError(err.message);
+      console.error("Error fetching data:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchData();
   }, [selectedFilter]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchData();
+    setRefreshing(false);
+  };
 
   const handleGamePress = (market) => {
     navigation.navigate("MarketDetail", { game: market });
@@ -209,6 +222,9 @@ export default function HomeScreen() {
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
         >
           {loading ? (
             // Show skeleton loaders while loading
