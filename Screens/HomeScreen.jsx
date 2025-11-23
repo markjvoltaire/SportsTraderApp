@@ -5,7 +5,6 @@ import ScreenTemplate from "./ScreenTemplate";
 import GameCard from "../src/components/market/GameCard";
 import { Colors, Spacing } from "../constants/theme";
 import { SafeAreaView } from "react-native-safe-area-context";
-import API_BASE_URL from "../src/config/api";
 
 export default function HomeScreen() {
   const navigation = useNavigation();
@@ -18,11 +17,14 @@ export default function HomeScreen() {
       try {
         setLoading(true);
         setError(null);
-        const response = await fetch(`${API_BASE_URL}/api/markets/685150`);
+        const response = await fetch(
+          "http://localhost:4000/api/markets/685150"
+        );
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
+        console.log("data", data);
 
         setMarkets(data);
       } catch (err) {
@@ -56,7 +58,7 @@ export default function HomeScreen() {
         <View style={styles.centerContainer}>
           <Text style={styles.errorText}>Error: {error}</Text>
           <Text style={styles.errorDetails}>
-            Make sure the API server is running on {API_BASE_URL}
+            Make sure the API server is running on localhost:3000
           </Text>
         </View>
       </SafeAreaView>
