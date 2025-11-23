@@ -17,7 +17,13 @@ import {
   VictoryAxis,
   VictoryTheme,
   VictoryLabel,
+  VictoryZoomContainer,
+  VictoryVoronoiContainer,
+  createContainer,
 } from "victory-native";
+
+// Define the combined container outside the component
+const ZoomVoronoiContainer = createContainer("zoom", "voronoi"); // Enables both pan/zoom and closest-point tracking
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const CHART_WIDTH = SCREEN_WIDTH - 10; // Minimal padding for screen edges
@@ -184,6 +190,9 @@ function transformMarketData(market) {
     team2Abbreviation,
   };
 }
+// ----------------------------------------------------------------------
+// PRICE HISTORY CHART COMPONENT
+// ----------------------------------------------------------------------
 
 const PriceHistoryChart = ({
   market,
@@ -197,6 +206,11 @@ const PriceHistoryChart = ({
   noHistory = null,
   loading = false,
 }) => {
+  // State for controlling parent ScrollView
+  const [isChartFocused, setIsChartFocused] = useState(false);
+  // State for tracking the currently hovered/touched data point
+  const [activePoint, setActivePoint] = useState(null);
+
   // Process history data for chart - both lines
   const yesChartData = useMemo(() => {
     if (!yesHistory || yesHistory.length === 0) {
@@ -251,10 +265,36 @@ const PriceHistoryChart = ({
   // Calculate percentages and capture the latest chart points for label positioning
   const yesPercent = Math.round(yesPrice * 100);
   const noPercent = Math.round(noPrice * 100);
-  const lastYesPoint =
+
+  // FIX 1: Safely retrieve the last data point to prevent TypeError from spread operator
+  const rawLastYesPoint =
     yesChartData.length > 0 ? yesChartData[yesChartData.length - 1] : null;
-  const lastNoPoint =
+  const rawLastNoPoint =
     noChartData.length > 0 ? noChartData[noChartData.length - 1] : null;
+
+  // Create last point objects with full metadata, only if the raw point exists
+  const lastYesPoint = rawLastYesPoint
+    ? {
+        ...rawLastYesPoint,
+        price: yesPrice,
+        label: yesLabel,
+        color: yesColor,
+      }
+    : null;
+  const lastNoPoint = rawLastNoPoint
+    ? {
+        ...rawLastNoPoint,
+        price: noPrice,
+        label: noLabel,
+        color: noColor,
+      }
+    : null;
+
+  // Logic to determine which point's data to display (hovered/active or the final point)
+  const activeYesPoint =
+    activePoint && activePoint.label === yesLabel ? activePoint : lastYesPoint;
+  const activeNoPoint =
+    activePoint && activePoint.label === noLabel ? activePoint : lastNoPoint;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -262,6 +302,8 @@ const PriceHistoryChart = ({
         style={styles.container}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        // FIX: Disable parent scroll when chart is focused
+        scrollEnabled={!isChartFocused}
       >
         {/* Market Name */}
         <View style={styles.marketInfo}>
@@ -285,6 +327,56 @@ const PriceHistoryChart = ({
                 height={CHART_HEIGHT}
                 padding={{ top: 30, bottom: 35, left: 30, right: 70 }}
                 theme={VictoryTheme.material}
+                // FIX: Use onTouchStart to immediately capture gesture control
+                onTouchStart={() => setIsChartFocused(true)}
+                // FIX: Use onTouchEnd to release gesture control and clear active point
+                onTouchEnd={() =>
+                  setTimeout(() => {
+                    setIsChartFocused(false);
+                    setActivePoint(null); // Clear active point on touch end
+                  }, 100)
+                }
+                // Use combined container for zoom/pan and touch tracking
+                containerComponent={
+                  <ZoomVoronoiContainer
+                    zoomDimension="x"
+                    allowZoom={true}
+                    allowPan={true}
+                    onZoomDomainChange={() => setIsChartFocused(true)} // Backup focus trigger
+                    voronoiDimension="x"
+                    labels={({ datum }) => null}
+                    // NEW: Event handler when a data point is touched/hovered
+                    onActivated={(points, props) => {
+                      if (points && points.length > 0) {
+                        const closestPoint = points.find(
+                          (p) => p.y !== undefined
+                        );
+                        if (!closestPoint) return;
+
+                        // FIX 2: Safely check for the existence of the data element array item
+                        const firstDataElement = closestPoint.data?.[0];
+                        if (!firstDataElement) return;
+
+                        // Safely determine line color from style using the secured element
+                        const styleData = firstDataElement.style?.data;
+                        const style = firstDataElement.style;
+
+                        const lineColor = styleData?.stroke || style?.stroke;
+                        const label =
+                          lineColor === yesColor ? yesLabel : noLabel;
+
+                        setActivePoint({
+                          x: closestPoint.x,
+                          y: closestPoint.y,
+                          price: closestPoint.y,
+                          label: label,
+                          color: lineColor,
+                        });
+                      }
+                    }}
+                    onDeactivated={() => setActivePoint(null)} // Clear active point when touch leaves area
+                  />
+                }
               >
                 {/* X Axis */}
                 <VictoryAxis
@@ -317,7 +409,7 @@ const PriceHistoryChart = ({
                   style={{
                     data: {
                       stroke: yesColor,
-                      strokeWidth: 0.8,
+                      strokeWidth: 2,
                     },
                   }}
                   interpolation="natural"
@@ -334,7 +426,7 @@ const PriceHistoryChart = ({
                   style={{
                     data: {
                       stroke: noColor,
-                      strokeWidth: 0.8,
+                      strokeWidth: 2,
                     },
                   }}
                   interpolation="natural"
@@ -345,23 +437,26 @@ const PriceHistoryChart = ({
                   }}
                 />
 
-                {/* Percentage Labels at end of lines */}
-                {lastYesPoint && (
+                {/* Percentage Labels at end of lines (or active touch point) */}
+                {activeYesPoint && (
                   <VictoryLabel
-                    datum={lastYesPoint}
-                    text={[yesLabel, `${yesPercent}%`]}
+                    datum={activeYesPoint} // Uses hovered point if active, otherwise last point
+                    text={[
+                      activeYesPoint.label,
+                      `${Math.round(activeYesPoint.price * 100)}%`,
+                    ]}
                     textAnchor="start"
                     dx={10}
                     dy={-6}
                     renderInPortal={false}
                     style={[
                       {
-                        fill: yesColor,
+                        fill: activeYesPoint.color,
                         fontSize: 12,
                         fontWeight: "600",
                       },
                       {
-                        fill: yesColor,
+                        fill: activeYesPoint.color,
                         fontSize: 24,
                         fontWeight: "700",
                       },
@@ -376,22 +471,25 @@ const PriceHistoryChart = ({
                   />
                 )}
 
-                {lastNoPoint && (
+                {activeNoPoint && (
                   <VictoryLabel
-                    datum={lastNoPoint}
-                    text={[noLabel, `${noPercent}%`]}
+                    datum={activeNoPoint} // Uses hovered point if active, otherwise last point
+                    text={[
+                      activeNoPoint.label,
+                      `${Math.round(activeNoPoint.price * 100)}%`,
+                    ]}
                     textAnchor="start"
                     dx={10}
                     dy={-6}
                     renderInPortal={false}
                     style={[
                       {
-                        fill: noColor,
+                        fill: activeNoPoint.color,
                         fontSize: 12,
                         fontWeight: "600",
                       },
                       {
-                        fill: noColor,
+                        fill: activeNoPoint.color,
                         fontSize: 24,
                         fontWeight: "700",
                       },
@@ -429,6 +527,10 @@ const PriceHistoryChart = ({
     </SafeAreaView>
   );
 };
+
+// ----------------------------------------------------------------------
+// STYLES
+// ----------------------------------------------------------------------
 
 const styles = StyleSheet.create({
   container: {
@@ -495,6 +597,10 @@ const styles = StyleSheet.create({
     color: "#374151",
   },
 });
+
+// ----------------------------------------------------------------------
+// MARKET DETAIL SCREEN WRAPPER
+// ----------------------------------------------------------------------
 
 // MarketDetailScreen wrapper component that receives market from route params
 export default function MarketDetailScreen() {
