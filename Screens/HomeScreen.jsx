@@ -20,6 +20,7 @@ import GameCardSkeleton from "../src/components/market/GameCardSkeleton";
 import FilterCarousel from "../src/components/ui/FilterCarousel";
 import SearchBar from "../src/components/ui/SearchBar";
 import { Colors, Spacing } from "../constants/theme";
+import ScreenTemplate from "./ScreenTemplate";
 
 // Animated wrapper component for GameCard with fade-in
 function AnimatedGameCard({ market, onPress, index }) {
@@ -95,7 +96,6 @@ export default function HomeScreen() {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const jsonData = await response.json();
-      console.log("jsonData", jsonData);
       setMarkets(jsonData);
     } catch (err) {
       setError(err.message);

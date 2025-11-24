@@ -256,8 +256,6 @@ export default function GameCard({ market, game, onPress }) {
   // Support both 'market' and 'game' props for compatibility
   const marketData = market || game;
 
-  console.log("marketData!!!", marketData);
-
   if (!marketData) {
     return (
       <View style={styles.card}>

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
 import {
   VictoryChart,
   VictoryLine,
@@ -15,18 +15,16 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   runOnJS,
+  withTiming,
+  Easing,
 } from "react-native-reanimated";
 import { useRoute } from "@react-navigation/native";
-import API_BASE_URL from "../src/config/api";
-import {
-  formatSharePrice,
-  formatTimestamp,
-  formatDateTime,
-} from "../src/utils/formatters";
-import { getTeamColor } from "../src/utils/teamColors";
-import ScreenTemplate from "./ScreenTemplate";
+import API_BASE_URL from "../../config/api";
+import { formatSharePrice } from "../../utils/formatters";
+import { getTeamColor } from "../../utils/teamColors";
+import ChartSkeleton from "./ChartSkeleton";
 
-function MyChart() {
+export default function MyChart({ onTimestampChange }) {
   const route = useRoute();
   const market = route.params?.game || route.params?.market;
 
@@ -87,6 +85,24 @@ function MyChart() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Gesture handling for cursor
+  const cursorX = useSharedValue(-1); // -1 means hidden
+  const cursorYHigh = useSharedValue(0);
+  const cursorYLow = useSharedValue(0);
+  const isActive = useSharedValue(false);
+
+  // Animation for chart fade-in
+  const chartOpacity = useSharedValue(0);
+  const [showTooltip, setShowTooltip] = useState(false);
+  const [tooltipData, setTooltipData] = useState({
+    index: 0,
+    awayPrice: 0,
+    homePrice: 0,
+    timestamp: null,
+    awayTeamName: "",
+    homeTeamName: "",
+  });
+
   // Fetch price history using candlesticks endpoint
   useEffect(() => {
     if (!marketData.conditionId) {
@@ -107,7 +123,6 @@ function MyChart() {
 
         // Fetch candlesticks using conditionId
         let url = `${API_BASE_URL}/api/candlesticks/${marketData.conditionId}?interval=1&startTs=${startTs}&endTs=${endTs}`;
-        console.log("Fetching candlesticks for conditionId:", url);
 
         let response = await fetch(url);
 
@@ -268,10 +283,6 @@ function MyChart() {
 
         setAwayHistory(awayHistoryData);
         setHomeHistory(homeHistoryData);
-
-        console.log(
-          `Loaded ${awayHistoryData.length} away and ${homeHistoryData.length} home price points`
-        );
       } catch (err) {
         console.error("Error fetching price history:", err);
         setError(err.message);
@@ -289,21 +300,6 @@ function MyChart() {
     marketData.homeTeam.tokenId,
     marketData,
   ]);
-
-  // Gesture handling for cursor
-  const cursorX = useSharedValue(-1); // -1 means hidden
-  const cursorYHigh = useSharedValue(0);
-  const cursorYLow = useSharedValue(0);
-  const isActive = useSharedValue(false);
-  const [showTooltip, setShowTooltip] = useState(false);
-  const [tooltipData, setTooltipData] = useState({
-    index: 0,
-    awayPrice: 0,
-    homePrice: 0,
-    timestamp: null,
-    awayTeamName: "",
-    homeTeamName: "",
-  });
 
   // Process chart data from price history
   const chartData = useMemo(() => {
@@ -448,6 +444,9 @@ function MyChart() {
     (xPos) => {
       if (xPos < 0) {
         setShowTooltip(false);
+        if (onTimestampChange) {
+          onTimestampChange(null);
+        }
         return;
       }
 
@@ -463,8 +462,13 @@ function MyChart() {
       cursorYHigh.value = data.yHigh;
       cursorYLow.value = data.yLow;
       setShowTooltip(true);
+
+      // Notify parent component of timestamp change
+      if (onTimestampChange) {
+        onTimestampChange(data.timestamp);
+      }
     },
-    [getValueAtX, cursorYHigh, cursorYLow]
+    [getValueAtX, cursorYHigh, cursorYLow, onTimestampChange, marketData]
   );
 
   // Gesture handler - Pan for dragging cursor
@@ -510,6 +514,24 @@ function MyChart() {
       setShowTooltip(true);
     }
   }, [chartData, plotWidth, cursorX, updateCursorData, isActive]);
+
+  // Fade in chart when data is loaded
+  useEffect(() => {
+    if (!loading && chartData && chartData.length > 0) {
+      chartOpacity.value = withTiming(1, {
+        duration: 400,
+        easing: Easing.out(Easing.ease),
+      });
+    } else {
+      chartOpacity.value = 0;
+    }
+  }, [loading, chartData, chartOpacity]);
+
+  const animatedChartStyle = useAnimatedStyle(() => {
+    return {
+      opacity: chartOpacity.value,
+    };
+  });
 
   const animatedCursorStyle = useAnimatedStyle(() => {
     // Show cursor with full opacity when active, reduced opacity when inactive but visible
@@ -574,11 +596,8 @@ function MyChart() {
     // Position above the higher tooltip (away team) with more spacing
     const dateY = Math.min(cursorYHigh.value, cursorYLow.value) - 90;
 
-    // Show date tooltip with full opacity when active, reduced opacity when inactive but visible
-    const opacity = isActive.value ? 1 : cursorX.value >= 0 ? 0.7 : 0;
-
     return {
-      opacity,
+      opacity: isActive.value ? 1 : 0,
       transform: [{ translateX: adjustedX }, { translateY: dateY }],
     };
   }, [chartWidth, chartPadding]);
@@ -603,158 +622,169 @@ function MyChart() {
     return `${month} ${day}, ${year} ${time}`;
   };
 
-  if (loading) {
-    return (
-      <View style={[styles.chartContainer, styles.loadingContainer]}>
-        <ActivityIndicator size="large" color="red" />
-        <Text style={styles.loadingText}>Loading price history...</Text>
-      </View>
-    );
-  }
-
   return (
-    <GestureHandlerRootView style={styles.chartContainer}>
-      <GestureDetector gesture={panGesture}>
-        <View style={styles.chartWrapper}>
-          <VictoryChart
-            theme={VictoryTheme.material}
-            width={chartWidth}
-            height={chartHeight}
-            padding={chartPadding}
-            domainPadding={{ x: 0, y: 10 }}
-            domain={{ y: yDomain }}
-          >
-            <VictoryAxis
-              style={{
-                axis: { stroke: "transparent", strokeWidth: 0 },
-                tickLabels: { fill: "transparent" },
-                grid: { stroke: "transparent", strokeWidth: 0 },
-                ticks: { stroke: "transparent", strokeWidth: 0 },
-              }}
-            />
-            <VictoryAxis
-              dependentAxis
-              style={{
-                axis: { stroke: "transparent", strokeWidth: 0 },
-                tickLabels: { fill: "transparent" },
-                grid: { stroke: "transparent", strokeWidth: 0 },
-                ticks: { stroke: "transparent", strokeWidth: 0 },
-              }}
-            />
-            <VictoryLine
-              data={chartData}
-              x="x"
-              y="awayPrice"
-              interpolation="linear"
-              style={{
-                data: {
-                  stroke: marketData.awayTeam.color,
-                  strokeWidth: 1.5,
-                },
-              }}
-              animate={{
-                duration: 400,
-                onLoad: { duration: 400 },
-                easing: "quadInOut",
-              }}
-            />
-            <VictoryLine
-              data={chartData}
-              x="x"
-              y="homePrice"
-              interpolation="linear"
-              style={{
-                data: {
-                  stroke: marketData.homeTeam.color,
-                  strokeWidth: 1.5,
-                },
-              }}
-              animate={{
-                duration: 400,
-                onLoad: { duration: 400 },
-                easing: "quadInOut",
-              }}
-            />
-          </VictoryChart>
-          {/* Cursor line - positioned absolutely over the chart */}
-          <Animated.View
-            style={[styles.cursorLine, animatedCursorStyle]}
-            pointerEvents="none"
-          />
+    <View style={styles.chartContainer}>
+      {loading && (
+        <View style={styles.skeletonContainer}>
+          <ChartSkeleton />
         </View>
-      </GestureDetector>
-      {/* Tooltips showing pressed values - separate for each line */}
-      {showTooltip && (
-        <>
-          {/* Away team price tooltip */}
-          <Animated.View
-            style={[
-              styles.tooltip,
-              styles.tooltipHigh,
-              animatedTooltipHighStyle,
-            ]}
-            pointerEvents="none"
-          >
-            <Text
-              style={[
-                styles.tooltipText,
-                {
-                  color: marketData.awayTeam.color,
-                  fontWeight: "bold",
-                  fontSize: 20,
-                },
-              ]}
-            >
-              {formatSharePrice(tooltipData.awayPrice)}
-            </Text>
-            <Text
-              style={[
-                styles.tooltipText,
-                {
-                  color: marketData.awayTeam.color,
-                  fontSize: 12,
-                  marginTop: 4,
-                  opacity: 0.8,
-                },
-              ]}
-            >
-              {tooltipData.awayTeamName}
-            </Text>
-          </Animated.View>
-          {/* Home team price tooltip */}
-          <Animated.View
-            style={[styles.tooltip, styles.tooltipLow, animatedTooltipLowStyle]}
-            pointerEvents="none"
-          >
-            <Text
-              style={[
-                styles.tooltipText,
-                {
-                  color: marketData.homeTeam.color,
-                  fontWeight: "bold",
-                  fontSize: 20,
-                },
-              ]}
-            >
-              {formatSharePrice(tooltipData.homePrice)}
-            </Text>
-            <Text
-              style={[
-                styles.tooltipText,
-                {
-                  color: marketData.homeTeam.color,
-                  fontSize: 12,
-                  marginTop: 4,
-                  opacity: 0.8,
-                },
-              ]}
-            >
-              {tooltipData.homeTeamName}
-            </Text>
-          </Animated.View>
-        </>
       )}
-    </GestureHandlerRootView>
+      <Animated.View
+        style={[
+          styles.chartAnimatedContainer,
+          animatedChartStyle,
+          loading && { opacity: 0 },
+        ]}
+        pointerEvents={loading ? "none" : "auto"}
+      >
+        <GestureHandlerRootView style={styles.chartContainer}>
+          <GestureDetector gesture={panGesture}>
+            <View style={styles.chartWrapper}>
+              <VictoryChart
+                theme={VictoryTheme.material}
+                width={chartWidth}
+                height={chartHeight}
+                padding={chartPadding}
+                domainPadding={{ x: 0, y: 10 }}
+                domain={{ y: yDomain }}
+              >
+                <VictoryAxis
+                  style={{
+                    axis: { stroke: "transparent", strokeWidth: 0 },
+                    tickLabels: { fill: "transparent" },
+                    grid: { stroke: "transparent", strokeWidth: 0 },
+                    ticks: { stroke: "transparent", strokeWidth: 0 },
+                  }}
+                />
+                <VictoryAxis
+                  dependentAxis
+                  style={{
+                    axis: { stroke: "transparent", strokeWidth: 0 },
+                    tickLabels: { fill: "transparent" },
+                    grid: { stroke: "transparent", strokeWidth: 0 },
+                    ticks: { stroke: "transparent", strokeWidth: 0 },
+                  }}
+                />
+                <VictoryLine
+                  data={chartData}
+                  x="x"
+                  y="awayPrice"
+                  interpolation="step"
+                  style={{
+                    data: {
+                      stroke: marketData.awayTeam.color,
+                      strokeWidth: 1.5,
+                    },
+                  }}
+                  animate={{
+                    duration: 400,
+                    onLoad: { duration: 400 },
+                    easing: "quadInOut",
+                  }}
+                />
+                <VictoryLine
+                  data={chartData}
+                  x="x"
+                  y="homePrice"
+                  interpolation="step"
+                  style={{
+                    data: {
+                      stroke: marketData.homeTeam.color,
+                      strokeWidth: 1.5,
+                    },
+                  }}
+                  animate={{
+                    duration: 400,
+                    onLoad: { duration: 400 },
+                    easing: "quadInOut",
+                  }}
+                />
+              </VictoryChart>
+              {/* Cursor line - positioned absolutely over the chart */}
+              <Animated.View
+                style={[styles.cursorLine, animatedCursorStyle]}
+                pointerEvents="none"
+              />
+            </View>
+          </GestureDetector>
+          {/* Tooltips showing pressed values - separate for each line */}
+          {showTooltip && (
+            <>
+              {/* Away team price tooltip */}
+              <Animated.View
+                style={[
+                  styles.tooltip,
+                  styles.tooltipHigh,
+                  animatedTooltipHighStyle,
+                ]}
+                pointerEvents="none"
+              >
+                <Text
+                  style={[
+                    styles.tooltipText,
+                    {
+                      color: marketData.awayTeam.color,
+                      fontWeight: "bold",
+                      fontSize: 20,
+                    },
+                  ]}
+                >
+                  {formatSharePrice(tooltipData.awayPrice)}
+                </Text>
+                <Text
+                  style={[
+                    styles.tooltipText,
+                    {
+                      color: marketData.awayTeam.color,
+                      fontSize: 12,
+                      marginTop: 4,
+                      opacity: 0.8,
+                    },
+                  ]}
+                >
+                  {tooltipData.awayTeamName}
+                </Text>
+              </Animated.View>
+              {/* Home team price tooltip */}
+              <Animated.View
+                style={[
+                  styles.tooltip,
+                  styles.tooltipLow,
+                  animatedTooltipLowStyle,
+                ]}
+                pointerEvents="none"
+              >
+                <Text
+                  style={[
+                    styles.tooltipText,
+                    {
+                      color: marketData.homeTeam.color,
+                      fontWeight: "bold",
+                      fontSize: 20,
+                    },
+                  ]}
+                >
+                  {formatSharePrice(tooltipData.homePrice)}
+                </Text>
+                <Text
+                  style={[
+                    styles.tooltipText,
+                    {
+                      color: marketData.homeTeam.color,
+                      fontSize: 12,
+                      marginTop: 4,
+                      opacity: 0.8,
+                    },
+                  ]}
+                >
+                  {tooltipData.homeTeamName}
+                </Text>
+              </Animated.View>
+            </>
+          )}
+        </GestureHandlerRootView>
+      </Animated.View>
+    </View>
   );
 }
 
@@ -763,6 +793,19 @@ const styles = StyleSheet.create({
     height: 300,
     marginVertical: 20,
     position: "relative",
+  },
+  skeletonContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chartAnimatedContainer: {
+    width: "100%",
+    height: "100%",
   },
   chartWrapper: {
     width: 350,
@@ -824,13 +867,3 @@ const styles = StyleSheet.create({
   },
 });
 
-export default function MarketsScreen() {
-  return (
-    <ScreenTemplate title="Markets" description="Browse all available markets.">
-      <View>
-        <Text>Markets</Text>
-        <MyChart />
-      </View>
-    </ScreenTemplate>
-  );
-}
