@@ -1,699 +1,125 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  Dimensions,
   ActivityIndicator,
   ScrollView,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { useRoute } from "@react-navigation/native";
-import API_BASE_URL from "../src/config/api";
-import { getTeamColor } from "../src/utils/teamColors";
 import {
-  VictoryLine,
   VictoryChart,
+  VictoryLine,
   VictoryAxis,
   VictoryTheme,
-  VictoryLabel,
-  VictoryZoomContainer,
-  VictoryVoronoiContainer,
-  createContainer,
 } from "victory-native";
+import {
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+} from "react-native-gesture-handler";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  runOnJS,
+  withTiming,
+  Easing,
+} from "react-native-reanimated";
+import ScreenTemplate from "./ScreenTemplate";
+import { useRoute } from "@react-navigation/native";
+import API_BASE_URL from "../src/config/api";
+import {
+  formatSharePrice,
+  formatTimestamp,
+  formatDateTime,
+} from "../src/utils/formatters";
+import { getTeamColor } from "../src/utils/teamColors";
+import MarketRules from "../src/components/market/MarketRules";
+import ChartSkeleton from "../src/components/market/ChartSkeleton";
 
-// Define the combined container outside the component
-const ZoomVoronoiContainer = createContainer("zoom", "voronoi"); // Enables both pan/zoom and closest-point tracking
-
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
-const CHART_WIDTH = SCREEN_WIDTH - 10; // Minimal padding for screen edges
-const CHART_HEIGHT = SCREEN_HEIGHT * 0.3; // Use 20% of screen height
-
-/**
- * Transform market data to display format
- */
-function transformMarketData(market) {
-  let team1 = "Team 1";
-  let team2 = "Team 2";
-  let team1Color = "#552583"; // Default LAL purple
-  let team2Color = "#007A33"; // Default BOS green
-  let team1Price = 0.5;
-  let team2Price = 0.5;
-  let team1Abbreviation = null;
-  let team2Abbreviation = null;
-
-  // Extract teams from awayTeam/homeTeam structure (new format)
-  if (market?.awayTeam && market?.homeTeam) {
-    const awayTeam = market.awayTeam;
-    const homeTeam = market.homeTeam;
-
-    // Use abbreviations or fallback to team names
-    team1Abbreviation = awayTeam.abbreviation || null;
-    team2Abbreviation = homeTeam.abbreviation || null;
-    team1 = awayTeam.abbreviation || awayTeam.name || "Away Team";
-    team2 = homeTeam.abbreviation || homeTeam.name || "Home Team";
-
-    // Get prices from team objects
-    team1Price = parseFloat(awayTeam.price) || 0.5;
-    team2Price = parseFloat(homeTeam.price) || 0.5;
-
-    // Get team colors based on abbreviation
-    team1Color = getTeamColor(team1Abbreviation, team1);
-    team2Color = getTeamColor(team2Abbreviation, team2);
-  }
-  // Extract teams from teams array (preferred)
-  else if (
-    market?.teams &&
-    Array.isArray(market.teams) &&
-    market.teams.length >= 2
-  ) {
-    const team1Data = market.teams[0];
-    const team2Data = market.teams[1];
-    team1 = team1Data.name || team1Data.short || "Team 1";
-    team2 = team2Data.name || team2Data.short || "Team 2";
-    team1Abbreviation = team1Data.abbreviation || null;
-    team2Abbreviation = team2Data.abbreviation || null;
-
-    // Get team colors based on abbreviation or name
-    team1Color = getTeamColor(team1Abbreviation, team1);
-    team2Color = getTeamColor(team2Abbreviation, team2);
-  }
-  // Fallback: parse teams from question/title
-  else if (market?.question || market?.title) {
-    const title = market.question || market.title || "";
-    if (title.includes(" vs ") || title.includes(" VS ")) {
-      const teams = title.split(/ vs /i);
-      if (teams.length === 2) {
-        team1 = teams[0].trim();
-        team2 = teams[1].trim();
-
-        // Try to extract abbreviations from team names
-        team1Color = getTeamColor(null, team1);
-        team2Color = getTeamColor(null, team2);
-      }
-    }
-  }
-
-  // Extract prices from outcomePrices (JSON string) - only if not already set
-  if (team1Price === 0.5 && team2Price === 0.5) {
-    try {
-      if (market?.outcomePrices) {
-        const pricesStr =
-          typeof market.outcomePrices === "string"
-            ? market.outcomePrices
-            : JSON.stringify(market.outcomePrices);
-        const prices = JSON.parse(pricesStr);
-
-        if (Array.isArray(prices) && prices.length >= 2) {
-          team1Price = parseFloat(prices[0]) || 0.5;
-          team2Price = parseFloat(prices[1]) || 0.5;
-        }
-      }
-    } catch (e) {
-      console.warn("Failed to parse outcomePrices:", e);
-    }
-  }
-
-  // Fallback: try to get prices from prices object - only if not already set
-  if (team1Price === 0.5 && team2Price === 0.5 && market?.prices) {
-    const priceValues = Object.values(market.prices);
-    if (priceValues.length >= 2) {
-      const price1 = parseFloat(priceValues[0]?.SELL || priceValues[0]) || 0.5;
-      const price2 = parseFloat(priceValues[1]?.SELL || priceValues[1]) || 0.5;
-      // Use the higher price as team1 (usually the favorite)
-      if (price1 >= price2) {
-        team1Price = price1;
-        team2Price = price2;
-      } else {
-        team1Price = price2;
-        team2Price = price1;
-      }
-    }
-  }
-
-  // Use outcomes array to match team names if available
-  try {
-    if (market?.outcomes) {
-      const outcomesStr =
-        typeof market.outcomes === "string"
-          ? market.outcomes
-          : JSON.stringify(market.outcomes);
-      const outcomes = JSON.parse(outcomesStr);
-
-      if (Array.isArray(outcomes) && outcomes.length >= 2) {
-        // Match outcomes to team names
-        const outcome1 = outcomes[0] || "";
-        const outcome2 = outcomes[1] || "";
-
-        // If team names match outcomes, use outcomes as team names
-        if (
-          team1 === "Team 1" ||
-          outcome1.toLowerCase().includes(team1.toLowerCase().split(" ")[0])
-        ) {
-          team1 = outcome1;
-        }
-        if (
-          team2 === "Team 2" ||
-          outcome2.toLowerCase().includes(team2.toLowerCase().split(" ")[0])
-        ) {
-          team2 = outcome2;
-        }
-      }
-    }
-  } catch (e) {
-    console.warn("Failed to parse outcomes:", e);
-  }
-
-  // Normalize prices to ensure they sum to 1.0
-  const totalPrice = team1Price + team2Price;
-  if (totalPrice > 0 && totalPrice !== 1.0) {
-    team1Price = team1Price / totalPrice;
-    team2Price = team2Price / totalPrice;
-  }
-
-  // If we don't have team colors yet, try to get them from team names
-  if (team1Color === "#552583" && team1 !== "Team 1") {
-    team1Color = getTeamColor(team1Abbreviation, team1);
-  }
-  if (team2Color === "#007A33" && team2 !== "Team 2") {
-    team2Color = getTeamColor(team2Abbreviation, team2);
-  }
-
-  return {
-    team1,
-    team2,
-    team1Color,
-    team2Color,
-    team1Price,
-    team2Price,
-    team1Abbreviation,
-    team2Abbreviation,
-  };
-}
-// ----------------------------------------------------------------------
-// PRICE HISTORY CHART COMPONENT
-// ----------------------------------------------------------------------
-
-const PriceHistoryChart = ({
-  market,
-  yesPrice = 0.58,
-  noPrice = 0.42,
-  yesLabel = "LAL",
-  noLabel = "BOS",
-  yesColor = "#552583",
-  noColor = "#007A33",
-  yesHistory = null,
-  noHistory = null,
-  loading = false,
-}) => {
-  // State for controlling parent ScrollView
-  const [isChartFocused, setIsChartFocused] = useState(false);
-  // State for tracking the currently hovered/touched data point
-  const [activePoint, setActivePoint] = useState(null);
-
-  // Process history data for chart - both lines
-  const yesChartData = useMemo(() => {
-    if (!yesHistory || yesHistory.length === 0) {
-      // Generate sample data if no history available
-      const sampleData = [];
-      const points = 24;
-
-      for (let i = 0; i < points; i++) {
-        const variance = (Math.random() - 0.5) * 0.08;
-        const price = Math.max(0.1, Math.min(0.9, yesPrice + variance));
-        sampleData.push({ x: i, y: price });
-      }
-
-      // Ensure last point is current price
-      sampleData[sampleData.length - 1].y = yesPrice;
-
-      return sampleData;
-    }
-
-    // Use actual history data - map to Victory format
-    return yesHistory.map((point, index) => ({
-      x: index,
-      y: point.y,
-    }));
-  }, [yesHistory, yesPrice]);
-
-  const noChartData = useMemo(() => {
-    if (!noHistory || noHistory.length === 0) {
-      // Generate sample data if no history available
-      const sampleData = [];
-      const points = 24;
-
-      for (let i = 0; i < points; i++) {
-        const variance = (Math.random() - 0.5) * 0.08;
-        const price = Math.max(0.1, Math.min(0.9, noPrice + variance));
-        sampleData.push({ x: i, y: price });
-      }
-
-      // Ensure last point is current price
-      sampleData[sampleData.length - 1].y = noPrice;
-
-      return sampleData;
-    }
-
-    // Use actual history data - map to Victory format
-    return noHistory.map((point, index) => ({
-      x: index,
-      y: point.y,
-    }));
-  }, [noHistory, noPrice]);
-
-  // Calculate percentages and capture the latest chart points for label positioning
-  const yesPercent = Math.round(yesPrice * 100);
-  const noPercent = Math.round(noPrice * 100);
-
-  // FIX 1: Safely retrieve the last data point to prevent TypeError from spread operator
-  const rawLastYesPoint =
-    yesChartData.length > 0 ? yesChartData[yesChartData.length - 1] : null;
-  const rawLastNoPoint =
-    noChartData.length > 0 ? noChartData[noChartData.length - 1] : null;
-
-  // Create last point objects with full metadata, only if the raw point exists
-  const lastYesPoint = rawLastYesPoint
-    ? {
-        ...rawLastYesPoint,
-        price: yesPrice,
-        label: yesLabel,
-        color: yesColor,
-      }
-    : null;
-  const lastNoPoint = rawLastNoPoint
-    ? {
-        ...rawLastNoPoint,
-        price: noPrice,
-        label: noLabel,
-        color: noColor,
-      }
-    : null;
-
-  // Logic to determine which point's data to display (hovered/active or the final point)
-  const activeYesPoint =
-    activePoint && activePoint.label === yesLabel ? activePoint : lastYesPoint;
-  const activeNoPoint =
-    activePoint && activePoint.label === noLabel ? activePoint : lastNoPoint;
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        // FIX: Disable parent scroll when chart is focused
-        scrollEnabled={!isChartFocused}
-      >
-        {/* Market Name */}
-        <View style={styles.marketInfo}>
-          <Text style={styles.title}>
-            {yesLabel} vs {noLabel}
-          </Text>
-        </View>
-
-        {/* Chart Card */}
-        <View style={styles.chartCard}>
-          {/* Chart */}
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={yesColor} />
-              <Text style={styles.loadingText}>Loading chart...</Text>
-            </View>
-          ) : (
-            <View style={styles.chartContainer}>
-              <VictoryChart
-                width={CHART_WIDTH}
-                height={CHART_HEIGHT}
-                padding={{ top: 30, bottom: 35, left: 30, right: 70 }}
-                theme={VictoryTheme.material}
-                // FIX: Use onTouchStart to immediately capture gesture control
-                onTouchStart={() => setIsChartFocused(true)}
-                // FIX: Use onTouchEnd to release gesture control and clear active point
-                onTouchEnd={() =>
-                  setTimeout(() => {
-                    setIsChartFocused(false);
-                    setActivePoint(null); // Clear active point on touch end
-                  }, 100)
-                }
-                // Use combined container for zoom/pan and touch tracking
-                containerComponent={
-                  <ZoomVoronoiContainer
-                    zoomDimension="x"
-                    allowZoom={true}
-                    allowPan={true}
-                    onZoomDomainChange={() => setIsChartFocused(true)} // Backup focus trigger
-                    voronoiDimension="x"
-                    labels={({ datum }) => null}
-                    // NEW: Event handler when a data point is touched/hovered
-                    onActivated={(points, props) => {
-                      if (points && points.length > 0) {
-                        const closestPoint = points.find(
-                          (p) => p.y !== undefined
-                        );
-                        if (!closestPoint) return;
-
-                        // FIX 2: Safely check for the existence of the data element array item
-                        const firstDataElement = closestPoint.data?.[0];
-                        if (!firstDataElement) return;
-
-                        // Safely determine line color from style using the secured element
-                        const styleData = firstDataElement.style?.data;
-                        const style = firstDataElement.style;
-
-                        const lineColor = styleData?.stroke || style?.stroke;
-                        const label =
-                          lineColor === yesColor ? yesLabel : noLabel;
-
-                        setActivePoint({
-                          x: closestPoint.x,
-                          y: closestPoint.y,
-                          price: closestPoint.y,
-                          label: label,
-                          color: lineColor,
-                        });
-                      }
-                    }}
-                    onDeactivated={() => setActivePoint(null)} // Clear active point when touch leaves area
-                  />
-                }
-              >
-                {/* X Axis */}
-                <VictoryAxis
-                  style={{
-                    axis: { stroke: "transparent" },
-                    tickLabels: { fill: "transparent" },
-                    grid: { stroke: "transparent" },
-                  }}
-                />
-
-                {/* Y Axis */}
-                <VictoryAxis
-                  dependentAxis
-                  style={{
-                    axis: { stroke: "#e5e7eb" },
-                    tickLabels: {
-                      fill: "transparent",
-                    },
-                    grid: {
-                      stroke: "#f3f4f6",
-                      strokeWidth: 1,
-                    },
-                  }}
-                  domain={[0, 1]}
-                />
-
-                {/* {yesLabel} Line */}
-                <VictoryLine
-                  data={yesChartData}
-                  style={{
-                    data: {
-                      stroke: yesColor,
-                      strokeWidth: 2,
-                    },
-                  }}
-                  interpolation="natural"
-                  animate={{
-                    duration: 400,
-                    onLoad: { duration: 400 },
-                    easing: "quadInOut",
-                  }}
-                />
-
-                {/* {noLabel} Line */}
-                <VictoryLine
-                  data={noChartData}
-                  style={{
-                    data: {
-                      stroke: noColor,
-                      strokeWidth: 2,
-                    },
-                  }}
-                  interpolation="natural"
-                  animate={{
-                    duration: 400,
-                    onLoad: { duration: 400 },
-                    easing: "quadInOut",
-                  }}
-                />
-
-                {/* Percentage Labels at end of lines (or active touch point) */}
-                {activeYesPoint && (
-                  <VictoryLabel
-                    datum={activeYesPoint} // Uses hovered point if active, otherwise last point
-                    text={[
-                      activeYesPoint.label,
-                      `${Math.round(activeYesPoint.price * 100)}%`,
-                    ]}
-                    textAnchor="start"
-                    dx={10}
-                    dy={-6}
-                    renderInPortal={false}
-                    style={[
-                      {
-                        fill: activeYesPoint.color,
-                        fontSize: 12,
-                        fontWeight: "600",
-                      },
-                      {
-                        fill: activeYesPoint.color,
-                        fontSize: 24,
-                        fontWeight: "700",
-                      },
-                    ]}
-                    lineHeight={[1.2, 1]}
-                    backgroundPadding={[4, 6]}
-                    backgroundStyle={{
-                      fill: "#FFFFFF",
-                      opacity: 0.95,
-                      stroke: "rgba(15, 23, 42, 0.08)",
-                    }}
-                  />
-                )}
-
-                {activeNoPoint && (
-                  <VictoryLabel
-                    datum={activeNoPoint} // Uses hovered point if active, otherwise last point
-                    text={[
-                      activeNoPoint.label,
-                      `${Math.round(activeNoPoint.price * 100)}%`,
-                    ]}
-                    textAnchor="start"
-                    dx={10}
-                    dy={-6}
-                    renderInPortal={false}
-                    style={[
-                      {
-                        fill: activeNoPoint.color,
-                        fontSize: 12,
-                        fontWeight: "600",
-                      },
-                      {
-                        fill: activeNoPoint.color,
-                        fontSize: 24,
-                        fontWeight: "700",
-                      },
-                    ]}
-                    lineHeight={[1.2, 1]}
-                    backgroundPadding={[4, 6]}
-                    backgroundStyle={{
-                      fill: "#FFFFFF",
-                      opacity: 0.95,
-                      stroke: "rgba(15, 23, 42, 0.08)",
-                    }}
-                  />
-                )}
-              </VictoryChart>
-
-              {/* Legend */}
-              <View style={styles.legendContainer}>
-                <View style={styles.legendItem}>
-                  <View
-                    style={[styles.legendColor, { backgroundColor: yesColor }]}
-                  />
-                  <Text style={styles.legendText}>{yesLabel}</Text>
-                </View>
-                <View style={styles.legendItem}>
-                  <View
-                    style={[styles.legendColor, { backgroundColor: noColor }]}
-                  />
-                  <Text style={styles.legendText}>{noLabel}</Text>
-                </View>
-              </View>
-            </View>
-          )}
-        </View>
-      </ScrollView>
-    </SafeAreaView>
-  );
-};
-
-// ----------------------------------------------------------------------
-// STYLES
-// ----------------------------------------------------------------------
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f9fafb",
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 32,
-  },
-  marketInfo: {
-    marginBottom: 24,
-  },
-  title: {
-    fontSize: 30,
-    fontWeight: "bold",
-    color: "#111827",
-  },
-  chartCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    padding: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-    overflow: "visible",
-  },
-  chartContainer: {
-    alignItems: "center",
-    marginHorizontal: -6,
-  },
-  loadingContainer: {
-    height: 180,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    marginTop: 12,
-    color: "#9ca3af",
-    fontSize: 14,
-  },
-  legendContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 8,
-    gap: 16,
-  },
-  legendItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  legendColor: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-  },
-  legendText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#374151",
-  },
-});
-
-// ----------------------------------------------------------------------
-// MARKET DETAIL SCREEN WRAPPER
-// ----------------------------------------------------------------------
-
-// MarketDetailScreen wrapper component that receives market from route params
-export default function MarketDetailScreen() {
+function MyChart({ onTimestampChange }) {
   const route = useRoute();
   const market = route.params?.game || route.params?.market;
 
-  console.log("route", route.params);
+  console.log("marketgdfgdf", market);
 
-  const [yesHistory, setYesHistory] = useState(null);
-  const [noHistory, setNoHistory] = useState(null);
+  const chartPadding = { top: 20, bottom: 40, left: 20, right: 100 };
+  const chartWidth = 350;
+  const chartHeight = 300;
+  const plotWidth = chartWidth - chartPadding.left - chartPadding.right;
+  const plotHeight = chartHeight - chartPadding.top - chartPadding.bottom;
+
+  // Extract market data
+  const marketData = useMemo(() => {
+    if (!market) {
+      return {
+        awayTeam: {
+          price: 0.5,
+          tokenId: null,
+          abbreviation: "Away",
+          name: "Away",
+          color: "#9333EA",
+        },
+        homeTeam: {
+          price: 0.5,
+          tokenId: null,
+          abbreviation: "Home",
+          name: "Home",
+          color: "#06B6D4",
+        },
+        conditionId: null,
+      };
+    }
+    const awayAbbreviation = market.awayTeam?.abbreviation || "Away";
+    const homeAbbreviation = market.homeTeam?.abbreviation || "Home";
+    const awayName = market.awayTeam?.name || awayAbbreviation;
+    const homeName = market.homeTeam?.name || homeAbbreviation;
+
+    return {
+      awayTeam: {
+        price: parseFloat(market.awayTeam?.price) || 0.5,
+        tokenId: market.awayTeam?.tokenId || null,
+        abbreviation: awayAbbreviation,
+        name: awayName,
+        color: getTeamColor(awayAbbreviation, awayName),
+      },
+      homeTeam: {
+        price: parseFloat(market.homeTeam?.price) || 0.5,
+        tokenId: market.homeTeam?.tokenId || null,
+        abbreviation: homeAbbreviation,
+        name: homeName,
+        color: getTeamColor(homeAbbreviation, homeName),
+      },
+      conditionId: market.conditionId || market.condition_id || null,
+    };
+  }, [market]);
+
+  // State for price history
+  const [awayHistory, setAwayHistory] = useState(null);
+  const [homeHistory, setHomeHistory] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Transform market data
-  const marketData = useMemo(() => {
-    if (!market) {
-      // Return default data if no market provided
-      return {
-        team1: "LAL",
-        team2: "BOS",
-        team1Color: "#552583",
-        team2Color: "#007A33",
-        team1Price: 0.58,
-        team2Price: 0.42,
-      };
-    }
-    return transformMarketData(market);
-  }, [market]);
+  // Gesture handling for cursor
+  const cursorX = useSharedValue(-1); // -1 means hidden
+  const cursorYHigh = useSharedValue(0);
+  const cursorYLow = useSharedValue(0);
+  const isActive = useSharedValue(false);
 
-  // Extract conditionId and token IDs from market
-  const { conditionId, tokenIds } = useMemo(() => {
-    if (!market) return { conditionId: null, tokenIds: null };
-
-    let conditionId = null;
-    let tokenIds = null;
-
-    try {
-      // Get conditionId (required for candlesticks endpoint)
-      // Dome API expects format: 0x followed by 64 hexadecimal characters
-      conditionId = market.conditionId || market.condition_id || null;
-
-      // Ensure conditionId has 0x prefix if it's a hex string
-      if (conditionId && !conditionId.startsWith("0x")) {
-        // If it's already a hex string without 0x, add it
-        if (/^[0-9a-fA-F]{64}$/.test(conditionId)) {
-          conditionId = `0x${conditionId}`;
-        }
-      }
-
-      // Extract token IDs from awayTeam/homeTeam structure (new format)
-      if (market.awayTeam?.tokenId && market.homeTeam?.tokenId) {
-        tokenIds = {
-          yesTokenId: market.awayTeam.tokenId,
-          noTokenId: market.homeTeam.tokenId,
-        };
-      }
-      // Fallback: extract from clobTokenIds array
-      else {
-        let clobTokenIds = market.clobTokenIds;
-
-        // If it's a string, parse it
-        if (typeof clobTokenIds === "string") {
-          clobTokenIds = JSON.parse(clobTokenIds);
-        }
-
-        // If it's an array with at least 2 tokens
-        if (Array.isArray(clobTokenIds) && clobTokenIds.length >= 2) {
-          tokenIds = {
-            yesTokenId: clobTokenIds[0],
-            noTokenId: clobTokenIds[1],
-          };
-        } else if (market.prices && typeof market.prices === "object") {
-          // Fallback: try to get from prices object keys
-          const priceKeys = Object.keys(market.prices);
-          if (priceKeys.length >= 2) {
-            tokenIds = {
-              yesTokenId: priceKeys[0],
-              noTokenId: priceKeys[1],
-            };
-          }
-        }
-      }
-    } catch (e) {
-      console.warn("Failed to extract conditionId or token IDs:", e);
-    }
-
-    return { conditionId, tokenIds };
-  }, [market]);
+  // Animation for chart fade-in
+  const chartOpacity = useSharedValue(0);
+  const [showTooltip, setShowTooltip] = useState(false);
+  const [tooltipData, setTooltipData] = useState({
+    index: 0,
+    awayPrice: 0,
+    homePrice: 0,
+    timestamp: null,
+    awayTeamName: "",
+    homeTeamName: "",
+  });
 
   // Fetch price history using candlesticks endpoint
   useEffect(() => {
-    // Need conditionId for candlesticks endpoint (Dome API requirement)
-    if (!conditionId) {
+    if (!marketData.conditionId) {
       console.warn("No conditionId found in market, cannot fetch candlesticks");
       setLoading(false);
       return;
@@ -709,16 +135,8 @@ export default function MarketDetailScreen() {
         const startTs = now - 24 * 60 * 60; // 24 hours ago
         const endTs = now;
 
-        // Log conditionId and token IDs for debugging
-        console.log("Market data:", {
-          conditionId: conditionId,
-          yesTokenId: tokenIds?.yesTokenId,
-          noTokenId: tokenIds?.noTokenId,
-        });
-
-        // Fetch candlesticks using conditionId (not token IDs)
-        // Dome API candlesticks endpoint requires conditionId format: 0x + 64 hex chars
-        let url = `${API_BASE_URL}/api/candlesticks/${conditionId}?interval=1&startTs=${startTs}&endTs=${endTs}`;
+        // Fetch candlesticks using conditionId
+        let url = `${API_BASE_URL}/api/candlesticks/${marketData.conditionId}?interval=1&startTs=${startTs}&endTs=${endTs}`;
         console.log("Fetching candlesticks for conditionId:", url);
 
         let response = await fetch(url);
@@ -726,7 +144,7 @@ export default function MarketDetailScreen() {
         // If 400 error, try without optional parameters
         if (!response.ok && response.status === 400) {
           console.log("400 error, trying without optional parameters...");
-          url = `${API_BASE_URL}/api/candlesticks/${conditionId}`;
+          url = `${API_BASE_URL}/api/candlesticks/${marketData.conditionId}`;
           console.log("Retrying with minimal URL:", url);
           response = await fetch(url);
         }
@@ -758,8 +176,6 @@ export default function MarketDetailScreen() {
         const data = await response.json();
 
         // Transform candlestick data for chart
-        // Response format from Dome API: array of candlesticks for all tokens in condition
-        // Each candlestick may be: [candlestick_data, token_metadata] or { token_id, prices, ... }
         let candlesticks = [];
 
         // Handle different response formats
@@ -774,13 +190,12 @@ export default function MarketDetailScreen() {
         console.log("Candlesticks response structure:", {
           totalCandlesticks: candlesticks.length,
           firstItem: candlesticks[0],
-          tokenIds: tokenIds,
+          awayTokenId: marketData.awayTeam.tokenId,
+          homeTokenId: marketData.homeTeam.tokenId,
         });
 
-        // Extract YES and NO token data from candlesticks
-        // Format: [[candlestick_array, token_metadata], ...]
-        // Where candlestick_array is an array of candlestick objects
-        const extractTokenData = (tokenId, label) => {
+        // Extract token data from candlesticks
+        const extractTokenData = (tokenId) => {
           const tokenCandlesticks = [];
 
           candlesticks.forEach((item) => {
@@ -789,14 +204,13 @@ export default function MarketDetailScreen() {
 
             // Handle tuple format: [candlestick_array, token_metadata]
             if (Array.isArray(item) && item.length >= 2) {
-              candlestickArray = item[0]; // Array of candlesticks
-              const metadata = item[1]; // Metadata with token_id
+              candlestickArray = item[0];
+              const metadata = item[1];
               itemTokenId = metadata?.token_id || metadata?.tokenId || null;
             }
             // Handle object format: {token_id, prices, ...}
             else if (typeof item === "object" && item !== null) {
               itemTokenId = item.token_id || item.tokenId || null;
-              // If it's a single object, wrap it in an array
               candlestickArray = Array.isArray(item.candlesticks)
                 ? item.candlesticks
                 : [item];
@@ -808,10 +222,8 @@ export default function MarketDetailScreen() {
               itemTokenId.toString() === tokenId?.toString() &&
               Array.isArray(candlestickArray)
             ) {
-              // Iterate through each candlestick in the array
-              candlestickArray.forEach((candle, candleIndex) => {
-                // Extract price from candlestick object
-                const price =
+              candlestickArray.forEach((candle) => {
+                let price =
                   parseFloat(candle?.close) ||
                   parseFloat(candle?.close_dollars) ||
                   parseFloat(candle?.price?.close) ||
@@ -822,6 +234,11 @@ export default function MarketDetailScreen() {
                   parseFloat(candle?.open_dollars) ||
                   0;
 
+                // Normalize price to 0-1 range if it's in cents (0-100 range)
+                if (price > 1) {
+                  price = price / 100;
+                }
+
                 if (price > 0) {
                   tokenCandlesticks.push({
                     x: tokenCandlesticks.length,
@@ -831,7 +248,7 @@ export default function MarketDetailScreen() {
                       candle?.time ||
                       candle?.end_period_ts ||
                       candle?.ts ||
-                      candleIndex,
+                      tokenCandlesticks.length,
                   });
                 }
               });
@@ -845,75 +262,744 @@ export default function MarketDetailScreen() {
           return tokenCandlesticks.map((point, index) => ({
             x: index,
             y: point.y,
+            timestamp: point.timestamp,
           }));
         };
 
-        // Extract data for YES and NO tokens
-        const yesHistoryData = tokenIds?.yesTokenId
-          ? extractTokenData(tokenIds.yesTokenId, "YES")
+        // Extract data for away and home teams
+        const awayHistoryData = marketData.awayTeam.tokenId
+          ? extractTokenData(marketData.awayTeam.tokenId)
           : [];
-        const noHistoryData = tokenIds?.noTokenId
-          ? extractTokenData(tokenIds.noTokenId, "NO")
+        const homeHistoryData = marketData.homeTeam.tokenId
+          ? extractTokenData(marketData.homeTeam.tokenId)
           : [];
 
         // Ensure both arrays have the same length
-        const maxLength = Math.max(yesHistoryData.length, noHistoryData.length);
+        const maxLength = Math.max(
+          awayHistoryData.length,
+          homeHistoryData.length
+        );
 
         // Fill missing data points
-        while (yesHistoryData.length < maxLength) {
+        while (awayHistoryData.length < maxLength) {
           const lastPrice =
-            yesHistoryData.length > 0
-              ? yesHistoryData[yesHistoryData.length - 1].y
-              : marketData.team1Price;
-          yesHistoryData.push({
-            x: yesHistoryData.length,
+            awayHistoryData.length > 0
+              ? awayHistoryData[awayHistoryData.length - 1].y
+              : marketData.awayTeam.price;
+          awayHistoryData.push({
+            x: awayHistoryData.length,
             y: lastPrice,
           });
         }
 
-        while (noHistoryData.length < maxLength) {
+        while (homeHistoryData.length < maxLength) {
           const lastPrice =
-            noHistoryData.length > 0
-              ? noHistoryData[noHistoryData.length - 1].y
-              : marketData.team2Price;
-          noHistoryData.push({
-            x: noHistoryData.length,
+            homeHistoryData.length > 0
+              ? homeHistoryData[homeHistoryData.length - 1].y
+              : marketData.homeTeam.price;
+          homeHistoryData.push({
+            x: homeHistoryData.length,
             y: lastPrice,
           });
         }
 
-        setYesHistory(yesHistoryData);
-        setNoHistory(noHistoryData);
+        setAwayHistory(awayHistoryData);
+        setHomeHistory(homeHistoryData);
 
         console.log(
-          `Loaded ${yesHistoryData.length} YES and ${noHistoryData.length} NO price points`
+          `Loaded ${awayHistoryData.length} away and ${homeHistoryData.length} home price points`
         );
       } catch (err) {
         console.error("Error fetching price history:", err);
         setError(err.message);
-        // Keep sample data on error
-        setYesHistory(null);
-        setNoHistory(null);
+        setAwayHistory(null);
+        setHomeHistory(null);
       } finally {
         setLoading(false);
       }
     };
 
     fetchPriceHistory();
-  }, [conditionId, tokenIds, marketData]);
+  }, [
+    marketData.conditionId,
+    marketData.awayTeam.tokenId,
+    marketData.homeTeam.tokenId,
+    marketData,
+  ]);
+
+  // Process chart data from price history
+  const chartData = useMemo(() => {
+    if (
+      !awayHistory ||
+      !homeHistory ||
+      awayHistory.length === 0 ||
+      homeHistory.length === 0
+    ) {
+      // Fallback to current prices if no history
+      return [
+        {
+          x: 0,
+          awayPrice: marketData.awayTeam.price,
+          homePrice: marketData.homeTeam.price,
+          timestamp: Date.now() / 1000,
+        },
+      ];
+    }
+
+    // Combine both histories, ensuring same length
+    const maxLength = Math.max(awayHistory.length, homeHistory.length);
+    const combined = [];
+
+    for (let i = 0; i < maxLength; i++) {
+      const awayPoint = awayHistory[i];
+      const homePoint = homeHistory[i];
+
+      combined.push({
+        x: i,
+        awayPrice: awayPoint?.y || marketData.awayTeam.price,
+        homePrice: homePoint?.y || marketData.homeTeam.price,
+        timestamp:
+          awayPoint?.timestamp || homePoint?.timestamp || Date.now() / 1000,
+      });
+    }
+
+    return combined;
+  }, [awayHistory, homeHistory, marketData]);
+
+  // Calculate y-axis domain based on actual price range to improve visibility
+  const yDomain = useMemo(() => {
+    if (!chartData || chartData.length === 0) {
+      return [0, 1];
+    }
+
+    const allPrices = chartData.flatMap((d) => [d.awayPrice, d.homePrice]);
+    const priceMin = Math.min(...allPrices);
+    const priceMax = Math.max(...allPrices);
+    const priceRange = priceMax - priceMin;
+
+    // If prices are very close together, add padding to make them more visible
+    // Add 10% padding on each side, but ensure minimum range of 0.1 (10 percentage points)
+    const minRange = 0.1;
+    const padding = Math.max(priceRange * 0.1, (minRange - priceRange) / 2);
+
+    const domainMin = Math.max(0, priceMin - padding);
+    const domainMax = Math.min(1, priceMax + padding);
+
+    return [domainMin, domainMax];
+  }, [chartData]);
+
+  // Find the closest data point and its y position for a given x position
+  const getValueAtX = useCallback(
+    (xPos) => {
+      if (!chartData || chartData.length === 0) {
+        return {
+          index: 0,
+          awayPrice: marketData.awayTeam.price,
+          homePrice: marketData.homeTeam.price,
+          timestamp: null,
+          yHigh: 0,
+          yLow: 0,
+        };
+      }
+
+      // Clamp x position to plot area
+      const clampedX = Math.max(0, Math.min(plotWidth, xPos));
+      const normalizedX = clampedX / plotWidth;
+
+      // Convert normalized x to data index
+      const maxIndex = chartData.length - 1;
+      const dataIndex = normalizedX * maxIndex;
+
+      // Find the two points that bracket the index value
+      const index = Math.floor(dataIndex);
+      const nextIndex = Math.min(index + 1, chartData.length - 1);
+      const currentPoint = chartData[index];
+      const nextPoint = chartData[nextIndex];
+
+      // Linear interpolation
+      const t = dataIndex - index;
+      const interpolatedAwayPrice =
+        currentPoint.awayPrice +
+        (nextPoint.awayPrice - currentPoint.awayPrice) * t;
+      const interpolatedHomePrice =
+        currentPoint.homePrice +
+        (nextPoint.homePrice - currentPoint.homePrice) * t;
+
+      // Interpolate timestamp
+      const interpolatedTimestamp = currentPoint.timestamp
+        ? currentPoint.timestamp +
+          (nextPoint.timestamp - currentPoint.timestamp) * t
+        : null;
+
+      // Prices are already in 0-1 range, so we can use them directly
+      // VictoryChart adds domainPadding.y: 10, which affects the scale
+      const domainPaddingY = 10;
+      const effectivePlotHeight = plotHeight - domainPaddingY * 2;
+
+      // Use the yDomain to normalize prices to the chart's actual domain
+      const [domainMin, domainMax] = yDomain;
+      const domainRange = domainMax - domainMin || 1;
+
+      const normalizedYAway = (interpolatedAwayPrice - domainMin) / domainRange;
+      const normalizedYHome = (interpolatedHomePrice - domainMin) / domainRange;
+
+      // VictoryChart renders from top, so we need to invert the y coordinate
+      const chartYAway =
+        chartPadding.top +
+        domainPaddingY +
+        (1 - normalizedYAway) * effectivePlotHeight;
+      const chartYHome =
+        chartPadding.top +
+        domainPaddingY +
+        (1 - normalizedYHome) * effectivePlotHeight;
+
+      return {
+        index: dataIndex,
+        awayPrice: interpolatedAwayPrice,
+        homePrice: interpolatedHomePrice,
+        timestamp: interpolatedTimestamp,
+        yHigh: chartYAway,
+        yLow: chartYHome,
+      };
+    },
+    [plotWidth, plotHeight, chartPadding, chartData, marketData, yDomain]
+  );
+
+  // Update cursor data when position changes
+  const updateCursorData = useCallback(
+    (xPos) => {
+      if (xPos < 0) {
+        setShowTooltip(false);
+        if (onTimestampChange) {
+          onTimestampChange(null);
+        }
+        return;
+      }
+
+      const data = getValueAtX(xPos);
+      setTooltipData({
+        index: data.index,
+        awayPrice: data.awayPrice,
+        homePrice: data.homePrice,
+        timestamp: data.timestamp,
+        awayTeamName: marketData.awayTeam.abbreviation || "Away",
+        homeTeamName: marketData.homeTeam.abbreviation || "Home",
+      });
+      cursorYHigh.value = data.yHigh;
+      cursorYLow.value = data.yLow;
+      setShowTooltip(true);
+
+      // Notify parent component of timestamp change
+      if (onTimestampChange) {
+        onTimestampChange(data.timestamp);
+      }
+    },
+    [getValueAtX, cursorYHigh, cursorYLow, onTimestampChange, marketData]
+  );
+
+  // Gesture handler - Pan for dragging cursor
+  const panGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .onStart((event) => {
+          "worklet";
+          const touchX = event.x - chartPadding.left;
+          if (touchX >= 0 && touchX <= plotWidth) {
+            cursorX.value = touchX;
+            isActive.value = true;
+            runOnJS(updateCursorData)(touchX);
+          }
+        })
+        .onUpdate((event) => {
+          "worklet";
+          const touchX = event.x - chartPadding.left;
+          if (touchX >= 0 && touchX <= plotWidth) {
+            cursorX.value = touchX;
+            runOnJS(updateCursorData)(touchX);
+          }
+        })
+        .onEnd(() => {
+          "worklet";
+          isActive.value = false;
+          // Return cursor to initial state (end of chart)
+          cursorX.value = plotWidth;
+          runOnJS(updateCursorData)(plotWidth);
+        }),
+    [chartPadding.left, plotWidth, cursorX, isActive, updateCursorData]
+  );
+
+  // Initialize cursor to end of chart when data is ready
+  useEffect(() => {
+    if (chartData && chartData.length > 0 && cursorX.value === -1) {
+      // Set cursor to the right edge (end of chart)
+      cursorX.value = plotWidth;
+      // Update tooltip data with latest prices
+      updateCursorData(plotWidth);
+      // Show tooltip but with lower opacity initially
+      isActive.value = false; // Will show with reduced opacity
+      setShowTooltip(true);
+    }
+  }, [chartData, plotWidth, cursorX, updateCursorData, isActive]);
+
+  // Fade in chart when data is loaded
+  useEffect(() => {
+    if (!loading && chartData && chartData.length > 0) {
+      chartOpacity.value = withTiming(1, {
+        duration: 400,
+        easing: Easing.out(Easing.ease),
+      });
+    } else {
+      chartOpacity.value = 0;
+    }
+  }, [loading, chartData, chartOpacity]);
+
+  const animatedChartStyle = useAnimatedStyle(() => {
+    return {
+      opacity: chartOpacity.value,
+    };
+  });
+
+  const animatedCursorStyle = useAnimatedStyle(() => {
+    // Show cursor with full opacity when active, reduced opacity when inactive but visible
+    const opacity = isActive.value ? 1 : cursorX.value >= 0 ? 0.5 : 0;
+    return {
+      opacity,
+      transform: [{ translateX: cursorX.value - 1 }], // -1 to center the 2px line
+    };
+  });
+
+  const animatedTooltipHighStyle = useAnimatedStyle(() => {
+    const offset = 80; // Desired offset to the right
+
+    // Calculate position (cursor + offset) - allow it to go outside chart
+    const adjustedX = cursorX.value + offset;
+
+    // Show tooltips with full opacity when active, reduced opacity when inactive but visible
+    const opacity = isActive.value ? 1 : cursorX.value >= 0 ? 0.7 : 0;
+
+    return {
+      opacity,
+      transform: [
+        { translateX: adjustedX },
+        { translateY: cursorYHigh.value - 40 }, // Position above the dot
+      ],
+    };
+  });
+
+  const animatedTooltipLowStyle = useAnimatedStyle(() => {
+    const offset = 80; // Desired offset to the right
+
+    // Calculate position (cursor + offset) - allow it to go outside chart
+    const adjustedX = cursorX.value + offset;
+
+    // Show tooltips with full opacity when active, reduced opacity when inactive but visible
+    const opacity = isActive.value ? 1 : cursorX.value >= 0 ? 0.7 : 0;
+
+    return {
+      opacity,
+      transform: [
+        { translateX: adjustedX },
+        { translateY: cursorYLow.value - 40 }, // Position above the dot
+      ],
+    };
+  });
+
+  // Animated style for date tooltip - positioned above both tooltips
+  const animatedDateTooltipStyle = useAnimatedStyle(() => {
+    const offset = 80; // Same offset as price tooltips
+    const dateTooltipWidth = 180; // Approximate width of date tooltip
+    const margin = 10; // Margin from right edge
+    // Account for chart padding - tooltip base position is at chartPadding.left
+    const rightEdge =
+      chartWidth - chartPadding.left - dateTooltipWidth - margin;
+
+    // Calculate desired position
+    const desiredX = cursorX.value + offset;
+
+    // Clamp to prevent going off screen on the right
+    const adjustedX = Math.min(desiredX, rightEdge);
+
+    // Position above the higher tooltip (away team) with more spacing
+    const dateY = Math.min(cursorYHigh.value, cursorYLow.value) - 90;
+
+    return {
+      opacity: isActive.value ? 1 : 0,
+      transform: [{ translateX: adjustedX }, { translateY: dateY }],
+    };
+  }, [chartWidth, chartPadding]);
+
+  // Format date like "Nov 23, 2025 8:14 pm"
+  const formatDateTooltip = (timestamp) => {
+    if (!timestamp) return "";
+    const date = new Date(timestamp * 1000);
+    if (Number.isNaN(date.getTime())) return "";
+
+    const month = date.toLocaleDateString(undefined, { month: "short" });
+    const day = date.getDate();
+    const year = date.getFullYear();
+    const time = date
+      .toLocaleTimeString(undefined, {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      })
+      .toLowerCase();
+
+    return `${month} ${day}, ${year} ${time}`;
+  };
 
   return (
-    <PriceHistoryChart
-      yesPrice={marketData.team1Price}
-      noPrice={marketData.team2Price}
-      yesLabel={marketData.team1}
-      noLabel={marketData.team2}
-      yesColor={marketData.team1Color}
-      noColor={marketData.team2Color}
-      yesHistory={yesHistory}
-      noHistory={noHistory}
-      loading={loading}
-      market={market}
-    />
+    <View style={styles.chartContainer}>
+      {loading && (
+        <View style={styles.skeletonContainer}>
+          <ChartSkeleton />
+        </View>
+      )}
+      <Animated.View
+        style={[
+          styles.chartAnimatedContainer,
+          animatedChartStyle,
+          loading && { opacity: 0 },
+        ]}
+        pointerEvents={loading ? "none" : "auto"}
+      >
+        <GestureHandlerRootView style={styles.chartContainer}>
+          <GestureDetector gesture={panGesture}>
+            <View style={styles.chartWrapper}>
+              <VictoryChart
+                theme={VictoryTheme.material}
+                width={chartWidth}
+                height={chartHeight}
+                padding={chartPadding}
+                domainPadding={{ x: 0, y: 10 }}
+                domain={{ y: yDomain }}
+              >
+                <VictoryAxis
+                  style={{
+                    axis: { stroke: "transparent", strokeWidth: 0 },
+                    tickLabels: { fill: "transparent" },
+                    grid: { stroke: "transparent", strokeWidth: 0 },
+                    ticks: { stroke: "transparent", strokeWidth: 0 },
+                  }}
+                />
+                <VictoryAxis
+                  dependentAxis
+                  style={{
+                    axis: { stroke: "transparent", strokeWidth: 0 },
+                    tickLabels: { fill: "transparent" },
+                    grid: { stroke: "transparent", strokeWidth: 0 },
+                    ticks: { stroke: "transparent", strokeWidth: 0 },
+                  }}
+                />
+                <VictoryLine
+                  data={chartData}
+                  x="x"
+                  y="awayPrice"
+                  interpolation="step"
+                  style={{
+                    data: {
+                      stroke: marketData.awayTeam.color,
+                      strokeWidth: 1.5,
+                    },
+                  }}
+                  animate={{
+                    duration: 400,
+                    onLoad: { duration: 400 },
+                    easing: "quadInOut",
+                  }}
+                />
+                <VictoryLine
+                  data={chartData}
+                  x="x"
+                  y="homePrice"
+                  interpolation="step"
+                  style={{
+                    data: {
+                      stroke: marketData.homeTeam.color,
+                      strokeWidth: 1.5,
+                    },
+                  }}
+                  animate={{
+                    duration: 400,
+                    onLoad: { duration: 400 },
+                    easing: "quadInOut",
+                  }}
+                />
+              </VictoryChart>
+              {/* Cursor line - positioned absolutely over the chart */}
+              <Animated.View
+                style={[styles.cursorLine, animatedCursorStyle]}
+                pointerEvents="none"
+              />
+            </View>
+          </GestureDetector>
+          {/* Tooltips showing pressed values - separate for each line */}
+          {showTooltip && (
+            <>
+              {/* Away team price tooltip */}
+              <Animated.View
+                style={[
+                  styles.tooltip,
+                  styles.tooltipHigh,
+                  animatedTooltipHighStyle,
+                ]}
+                pointerEvents="none"
+              >
+                <Text
+                  style={[
+                    styles.tooltipText,
+                    {
+                      color: marketData.awayTeam.color,
+                      fontWeight: "bold",
+                      fontSize: 20,
+                    },
+                  ]}
+                >
+                  {formatSharePrice(tooltipData.awayPrice)}
+                </Text>
+                <Text
+                  style={[
+                    styles.tooltipText,
+                    {
+                      color: marketData.awayTeam.color,
+                      fontSize: 12,
+                      marginTop: 4,
+                      opacity: 0.8,
+                    },
+                  ]}
+                >
+                  {tooltipData.awayTeamName}
+                </Text>
+              </Animated.View>
+              {/* Home team price tooltip */}
+              <Animated.View
+                style={[
+                  styles.tooltip,
+                  styles.tooltipLow,
+                  animatedTooltipLowStyle,
+                ]}
+                pointerEvents="none"
+              >
+                <Text
+                  style={[
+                    styles.tooltipText,
+                    {
+                      color: marketData.homeTeam.color,
+                      fontWeight: "bold",
+                      fontSize: 20,
+                    },
+                  ]}
+                >
+                  {formatSharePrice(tooltipData.homePrice)}
+                </Text>
+                <Text
+                  style={[
+                    styles.tooltipText,
+                    {
+                      color: marketData.homeTeam.color,
+                      fontSize: 12,
+                      marginTop: 4,
+                      opacity: 0.8,
+                    },
+                  ]}
+                >
+                  {tooltipData.homeTeamName}
+                </Text>
+              </Animated.View>
+            </>
+          )}
+        </GestureHandlerRootView>
+      </Animated.View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  chartContainer: {
+    height: 300,
+    marginVertical: 20,
+    position: "relative",
+  },
+  skeletonContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chartAnimatedContainer: {
+    width: "100%",
+    height: "100%",
+  },
+  chartWrapper: {
+    width: 350,
+    height: 300,
+    position: "relative",
+  },
+  cursorLine: {
+    position: "absolute",
+    width: 2,
+    backgroundColor: "rgba(0, 0, 0, 0.3)",
+    height: 240, // Chart height (300) - top padding (20) - bottom padding (40)
+    top: 20, // Top padding
+    left: 20, // Left padding (matches chart padding)
+  },
+  tooltip: {
+    position: "absolute",
+    backgroundColor: "transparent",
+    padding: 6,
+    borderRadius: 4,
+    minWidth: 80,
+    alignItems: "center",
+    top: 20, // Top padding
+    left: 20, // Left padding (matches chart padding)
+    marginLeft: -40, // Center the tooltip on the cursor
+  },
+  tooltipHigh: {
+    // Additional styles if needed
+  },
+  tooltipLow: {
+    // Additional styles if needed
+  },
+  dateTooltip: {
+    // Date tooltip positioned above price tooltips
+    alignItems: "flex-start",
+    marginLeft: 0, // Remove centering for date tooltip
+    minWidth: 180, // Ensure enough width for date text (e.g., "Nov 23, 2025 8:14 pm")
+    paddingHorizontal: 8, // Add horizontal padding
+    maxWidth: 200, // Prevent it from getting too wide
+  },
+  tooltipText: {
+    color: "white",
+    fontSize: 12,
+    marginVertical: 2,
+  },
+  loadingContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
+  },
+  loadingText: {
+    marginTop: 12,
+    color: "#666",
+    fontSize: 14,
+  },
+  scrollContent: {
+    paddingBottom: 100,
+  },
+  chartContainerWrapper: {
+    marginBottom: 20,
+  },
+});
+
+export default function MarketsScreen() {
+  const route = useRoute();
+  const market = route.params?.game || route.params?.market;
+
+  // Extract market title
+  const marketTitle = useMemo(() => {
+    if (!market) {
+      return "Markets";
+    }
+    // Try title first, then question, then construct from teams
+    if (market.title) {
+      return market.title;
+    }
+    if (market.question) {
+      return market.question;
+    }
+    // Construct from team names if available
+    if (market.awayTeam && market.homeTeam) {
+      const awayName =
+        market.awayTeam.abbreviation || market.awayTeam.name || "Away";
+      const homeName =
+        market.homeTeam.abbreviation || market.homeTeam.name || "Home";
+      return `${awayName} vs ${homeName}`;
+    }
+    return "Markets";
+  }, [market]);
+
+  // State for current timestamp from chart cursor
+  const [currentTimestamp, setCurrentTimestamp] = useState(null);
+
+  // Extract description - use current timestamp if available, otherwise use game date
+  const marketDescription = useMemo(() => {
+    // If we have a timestamp from the chart cursor, use that
+    if (currentTimestamp) {
+      try {
+        const dateObj = new Date(currentTimestamp * 1000); // Convert from seconds to milliseconds
+        if (!Number.isNaN(dateObj.getTime())) {
+          const dateStr = dateObj.toLocaleDateString(undefined, {
+            weekday: "long",
+            month: "long",
+            day: "numeric",
+            year: "numeric",
+          });
+          const timeStr = dateObj.toLocaleTimeString(undefined, {
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true,
+          });
+          return `${dateStr} ${timeStr}`;
+        }
+      } catch (e) {
+        // Ignore date parsing errors
+      }
+    }
+
+    // Otherwise, use the game date
+    if (!market) {
+      return "Browse all available markets.";
+    }
+    // Try to get a description or date
+    const date =
+      market.gameStartTime ||
+      market.date ||
+      market.eventDate ||
+      market.startTime ||
+      market.startDate;
+    if (date) {
+      try {
+        const dateObj = new Date(date);
+        if (!Number.isNaN(dateObj.getTime())) {
+          const dateStr = dateObj.toLocaleDateString(undefined, {
+            weekday: "long",
+            month: "long",
+            day: "numeric",
+            year: "numeric",
+          });
+          const timeStr = dateObj.toLocaleTimeString(undefined, {
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true,
+          });
+          return `${dateStr} ${timeStr}`;
+        }
+      } catch (e) {
+        // Ignore date parsing errors
+      }
+    }
+    return "Market details";
+  }, [market, currentTimestamp]);
+
+  return (
+    <ScreenTemplate title={marketTitle} description={marketDescription}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        <View style={styles.chartContainerWrapper}>
+          <MyChart onTimestampChange={setCurrentTimestamp} />
+        </View>
+        <MarketRules />
+      </ScrollView>
+    </ScreenTemplate>
   );
 }

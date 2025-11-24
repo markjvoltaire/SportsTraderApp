@@ -256,7 +256,7 @@ export default function GameCard({ market, game, onPress }) {
   // Support both 'market' and 'game' props for compatibility
   const marketData = market || game;
 
-  console.log("marketData", marketData);
+  console.log("marketData!!!", marketData);
 
   if (!marketData) {
     return (
@@ -307,14 +307,14 @@ export default function GameCard({ market, game, onPress }) {
       onPress={() => onPress?.(marketData)}
     >
       {/* Date Row */}
-      {/* <View style={styles.dateRow}>
+      <View style={styles.dateRow}>
         <Ionicons
           name="calendar-outline"
           size={14}
           color={Colors.textTertiary}
         />
         <Text style={styles.dateText}>{formattedDate}</Text>
-      </View> */}
+      </View>
 
       {/* Teams Row with Icons */}
       <View style={styles.teamsRow}>

@@ -95,6 +95,7 @@ export default function HomeScreen() {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const jsonData = await response.json();
+      console.log("jsonData", jsonData);
       setMarkets(jsonData);
     } catch (err) {
       setError(err.message);
