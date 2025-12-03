@@ -7,6 +7,7 @@ import Animated, {
   useSharedValue,
 } from "react-native-reanimated";
 import { Colors, Spacing, Typography } from "../../constants/theme";
+import { normalize, normalizeFont } from "../../utils/dimensions";
 
 export default function MarketRules({ market }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -15,11 +16,6 @@ export default function MarketRules({ market }) {
   const height = useSharedValue(0);
 
   const rules = [
-    {
-      icon: "trophy-outline",
-      title: "Winner Takes All",
-      description: "The team that wins the game receives the full payout.",
-    },
     {
       icon: "time-outline",
       title: "Settlement Time",
@@ -100,13 +96,26 @@ export default function MarketRules({ market }) {
   );
 }
 
+// Calculate responsive dimensions
+const containerRadius = normalize(12);
+const iconSize = normalize(32);
+const iconRadius = normalize(16);
+const iconMarginTop = normalize(2);
+const titleFontSize = normalizeFont(18);
+const descFontSize = normalizeFont(14);
+const descLineHeight = normalize(20);
+const descMarginBottom = normalize(30);
+const ruleTitleFontSize = normalizeFont(15);
+const ruleDescFontSize = normalizeFont(13);
+const ruleDescLineHeight = normalize(18);
+
 const styles = StyleSheet.create({
   container: {
     marginTop: Spacing.xl,
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.lg,
     backgroundColor: Colors.surface,
-    borderRadius: 12,
+    borderRadius: containerRadius,
     marginHorizontal: Spacing.md,
     overflow: "hidden",
   },
@@ -118,15 +127,15 @@ const styles = StyleSheet.create({
   },
   title: {
     ...Typography.sectionTitle,
-    fontSize: 18,
+    fontSize: titleFontSize,
     fontWeight: "700",
   },
   marketDescription: {
     ...Typography.body,
     color: Colors.textSecondary,
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: Spacing.md,
+    fontSize: descFontSize,
+    lineHeight: descLineHeight,
+    marginBottom: descMarginBottom,
   },
   rulesList: {
     gap: Spacing.md,
@@ -138,14 +147,14 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   iconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: iconSize,
+    height: iconSize,
+    borderRadius: iconRadius,
     backgroundColor: Colors.primary + "20",
     alignItems: "center",
     justifyContent: "center",
     marginRight: Spacing.md,
-    marginTop: 2,
+    marginTop: iconMarginTop,
   },
   ruleContent: {
     flex: 1,
@@ -154,12 +163,12 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontWeight: "600",
     marginBottom: Spacing.xs,
-    fontSize: 15,
+    fontSize: ruleTitleFontSize,
   },
   ruleDescription: {
     ...Typography.body,
     color: Colors.textTertiary,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: ruleDescFontSize,
+    lineHeight: ruleDescLineHeight,
   },
 });

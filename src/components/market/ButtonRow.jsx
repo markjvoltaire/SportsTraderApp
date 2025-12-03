@@ -2,6 +2,7 @@ import { StyleSheet, Text, View, TouchableOpacity } from "react-native";
 import React from "react";
 import { getTeamColor } from "../../utils/teamColors";
 import { formatSharePrice } from "../../utils/formatters";
+import { normalize, normalizeFont } from "../../utils/dimensions";
 
 export default function ButtonRow({ market }) {
   if (!market) {
@@ -64,25 +65,34 @@ export default function ButtonRow({ market }) {
   );
 }
 
+// Calculate responsive dimensions
+const containerPadding = normalize(6);
+const containerGap = normalize(6);
+const buttonPaddingV = normalize(8);
+const buttonPaddingH = normalize(8);
+const buttonRadius = normalize(8);
+const buttonMinHeight = normalize(45);
+const fontSize = normalizeFont(11);
+
 const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
-    padding: 6,
-    gap: 6,
+    padding: containerPadding,
+    gap: containerGap,
     width: "100%",
   },
   button: {
     flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    borderRadius: 8,
+    paddingVertical: buttonPaddingV,
+    paddingHorizontal: buttonPaddingH,
+    borderRadius: buttonRadius,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 45,
+    minHeight: buttonMinHeight,
   },
   teamName: {
     color: "#FFFFFF",
-    fontSize: 11,
+    fontSize: fontSize,
     fontWeight: "600",
   },
 });

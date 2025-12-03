@@ -137,7 +137,9 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 200, // Space for buttons at bottom
   },
-  chartContainerWrapper: {},
+  chartContainerWrapper: {
+    marginHorizontal: -Spacing.xl,
+  },
   buttonContainer: {
     position: "absolute",
     left: 0,
