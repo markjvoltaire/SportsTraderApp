@@ -74,13 +74,8 @@ export default function ScreenTemplate({
 
 const styles = StyleSheet.create({
   screen: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "flex-start",
     backgroundColor: Colors.background,
     paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.xxl,
   },
   title: {
     ...Typography.sectionTitle,
@@ -89,14 +84,12 @@ const styles = StyleSheet.create({
   body: {
     ...Typography.body,
     color: Colors.textTertiary,
-    marginBottom: Spacing.lg,
   },
   content: {
     alignSelf: "stretch",
+    bottom: 40,
   },
-  headerContainer: {
-    marginBottom: Spacing.lg,
-  },
+  headerContainer: {},
   children: {
     marginTop: 0,
   },

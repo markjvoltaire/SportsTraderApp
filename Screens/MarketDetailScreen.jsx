@@ -1,16 +1,21 @@
 import React, { useState, useMemo } from "react";
-import { View, StyleSheet, ScrollView } from "react-native";
+import { View, StyleSheet, ScrollView, Dimensions, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ScreenTemplate from "./ScreenTemplate";
 import { useRoute } from "@react-navigation/native";
 import MarketRules from "../src/components/market/MarketRules";
 import MyChart from "../src/components/market/MyChart";
 import ButtonRow from "../src/components/market/ButtonRow";
-import { Spacing } from "../src/constants/theme";
+import { Spacing, Typography } from "../src/constants/theme";
+import { formatCurrency } from "../src/utils/formatters";
+import StatCard from "../src/components/market/StatCard";
 
 export default function MarketsScreen() {
   const route = useRoute();
   const market = route.params?.game || route.params?.market;
+  console.log("market", market);
+
+  const { height } = Dimensions.get("window");
 
   // Get safe area insets for proper button positioning
   const insets = useSafeAreaInsets();
@@ -101,15 +106,47 @@ export default function MarketsScreen() {
     return "Market details";
   }, [market, currentTimestamp]);
 
+  // Extract and format volume
+  const marketVolume = useMemo(() => {
+    if (!market) {
+      return 0;
+    }
+    return (
+      market.volume24hr ||
+      market.volume?.day ||
+      market.volumeNum ||
+      market.volume ||
+      0
+    );
+  }, [market]);
+
+  const formattedVolume =
+    marketVolume > 0 ? formatCurrency(marketVolume) : "$0";
+
   return (
-    <View style={styles.container}>
+    <>
       <ScreenTemplate title={marketTitle} description={marketDescription}>
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          <View style={styles.chartContainerWrapper}>
+          <View style={[styles.chartContainerWrapper, { top: height * 0.02 }]}>
             <MyChart onTimestampChange={setCurrentTimestamp} />
+          </View>
+
+          {/* Market Stats Section */}
+          <View style={styles.statsSection}>
+            <Text style={styles.sectionTitle}>Market Stats</Text>
+
+            <View style={styles.statsGrid}>
+              <StatCard
+                label="24hr Volume"
+                value={formattedVolume}
+                subtitle={
+                  marketVolume > 0 ? "Total trading volume" : "No volume yet"
+                }
+              />
+            </View>
           </View>
 
           <MarketRules market={market} />
@@ -119,14 +156,15 @@ export default function MarketsScreen() {
         style={[
           styles.buttonContainer,
           {
-            top: 688 + insets.bottom + Spacing.md, // Tab bar height (72) + safe area bottom + padding
+            // Tab bar height (72) + safe area bottom + padding
+            top: 578 + insets.bottom + Spacing.md,
           },
         ]}
         pointerEvents="box-none"
       >
         <ButtonRow market={market} />
       </View>
-    </View>
+    </>
   );
 }
 
@@ -139,6 +177,7 @@ const styles = StyleSheet.create({
   },
   chartContainerWrapper: {
     marginHorizontal: -Spacing.xl,
+    marginBottom: Spacing.md,
   },
   buttonContainer: {
     position: "absolute",
@@ -149,5 +188,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xl, // Match ScreenTemplate padding
     zIndex: 1000, // Ensure it's above other content
     elevation: 10, // For Android shadow/elevation
+  },
+  statsSection: {
+    marginTop: Spacing.xl,
+    marginBottom: Spacing.lg,
+  },
+  sectionTitle: {
+    ...Typography.cardTitle,
+    fontSize: 18,
+    marginBottom: Spacing.md,
+    marginHorizontal: Spacing.xl,
+  },
+  statsGrid: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+    marginBottom: Spacing.lg,
   },
 });

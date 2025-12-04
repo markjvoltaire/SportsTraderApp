@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, Dimensions } from "react-native";
 import {
   VictoryChart,
   VictoryLine,
@@ -28,16 +28,17 @@ import { normalize, widthPercentage } from "../../utils/dimensions";
 export default function MyChart({ onTimestampChange }) {
   const route = useRoute();
   const market = route.params?.game || route.params?.market;
+  const { width, height } = Dimensions.get("window");
 
   const chartPadding = {
-    top: normalize(20),
-    bottom: normalize(40),
+    top: normalize(10),
+    bottom: normalize(10),
     left: normalize(20),
     right: normalize(20), // Reduced right padding since we now flip tooltips
   };
 
-  const chartWidth = widthPercentage(100); // use full device width for larger plot area
-  const chartHeight = normalize(360);
+  const chartWidth = widthPercentage(width * 0.23); // use full device width for larger plot area
+  const chartHeight = normalize(250);
   const plotWidth = chartWidth - chartPadding.left - chartPadding.right;
   const plotHeight = chartHeight - chartPadding.top - chartPadding.bottom;
 
@@ -297,8 +298,8 @@ export default function MyChart({ onTimestampChange }) {
     const priceMin = Math.min(...allPrices);
     const priceMax = Math.max(...allPrices);
     const priceRange = priceMax - priceMin;
-    const minRange = 0.1;
-    const padding = Math.max(priceRange * 0.1, (minRange - priceRange) / 2);
+    const minRange = 0.05;
+    const padding = Math.max(priceRange * 0.03, (minRange - priceRange) / 2);
     const domainMin = Math.max(0, priceMin - padding);
     const domainMax = Math.min(1, priceMax + padding);
     return [domainMin, domainMax];
@@ -540,7 +541,7 @@ export default function MyChart({ onTimestampChange }) {
                 width={chartWidth}
                 height={chartHeight}
                 padding={chartPadding}
-                domainPadding={{ x: 0, y: 10 }}
+                domainPadding={{ x: 0, y: 5 }}
                 domain={{ y: yDomain }}
               >
                 <VictoryAxis
@@ -574,9 +575,9 @@ export default function MyChart({ onTimestampChange }) {
                     },
                   }}
                   animate={{
-                    duration: 400,
-                    onLoad: { duration: 400 },
-                    easing: "quadInOut",
+                    duration: 850,
+                    onLoad: { duration: 850 },
+                    easing: "quadOut",
                   }}
                 />
                 <VictoryLine
@@ -593,9 +594,9 @@ export default function MyChart({ onTimestampChange }) {
                     },
                   }}
                   animate={{
-                    duration: 400,
-                    onLoad: { duration: 400 },
-                    easing: "quadInOut",
+                    duration: 850,
+                    onLoad: { duration: 850 },
+                    easing: "quadOut",
                   }}
                 />
               </VictoryChart>
@@ -688,7 +689,7 @@ export default function MyChart({ onTimestampChange }) {
 
 // Calculate responsive dimensions
 const chartHeight = normalize(360);
-const chartMargin = normalize(24);
+const chartMargin = normalize(8);
 const cursorWidth = normalize(2);
 const cursorHeight = normalize(300);
 const padding = normalize(20);
@@ -696,8 +697,7 @@ const padding = normalize(20);
 const styles = StyleSheet.create({
   chartContainer: {
     width: "100%",
-    height: chartHeight,
-    marginVertical: chartMargin,
+
     position: "relative",
   },
   skeletonContainer: {
@@ -711,12 +711,11 @@ const styles = StyleSheet.create({
   },
   chartAnimatedContainer: {
     width: "100%",
-    height: "100%",
   },
   chartWrapper: {
     width: "100%",
-    height: chartHeight,
     position: "relative",
+    bottom: 10,
   },
   cursorLine: {
     position: "absolute",

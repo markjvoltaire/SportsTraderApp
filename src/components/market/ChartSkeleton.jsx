@@ -7,7 +7,9 @@ export default function ChartSkeleton() {
   const chartHeight = 300;
 
   return (
-    <View style={[styles.container, { width: chartWidth, height: chartHeight }]}>
+    <View
+      style={[styles.container, { width: chartWidth, height: chartHeight }]}
+    >
       <ActivityIndicator size="large" color={Colors.primary} />
     </View>
   );
@@ -16,10 +18,9 @@ export default function ChartSkeleton() {
 const styles = StyleSheet.create({
   container: {
     position: "relative",
-    backgroundColor: Colors.surface,
+
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
   },
 });
-

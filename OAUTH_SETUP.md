@@ -119,3 +119,4 @@ The app is already configured with:
 - OAuth redirects are handled securely via deep linking
 - Phone numbers are validated before sending OTP
 - All authentication flows use Supabase's secure infrastructure
+
