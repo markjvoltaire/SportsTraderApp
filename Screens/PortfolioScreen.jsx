@@ -1,12 +1,13 @@
+import { StyleSheet, Text, View } from "react-native";
 import React from "react";
-
-import ScreenTemplate from "./ScreenTemplate";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function PortfolioScreen() {
   return (
-    <ScreenTemplate
-      title="Portfolio"
-      description="Review your positions and performance."
-    />
+    <SafeAreaView style={{ flex: 1 }}>
+      <Text>PortfolioScreen</Text>
+    </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({});

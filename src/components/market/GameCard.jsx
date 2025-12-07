@@ -31,6 +31,7 @@ function normalizeDateString(dateString) {
 
 /**
  * Format date as "Nov 20 @ 7:00 PM"
+ * Uses the date from the original string to avoid timezone issues
  */
 function formatGameDateTime(dateString) {
   if (!dateString) return "TBD";
@@ -40,15 +41,35 @@ function formatGameDateTime(dateString) {
 
   if (Number.isNaN(date.getTime())) return "TBD";
 
-  const month = date.toLocaleDateString(undefined, { month: "short" });
-  const day = date.getDate();
+  // Extract date components from the original date string to avoid timezone conversion issues
+  // If the string contains a date, use those parts directly
+  let year, month, day;
+  
+  // Try to parse date from string format like "2025-12-04" or "2025-12-04 18:00:00+00"
+  const dateMatch = dateString.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (dateMatch) {
+    year = parseInt(dateMatch[1], 10);
+    month = parseInt(dateMatch[2], 10) - 1; // JS months are 0-indexed
+    day = parseInt(dateMatch[3], 10);
+  } else {
+    // Fallback to using the date object
+    year = date.getFullYear();
+    month = date.getMonth();
+    day = date.getDate();
+  }
+
+  // Create a date object for the local date to format month name
+  const localDate = new Date(year, month, day);
+  const monthName = localDate.toLocaleDateString(undefined, { month: "short" });
+  
+  // Use the date object for time (which should be converted to local time)
   const time = date.toLocaleTimeString(undefined, {
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
   });
 
-  return `${month} ${day} @ ${time}`;
+  return `${monthName} ${day} @ ${time}`;
 }
 
 /**

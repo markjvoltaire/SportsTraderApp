@@ -25,7 +25,11 @@ import { getTeamColor } from "../../utils/teamColors";
 import ChartSkeleton from "./ChartSkeleton";
 import { normalize, widthPercentage } from "../../utils/dimensions";
 
-export default function MyChart({ onTimestampChange }) {
+export default function MyChart({
+  onTimestampChange,
+  onPriceStatsChange,
+  timeFrame = "24H",
+}) {
   const route = useRoute();
   const market = route.params?.game || route.params?.market;
   const { width, height } = Dimensions.get("window");
@@ -38,7 +42,7 @@ export default function MyChart({ onTimestampChange }) {
   };
 
   const chartWidth = widthPercentage(width * 0.23); // use full device width for larger plot area
-  const chartHeight = normalize(250);
+  const chartHeight = normalize(200);
   const plotWidth = chartWidth - chartPadding.left - chartPadding.right;
   const plotHeight = chartHeight - chartPadding.top - chartPadding.bottom;
 
@@ -124,13 +128,59 @@ export default function MyChart({ onTimestampChange }) {
         setLoading(true);
         setError(null);
 
-        // Calculate time range (last 24 hours)
+        // Calculate time range based on selected time frame
         const now = Math.floor(Date.now() / 1000);
-        const startTs = now - 24 * 60 * 60; // 24 hours ago
+        let startTs;
+
+        switch (timeFrame) {
+          case "1H":
+            startTs = now - 60 * 60; // 1 hour ago
+            break;
+          case "24H":
+            startTs = now - 24 * 60 * 60; // 24 hours ago
+            break;
+          case "7D":
+            startTs = now - 7 * 24 * 60 * 60; // 7 days ago
+            break;
+          case "30D":
+            startTs = now - 30 * 24 * 60 * 60; // 30 days ago
+            break;
+          case "ALL":
+          default:
+            startTs = null; // Fetch all available data
+            break;
+        }
+
         const endTs = now;
 
+        // Determine interval based on time frame for optimal data density
+        let interval = 1; // Default to 1 minute
+        switch (timeFrame) {
+          case "1H":
+            interval = 1; // 1 minute intervals
+            break;
+          case "24H":
+            interval = 1; // 1 minute intervals
+            break;
+          case "7D":
+            interval = 60; // 1 hour intervals
+            break;
+          case "30D":
+            interval = 1440; // 1 day intervals
+            break;
+          case "ALL":
+            interval = 1440; // 1 day intervals for all time
+            break;
+        }
+
         // Fetch candlesticks using conditionId
-        let url = `${API_BASE_URL}/api/candlesticks/${marketData.conditionId}?interval=1&startTs=${startTs}&endTs=${endTs}`;
+        let url;
+        if (startTs !== null) {
+          url = `${API_BASE_URL}/api/candlesticks/${marketData.conditionId}?interval=${interval}&startTs=${startTs}&endTs=${endTs}`;
+        } else {
+          // For "ALL", fetch without time range
+          url = `${API_BASE_URL}/api/candlesticks/${marketData.conditionId}?interval=${interval}`;
+        }
 
         let response = await fetch(url);
 
@@ -228,7 +278,15 @@ export default function MyChart({ onTimestampChange }) {
             awayHistoryData.length > 0
               ? awayHistoryData[awayHistoryData.length - 1].y
               : marketData.awayTeam.price;
-          awayHistoryData.push({ x: awayHistoryData.length, y: lastPrice });
+          const lastTimestamp =
+            awayHistoryData.length > 0
+              ? awayHistoryData[awayHistoryData.length - 1].timestamp
+              : null;
+          awayHistoryData.push({
+            x: awayHistoryData.length,
+            y: lastPrice,
+            timestamp: lastTimestamp,
+          });
         }
 
         while (homeHistoryData.length < maxLength) {
@@ -236,7 +294,15 @@ export default function MyChart({ onTimestampChange }) {
             homeHistoryData.length > 0
               ? homeHistoryData[homeHistoryData.length - 1].y
               : marketData.homeTeam.price;
-          homeHistoryData.push({ x: homeHistoryData.length, y: lastPrice });
+          const lastTimestamp =
+            homeHistoryData.length > 0
+              ? homeHistoryData[homeHistoryData.length - 1].timestamp
+              : null;
+          homeHistoryData.push({
+            x: homeHistoryData.length,
+            y: lastPrice,
+            timestamp: lastTimestamp,
+          });
         }
 
         setAwayHistory(awayHistoryData);
@@ -254,6 +320,7 @@ export default function MyChart({ onTimestampChange }) {
     marketData.conditionId,
     marketData.awayTeam.tokenId,
     marketData.homeTeam.tokenId,
+    timeFrame,
   ]);
 
   // Process chart data from price history
@@ -291,6 +358,58 @@ export default function MyChart({ onTimestampChange }) {
 
     return combined;
   }, [awayHistory, homeHistory, marketData]);
+
+  // Calculate high/low prices for each contract
+  const priceStats = useMemo(() => {
+    if (!chartData || chartData.length === 0) {
+      return {
+        awayHigh: marketData.awayTeam.price,
+        awayLow: marketData.awayTeam.price,
+        homeHigh: marketData.homeTeam.price,
+        homeLow: marketData.homeTeam.price,
+        awayOpen: marketData.awayTeam.price,
+        homeOpen: marketData.homeTeam.price,
+        openingTimestamp: null,
+      };
+    }
+
+    const awayPrices = chartData.map((d) => d.awayPrice).filter((p) => p > 0);
+    const homePrices = chartData.map((d) => d.homePrice).filter((p) => p > 0);
+
+    // Get opening prices (first data point) and opening timestamp
+    // Since chartData is built from sorted history, the first point has the earliest timestamp
+    const firstDataPoint = chartData[0];
+    const openingTimestamp = firstDataPoint?.timestamp || null;
+
+    return {
+      awayHigh:
+        awayPrices.length > 0
+          ? Math.max(...awayPrices)
+          : marketData.awayTeam.price,
+      awayLow:
+        awayPrices.length > 0
+          ? Math.min(...awayPrices)
+          : marketData.awayTeam.price,
+      homeHigh:
+        homePrices.length > 0
+          ? Math.max(...homePrices)
+          : marketData.homeTeam.price,
+      homeLow:
+        homePrices.length > 0
+          ? Math.min(...homePrices)
+          : marketData.homeTeam.price,
+      awayOpen: firstDataPoint?.awayPrice || marketData.awayTeam.price,
+      homeOpen: firstDataPoint?.homePrice || marketData.homeTeam.price,
+      openingTimestamp,
+    };
+  }, [chartData, marketData]);
+
+  // Pass price stats to parent component
+  useEffect(() => {
+    if (onPriceStatsChange && !loading) {
+      onPriceStatsChange(priceStats);
+    }
+  }, [priceStats, loading, onPriceStatsChange]);
 
   const yDomain = useMemo(() => {
     if (!chartData || chartData.length === 0) return [0, 1];
@@ -468,11 +587,18 @@ export default function MyChart({ onTimestampChange }) {
 
   const animatedTooltipHighStyle = useAnimatedStyle(() => {
     const opacity = isActive.value ? 1 : cursorX.value >= 0 ? 0.7 : 0;
+    // Calculate tooltip Y position
+    const tooltipY = cursorYHigh.value - 30;
+    // If tooltip is too close to top (where date tooltip is at -50), shift it down
+    // Date tooltip occupies roughly -50 to -20 (30px height)
+    const dateTooltipBottom = -20;
+    const adjustedY =
+      tooltipY < dateTooltipBottom + 10 ? dateTooltipBottom + 10 : tooltipY;
     return {
       opacity,
       transform: [
         { translateX: getTooltipXPosition(cursorX.value) },
-        { translateY: cursorYHigh.value - 30 },
+        { translateY: adjustedY },
       ],
     };
   });
@@ -490,12 +616,12 @@ export default function MyChart({ onTimestampChange }) {
 
   const animatedDateTooltipStyle = useAnimatedStyle(() => {
     const opacity = isActive.value ? 1 : 0;
-    // Position date at the very top of the chart
+    // Position date above the chart area to avoid overlapping with price tooltips
     return {
       opacity,
       transform: [
         { translateX: getTooltipXPosition(cursorX.value) - 10 },
-        { translateY: 0 }, // Fixed at top of chart area
+        { translateY: -50 }, // Position well above chart area to avoid overlap
       ],
     };
   });
@@ -565,7 +691,7 @@ export default function MyChart({ onTimestampChange }) {
                   data={chartData}
                   x="x"
                   y="awayPrice"
-                  interpolation="linear"
+                  interpolation="cardinal"
                   style={{
                     data: {
                       stroke: marketData.awayTeam.color,
@@ -575,16 +701,16 @@ export default function MyChart({ onTimestampChange }) {
                     },
                   }}
                   animate={{
-                    duration: 850,
-                    onLoad: { duration: 850 },
-                    easing: "quadOut",
+                    duration: 950,
+                    onLoad: { duration: 950 },
+                    easing: "back",
                   }}
                 />
                 <VictoryLine
                   data={chartData}
                   x="x"
                   y="homePrice"
-                  interpolation="linear"
+                  interpolation="cardinal"
                   style={{
                     data: {
                       stroke: marketData.homeTeam.color,
@@ -594,9 +720,9 @@ export default function MyChart({ onTimestampChange }) {
                     },
                   }}
                   animate={{
-                    duration: 850,
-                    onLoad: { duration: 850 },
-                    easing: "quadOut",
+                    duration: 950,
+                    onLoad: { duration: 950 },
+                    easing: "back",
                   }}
                 />
               </VictoryChart>
@@ -610,20 +736,6 @@ export default function MyChart({ onTimestampChange }) {
               {/* Tooltips */}
               {showTooltip && (
                 <>
-                  {/* Date Tooltip (New) */}
-                  <Animated.View
-                    style={[
-                      styles.tooltip,
-                      styles.dateTooltip,
-                      animatedDateTooltipStyle,
-                    ]}
-                    pointerEvents="none"
-                  >
-                    <Text style={styles.dateText}>
-                      {formatDateTooltip(tooltipData.timestamp)}
-                    </Text>
-                  </Animated.View>
-
                   {/* Away Team Tooltip */}
                   <Animated.View
                     style={[

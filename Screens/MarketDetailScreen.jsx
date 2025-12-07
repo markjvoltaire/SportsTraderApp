@@ -7,7 +7,7 @@ import MarketRules from "../src/components/market/MarketRules";
 import MyChart from "../src/components/market/MyChart";
 import ButtonRow from "../src/components/market/ButtonRow";
 import { Spacing, Typography } from "../src/constants/theme";
-import { formatCurrency } from "../src/utils/formatters";
+import { formatCurrency, formatSharePrice } from "../src/utils/formatters";
 import StatCard from "../src/components/market/StatCard";
 
 export default function MarketsScreen() {
@@ -45,6 +45,9 @@ export default function MarketsScreen() {
 
   // State for current timestamp from chart cursor
   const [currentTimestamp, setCurrentTimestamp] = useState(null);
+
+  // State for price stats (high/low) from chart
+  const [priceStats, setPriceStats] = useState(null);
 
   // Extract description - use current timestamp if available, otherwise use game date
   const marketDescription = useMemo(() => {
@@ -131,7 +134,10 @@ export default function MarketsScreen() {
           contentContainerStyle={styles.scrollContent}
         >
           <View style={[styles.chartContainerWrapper, { top: height * 0.02 }]}>
-            <MyChart onTimestampChange={setCurrentTimestamp} />
+            <MyChart
+              onTimestampChange={setCurrentTimestamp}
+              onPriceStatsChange={setPriceStats}
+            />
           </View>
 
           {/* Market Stats Section */}
@@ -147,6 +153,62 @@ export default function MarketsScreen() {
                 }
               />
             </View>
+
+            {/* Team High/Low Stats */}
+            {priceStats && market && (
+              <>
+                <Text style={styles.sectionTitle}>Price Range</Text>
+                <View style={styles.statsGrid}>
+                  {/* Away Team Stats */}
+                  {market.awayTeam && (
+                    <>
+                      <StatCard
+                        label={`${
+                          market.awayTeam.abbreviation ||
+                          market.awayTeam.name ||
+                          "Away"
+                        } High`}
+                        value={formatSharePrice(priceStats.awayHigh)}
+                        subtitle="Highest price"
+                      />
+                      <StatCard
+                        label={`${
+                          market.awayTeam.abbreviation ||
+                          market.awayTeam.name ||
+                          "Away"
+                        } Low`}
+                        value={formatSharePrice(priceStats.awayLow)}
+                        subtitle="Lowest price"
+                      />
+                    </>
+                  )}
+
+                  {/* Home Team Stats */}
+                  {market.homeTeam && (
+                    <>
+                      <StatCard
+                        label={`${
+                          market.homeTeam.abbreviation ||
+                          market.homeTeam.name ||
+                          "Home"
+                        } High`}
+                        value={formatSharePrice(priceStats.homeHigh)}
+                        subtitle="Highest price"
+                      />
+                      <StatCard
+                        label={`${
+                          market.homeTeam.abbreviation ||
+                          market.homeTeam.name ||
+                          "Home"
+                        } Low`}
+                        value={formatSharePrice(priceStats.homeLow)}
+                        subtitle="Lowest price"
+                      />
+                    </>
+                  )}
+                </View>
+              </>
+            )}
           </View>
 
           <MarketRules market={market} />
@@ -201,6 +263,7 @@ const styles = StyleSheet.create({
   },
   statsGrid: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: Spacing.md,
     paddingHorizontal: Spacing.xl,
     marginBottom: Spacing.lg,

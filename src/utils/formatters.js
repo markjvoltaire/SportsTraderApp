@@ -36,11 +36,47 @@ export function formatTimestamp(value) {
   return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
+/**
+ * Extract date components from a date string to avoid timezone conversion issues
+ * Returns {year, month, day} from the original string if possible
+ */
+function extractDateComponents(dateString) {
+  if (!dateString) return null;
+  
+  // Try to parse date from string format like "2025-12-04" or "2025-12-04 18:00:00+00"
+  const dateMatch = String(dateString).match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (dateMatch) {
+    return {
+      year: parseInt(dateMatch[1], 10),
+      month: parseInt(dateMatch[2], 10) - 1, // JS months are 0-indexed
+      day: parseInt(dateMatch[3], 10),
+    };
+  }
+  return null;
+}
+
 export function formatGameDate(value) {
   if (!value) return "TBD";
+  
+  // Try to extract date from string first
+  const dateComponents = extractDateComponents(value);
   const date = new Date(value);
+  
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString(undefined, {
+  
+  let year, month, day;
+  if (dateComponents) {
+    ({ year, month, day } = dateComponents);
+  } else {
+    // Fallback: use UTC date to avoid timezone issues
+    year = date.getUTCFullYear();
+    month = date.getUTCMonth();
+    day = date.getUTCDate();
+  }
+  
+  // Create a date object for formatting
+  const dateForFormat = new Date(year, month, day);
+  return dateForFormat.toLocaleDateString(undefined, {
     weekday: "short",
     month: "short",
     day: "numeric",
