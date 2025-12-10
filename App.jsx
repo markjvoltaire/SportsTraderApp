@@ -19,6 +19,7 @@ import { Colors, Spacing, Typography } from "./src/constants/theme";
 
 const Tab = createBottomTabNavigator();
 const HomeStack = createNativeStackNavigator();
+const MarketsStack = createNativeStackNavigator();
 const AuthStack = createNativeStackNavigator();
 
 function HomeStackScreen() {
@@ -39,6 +40,27 @@ function HomeStackScreen() {
         })}
       />
     </HomeStack.Navigator>
+  );
+}
+
+function MarketsStackScreen() {
+  return (
+    <MarketsStack.Navigator screenOptions={{ headerShown: false }}>
+      <MarketsStack.Screen name="MarketsList" component={MarketsScreen} />
+      <MarketsStack.Screen
+        name="MarketDetail"
+        component={MarketDetailScreen}
+        options={({ route }) => ({
+          headerShown: true,
+          headerTitle: "",
+          headerBackTitleVisible: false,
+          headerBackTitle: "",
+          headerTintColor: Colors.textPrimary,
+          headerStyle: { backgroundColor: Colors.background },
+          headerShadowVisible: false,
+        })}
+      />
+    </MarketsStack.Navigator>
   );
 }
 
@@ -84,7 +106,7 @@ function AppNavigator() {
       />
       <Tab.Screen
         name="Markets"
-        component={MarketsScreen}
+        component={MarketsStackScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="stats-chart-outline" size={size} color={color} />
@@ -135,7 +157,7 @@ export default function App() {
   return (
     <AuthProvider>
       <NavigationContainer>
-        <StatusBar style="dark" />
+        <StatusBar style="light" />
         <RootNavigator />
       </NavigationContainer>
     </AuthProvider>

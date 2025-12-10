@@ -1,5 +1,12 @@
 import React from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity } from "react-native";
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  Image,
+  View,
+} from "react-native";
 import { Colors, Spacing, Typography } from "../../constants/theme";
 
 export default function FilterCarousel({ options, selectedKey, onSelect }) {
@@ -16,12 +23,24 @@ export default function FilterCarousel({ options, selectedKey, onSelect }) {
           <TouchableOpacity
             key={option.key}
             activeOpacity={0.8}
-            style={[styles.pill, isActive && styles.pillActive]}
+            style={styles.button}
             onPress={() => onSelect(option.key)}
           >
-            <Text style={[styles.label, isActive && styles.labelActive]}>
-              {option.label}
-            </Text>
+            {option.icon ? (
+              <Image
+                source={option.icon}
+                style={[styles.icon, isActive && styles.iconActive]}
+                resizeMode="contain"
+              />
+            ) : (
+              <View style={styles.iconPlaceholder}>
+                <Text
+                  style={[styles.iconText, isActive && styles.iconTextActive]}
+                >
+                  {option.label.charAt(0)}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         );
       })}
@@ -32,30 +51,55 @@ export default function FilterCarousel({ options, selectedKey, onSelect }) {
 const styles = StyleSheet.create({
   carousel: {
     marginBottom: Spacing.lg,
+    top: 10,
   },
   content: {
     paddingRight: Spacing.xl,
   },
-  pill: {
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.sm,
-    borderRadius: 999,
+  button: {
+    width: 55,
+    height: 55,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
     marginRight: Spacing.sm,
     backgroundColor: Colors.surface,
-    overflow: "visible",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  pillActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+
+  icon: {
+    width: 100,
+    height: 50,
+
+    opacity: 0.7,
+  },
+  iconActive: {
+    opacity: 1,
+  },
+  iconPlaceholder: {
+    width: 32,
+    height: 32,
+    marginBottom: Spacing.xs,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconText: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: Colors.textSecondary,
+    opacity: 0.7,
+  },
+  iconTextActive: {
+    color: "#FFFFFF",
+    opacity: 1,
   },
   label: {
-    ...Typography.caption,
-    color: Colors.textSecondary,
+    fontSize: 11,
     fontWeight: "600",
-    includeFontPadding: false,
-    textAlignVertical: "center",
+    color: Colors.textSecondary,
+    marginTop: 2,
+    textAlign: "center",
   },
   labelActive: {
     color: "#FFFFFF",

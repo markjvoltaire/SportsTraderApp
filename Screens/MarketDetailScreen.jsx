@@ -6,14 +6,13 @@ import { useRoute } from "@react-navigation/native";
 import MarketRules from "../src/components/market/MarketRules";
 import MyChart from "../src/components/market/MyChart";
 import ButtonRow from "../src/components/market/ButtonRow";
-import { Spacing, Typography } from "../src/constants/theme";
+import { Colors, Spacing, Typography } from "../src/constants/theme";
 import { formatCurrency, formatSharePrice } from "../src/utils/formatters";
 import StatCard from "../src/components/market/StatCard";
 
 export default function MarketsScreen() {
   const route = useRoute();
   const market = route.params?.game || route.params?.market;
-  console.log("market", market);
 
   const { height } = Dimensions.get("window");
 
@@ -132,6 +131,7 @@ export default function MarketsScreen() {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
+          scrollEventThrottle={16}
         >
           <View style={[styles.chartContainerWrapper, { top: height * 0.02 }]}>
             <MyChart
@@ -212,14 +212,14 @@ export default function MarketsScreen() {
           </View>
 
           <MarketRules market={market} />
+          <View style={styles.bottomSpacer} />
         </ScrollView>
       </ScreenTemplate>
       <View
         style={[
           styles.buttonContainer,
           {
-            // Tab bar height (72) + safe area bottom + padding
-            top: 578 + insets.bottom + Spacing.md,
+            bottom: 72, // Tab bar height
           },
         ]}
         pointerEvents="box-none"
@@ -235,7 +235,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 200, // Space for buttons at bottom
+    paddingBottom: 120, // Space for buttons at bottom
+  },
+  bottomSpacer: {
+    height: 200, // Extra space to ensure MarketRules is fully scrollable
   },
   chartContainerWrapper: {
     marginHorizontal: -Spacing.xl,
@@ -245,11 +248,19 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    backgroundColor: "white",
+    backgroundColor: Colors.background,
     width: "100%",
     paddingHorizontal: Spacing.xl, // Match ScreenTemplate padding
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.md,
     zIndex: 1000, // Ensure it's above other content
     elevation: 10, // For Android shadow/elevation
+    shadowColor: "rgba(0, 0, 0, 0.5)",
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
   },
   statsSection: {
     marginTop: Spacing.xl,

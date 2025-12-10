@@ -3,36 +3,39 @@
  * Centralized theme constants following fintech UX best practices
  */
 
-// Color Palette - Black and White Theme
+// Color Palette - Dark Theme
 export const Colors = {
   // Primary surfaces
-  background: "#FFFFFF",
-  surface: "#F5F5F5",
-  surfaceAlt: "#E5E5E5",
+  background: "#141414",
+  surface: "#24232A",
+  surfaceAlt: "#2A2A2A",
 
-  // Accent
-  primary: "#000000",
-  primaryDark: "#000000",
-  primaryLight: "#333333",
-  primaryGradient: ["#000000", "#333333"],
-  accentGradient: ["#000000", "#666666"],
-  success: "#000000",
-  successMuted: "rgba(0, 0, 0, 0.16)",
-  danger: "#000000",
-  dangerMuted: "rgba(0, 0, 0, 0.16)",
-  warning: "#000000",
+  // Accent - Vibrant sports betting colors
+  primary: "#8B5CF6", // Vibrant purple/blue
+  primaryDark: "#6D28D9",
+  primaryLight: "#A78BFA",
+  primaryGradient: ["#8B5CF6", "#A78BFA"],
+  accentGradient: ["#7C3AED", "#C4B5FD"],
+  accentTeal: "#06B6D4", // Teal for second team
+  accentCyan: "#14B8A6",
+  success: "#34D399",
+  successMuted: "rgba(52, 211, 153, 0.2)",
+  danger: "#F87171",
+  dangerMuted: "rgba(248, 113, 113, 0.2)",
+  warning: "#FBBF24",
+  flame: "#F59E0B", // Orange for flame/bets indicator
 
-  // Text
-  textPrimary: "#000000",
-  textSecondary: "#333333",
-  textTertiary: "#666666",
-  textMuted: "#999999",
+  // Text - Light colors for dark background
+  textPrimary: "#FFFFFF",
+  textSecondary: "#E5E5E5",
+  textTertiary: "#B0B0B0",
+  textMuted: "#808080",
 
   // Glass & borders
-  glassSurface: "rgba(255, 255, 255, 0.9)",
-  glassBorder: "rgba(0, 0, 0, 0.2)",
-  border: "rgba(0, 0, 0, 0.1)",
-  borderFocus: "rgba(0, 0, 0, 0.4)",
+  glassSurface: "rgba(31, 31, 31, 0.8)",
+  glassBorder: "rgba(139, 92, 246, 0.3)",
+  border: "rgba(255, 255, 255, 0.1)",
+  borderFocus: "rgba(139, 92, 246, 0.5)",
 };
 
 // Typography Scale

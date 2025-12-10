@@ -3,6 +3,7 @@ import React from "react";
 import { getTeamColor } from "../../utils/teamColors";
 import { formatSharePrice } from "../../utils/formatters";
 import { normalize, normalizeFont } from "../../utils/dimensions";
+import { Colors, Spacing } from "../../constants/theme";
 
 export default function ButtonRow({ market }) {
   if (!market) {
@@ -83,16 +84,22 @@ const styles = StyleSheet.create({
   },
   button: {
     flex: 1,
-    paddingVertical: buttonPaddingV,
-    paddingHorizontal: buttonPaddingH,
-    borderRadius: buttonRadius,
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.md,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: buttonMinHeight,
+    minHeight: 56,
+    shadowColor: "rgba(0, 0, 0, 0.3)",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 4,
   },
   teamName: {
     color: "#FFFFFF",
-    fontSize: fontSize,
-    fontWeight: "600",
+    fontSize: 16,
+    fontWeight: "700",
+    letterSpacing: 0.3,
   },
 });

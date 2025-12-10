@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, Typography } from "../../constants/theme";
 import { formatPrice, formatCurrency } from "../../utils/formatters";
@@ -307,8 +307,10 @@ export default function GameCard({ market, game, onPress }) {
     marketData?.volume ||
     0;
 
-  // Format values
-  const formattedDate = formatGameDateTime(date);
+  // Format values - use gameTime object if available, otherwise format date
+  const formattedDate = marketData?.gameTime?.timeString 
+    ? marketData.gameTime.timeString 
+    : formatGameDateTime(date);
   const formattedVolume = volume > 0 ? formatCurrency(volume) : "$0";
   const team1PriceFormatted = formatPrice(transformedData.team1Price);
   const team2PriceFormatted = formatPrice(transformedData.team2Price);
@@ -423,24 +425,24 @@ export default function GameCard({ market, game, onPress }) {
       <View style={styles.priceBoxesRow}>
         {/* Team 1 Price Box */}
         <TouchableOpacity
-          style={styles.priceBox}
+          style={[styles.priceBox, { backgroundColor: team1Color }]}
           activeOpacity={0.8}
           onPress={() => onPress?.({ ...marketData, selectedSide: "yes" })}
         >
           <Text style={styles.priceBoxTeam}>{transformedData.team1}</Text>
-          <Text style={[styles.priceBoxPrice, { color: team1Color }]}>
+          <Text style={styles.priceBoxPrice}>
             {team1PriceFormatted}
           </Text>
         </TouchableOpacity>
 
         {/* Team 2 Price Box */}
         <TouchableOpacity
-          style={styles.priceBox}
+          style={[styles.priceBox, { backgroundColor: team2Color }]}
           activeOpacity={0.8}
           onPress={() => onPress?.({ ...marketData, selectedSide: "no" })}
         >
           <Text style={styles.priceBoxTeam}>{transformedData.team2}</Text>
-          <Text style={[styles.priceBoxPrice, { color: team2Color }]}>
+          <Text style={styles.priceBoxPrice}>
             {team2PriceFormatted}
           </Text>
         </TouchableOpacity>
@@ -456,13 +458,13 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
     marginBottom: Spacing.md,
     marginHorizontal: Spacing.md,
-    shadowColor: "rgba(0, 0, 0, 0.08)",
+    shadowColor: "rgba(0, 0, 0, 0.5)",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1,
     shadowRadius: 8,
     elevation: 3,
     borderWidth: 1,
-    borderColor: "rgba(0, 0, 0, 0.05)",
+    borderColor: Colors.border,
   },
   dateRow: {
     flexDirection: "row",
@@ -555,30 +557,28 @@ const styles = StyleSheet.create({
   },
   priceBox: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
     borderRadius: 8,
     padding: Spacing.md,
     alignItems: "center",
     justifyContent: "center",
     marginHorizontal: Spacing.xs,
-    borderWidth: 1,
-    borderColor: "rgba(0, 0, 0, 0.05)",
-    shadowColor: "rgba(0, 0, 0, 0.05)",
-    shadowOffset: { width: 0, height: 1 },
+    shadowColor: "rgba(0, 0, 0, 0.3)",
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   priceBoxTeam: {
     fontSize: 13,
     fontWeight: "600",
-    color: Colors.textPrimary,
+    color: "#FFFFFF",
     marginBottom: Spacing.xs,
     textAlign: "center",
   },
   priceBoxPrice: {
     fontSize: 20,
     fontWeight: "700",
+    color: "#FFFFFF",
   },
   errorText: {
     fontSize: 14,

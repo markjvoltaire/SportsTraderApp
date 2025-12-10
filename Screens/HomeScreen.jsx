@@ -6,8 +6,8 @@ import {
   RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import React, { useEffect, useState } from "react";
-import { useNavigation } from "@react-navigation/native";
+import React, { useEffect, useState, useRef } from "react";
+import { useNavigation, useScrollToTop } from "@react-navigation/native";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -57,17 +57,65 @@ function AnimatedGameCard({ market, onPress, index }) {
 }
 
 const FILTER_OPTIONS = [
-  { key: "all", label: "All" },
-  { key: "nfl", label: "NFL" },
-  { key: "nba", label: "NBA" },
-  { key: "nhl", label: "NHL" },
-  { key: "mlb", label: "MLB" },
-  { key: "cfb", label: "CFB" },
-  { key: "wbna", label: "WBNA" },
+  {
+    key: "all",
+    label: "All",
+    icon: require("../assets/sportsIcons/ForYou.png"),
+  },
+  {
+    key: "nfl",
+    label: "NFL",
+    icon: require("../assets/sportsIcons/NFL.png"),
+  },
+  {
+    key: "nba",
+    label: "NBA",
+    icon: require("../assets/sportsIcons/NBA.png"),
+  },
+  {
+    key: "nhl",
+    label: "NHL",
+    icon: require("../assets/sportsIcons/NHL.png"),
+  },
+  {
+    key: "ufc",
+    label: "UFC",
+    icon: require("../assets/sportsIcons/UFC.png"),
+  },
+  {
+    key: "soccer",
+    label: "Soccer",
+    icon: require("../assets/sportsIcons/Soccer.png"),
+  },
+  {
+    key: "cfb",
+    label: "CFB",
+    icon: require("../assets/sportsIcons/CFB.png"),
+  },
+  {
+    key: "boxing",
+    label: "Boxing",
+    icon: require("../assets/sportsIcons/Boxing.png"),
+  },
+  {
+    key: "cbb",
+    label: "CBB",
+    icon: require("../assets/sportsIcons/CBB.png"),
+  },
+  {
+    key: "wbna",
+    label: "WNBA",
+    icon: require("../assets/sportsIcons/WNBA.png"),
+  },
 ];
+
+// Cache for markets by category
+const marketsCache = {};
 
 export default function HomeScreen() {
   const navigation = useNavigation();
+  const scrollViewRef = useRef(null);
+  useScrollToTop(scrollViewRef);
   const [markets, setMarkets] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -75,8 +123,17 @@ export default function HomeScreen() {
   const [selectedFilter, setSelectedFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const fetchData = async () => {
+  const fetchData = async (forceRefresh = false) => {
     try {
+      // Check cache first (unless forcing refresh)
+      const cacheKey = selectedFilter;
+      if (!forceRefresh && marketsCache[cacheKey]) {
+        setMarkets(marketsCache[cacheKey]);
+        setLoading(false);
+        setError(null);
+        return;
+      }
+
       setLoading(true);
       setError(null);
 
@@ -91,11 +148,17 @@ export default function HomeScreen() {
         queryString ? `?${queryString}` : ""
       }`;
 
+      console.log("url", url);
+
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const jsonData = await response.json();
+
+      // Store in cache
+      marketsCache[cacheKey] = jsonData;
+
       setMarkets(jsonData);
     } catch (err) {
       setError(err.message);
@@ -111,7 +174,8 @@ export default function HomeScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchData();
+    // Force refresh - bypass cache
+    await fetchData(true);
     setRefreshing(false);
   };
 
@@ -194,14 +258,21 @@ export default function HomeScreen() {
     });
   }, [marketsArray, searchQuery]);
 
+  useEffect(() => {
+    if (marketsArray.length > 0) {
+      console.log("Sample market:", JSON.stringify(marketsArray[0], null, 2));
+      console.log("Game time:", marketsArray[0].gameTime);
+    }
+  }, [marketsArray]);
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <SearchBar
+        {/* <SearchBar
           value={searchQuery}
           onChangeText={setSearchQuery}
           placeholder="Search teams, matchups, questions"
-        />
+        /> */}
         <FilterCarousel
           options={FILTER_OPTIONS}
           selectedKey={selectedFilter}
@@ -220,11 +291,16 @@ export default function HomeScreen() {
 
       {!error && (
         <ScrollView
+          ref={scrollViewRef}
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            <RefreshControl
+              style={styles.refreshControl}
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+            />
           }
         >
           {loading ? (
@@ -276,6 +352,7 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
+
   scrollContent: {
     paddingBottom: Spacing.xl,
   },

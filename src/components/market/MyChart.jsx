@@ -1,4 +1,10 @@
-import React, { useState, useMemo, useCallback, useEffect } from "react";
+import React, {
+  useState,
+  useMemo,
+  useCallback,
+  useEffect,
+  useRef,
+} from "react";
 import { View, Text, StyleSheet, Dimensions } from "react-native";
 import {
   VictoryChart,
@@ -359,6 +365,35 @@ export default function MyChart({
     return combined;
   }, [awayHistory, homeHistory, marketData]);
 
+  // Determine animation settings based on data size for better performance
+  const animationConfig = useMemo(() => {
+    const dataSize = chartData.length;
+
+    // For very large datasets, disable animation entirely but use smooth interpolation
+    if (dataSize > 500) {
+      return {
+        enabled: false,
+        interpolation: "natural", // Smooth natural spline interpolation
+      };
+    }
+
+    // For medium datasets, use shorter animation with smooth interpolation
+    if (dataSize > 200) {
+      return {
+        enabled: true,
+        duration: 600,
+        interpolation: "natural", // Smooth natural spline interpolation
+      };
+    }
+
+    // For small datasets, use full animation with smooth interpolation
+    return {
+      enabled: true,
+      duration: 950,
+      interpolation: "cardinal", // Very smooth cardinal spline
+    };
+  }, [chartData.length]);
+
   // Calculate high/low prices for each contract
   const priceStats = useMemo(() => {
     if (!chartData || chartData.length === 0) {
@@ -488,6 +523,10 @@ export default function MyChart({
     [plotWidth, plotHeight, chartPadding, chartData, marketData, yDomain]
   );
 
+  // Throttle cursor updates for better performance with large datasets
+  const lastUpdateTimeRef = useRef(0);
+  const THROTTLE_MS = 16; // ~60fps
+
   const updateCursorData = useCallback(
     (xPos) => {
       if (xPos < 0) {
@@ -495,6 +534,16 @@ export default function MyChart({
         if (onTimestampChange) onTimestampChange(null);
         return;
       }
+
+      // Throttle updates for large datasets
+      const now = Date.now();
+      if (
+        chartData.length > 200 &&
+        now - lastUpdateTimeRef.current < THROTTLE_MS
+      ) {
+        return;
+      }
+      lastUpdateTimeRef.current = now;
 
       const data = getValueAtX(xPos);
       setTooltipData({
@@ -511,7 +560,14 @@ export default function MyChart({
 
       if (onTimestampChange) onTimestampChange(data.timestamp);
     },
-    [getValueAtX, cursorYHigh, cursorYLow, onTimestampChange, marketData]
+    [
+      getValueAtX,
+      cursorYHigh,
+      cursorYLow,
+      onTimestampChange,
+      marketData,
+      chartData.length,
+    ]
   );
 
   const panGesture = useMemo(
@@ -669,12 +725,17 @@ export default function MyChart({
                 padding={chartPadding}
                 domainPadding={{ x: 0, y: 5 }}
                 domain={{ y: yDomain }}
+                scale={{ x: "linear", y: "linear" }}
               >
                 <VictoryAxis
                   style={{
                     axis: { stroke: "transparent" },
                     tickLabels: { fill: "transparent" },
-                    grid: { stroke: "transparent" },
+                    grid: {
+                      stroke: "rgba(255, 255, 255, 0.1)",
+                      strokeWidth: 1,
+                      strokeDasharray: "4,4",
+                    },
                     ticks: { stroke: "transparent" },
                   }}
                 />
@@ -683,7 +744,11 @@ export default function MyChart({
                   style={{
                     axis: { stroke: "transparent" },
                     tickLabels: { fill: "transparent" },
-                    grid: { stroke: "transparent" },
+                    grid: {
+                      stroke: "rgba(255, 255, 255, 0.1)",
+                      strokeWidth: 1,
+                      strokeDasharray: "4,4",
+                    },
                     ticks: { stroke: "transparent" },
                   }}
                 />
@@ -691,39 +756,49 @@ export default function MyChart({
                   data={chartData}
                   x="x"
                   y="awayPrice"
-                  interpolation="cardinal"
+                  interpolation={animationConfig.interpolation}
                   style={{
                     data: {
                       stroke: marketData.awayTeam.color,
-                      strokeWidth: 1.5,
+                      strokeWidth: 2.5,
                       strokeLinecap: "round",
                       strokeLinejoin: "round",
+                      strokeDasharray: "0",
                     },
                   }}
-                  animate={{
-                    duration: 950,
-                    onLoad: { duration: 950 },
-                    easing: "back",
-                  }}
+                  animate={
+                    animationConfig.enabled
+                      ? {
+                          duration: animationConfig.duration,
+                          onLoad: { duration: animationConfig.duration },
+                          easing: "back",
+                        }
+                      : undefined
+                  }
                 />
                 <VictoryLine
                   data={chartData}
                   x="x"
                   y="homePrice"
-                  interpolation="cardinal"
+                  interpolation={animationConfig.interpolation}
                   style={{
                     data: {
                       stroke: marketData.homeTeam.color,
-                      strokeWidth: 1.5,
+                      strokeWidth: 2.5,
                       strokeLinecap: "round",
                       strokeLinejoin: "round",
+                      strokeDasharray: "0",
                     },
                   }}
-                  animate={{
-                    duration: 950,
-                    onLoad: { duration: 950 },
-                    easing: "back",
-                  }}
+                  animate={
+                    animationConfig.enabled
+                      ? {
+                          duration: animationConfig.duration,
+                          onLoad: { duration: animationConfig.duration },
+                          easing: "back",
+                        }
+                      : undefined
+                  }
                 />
               </VictoryChart>
 
@@ -742,23 +817,14 @@ export default function MyChart({
                       styles.tooltip,
                       styles.tooltipHigh,
                       animatedTooltipHighStyle,
+                      { borderLeftColor: marketData.awayTeam.color },
                     ]}
                     pointerEvents="none"
                   >
-                    <Text
-                      style={[
-                        styles.tooltipPrice,
-                        { color: marketData.awayTeam.color },
-                      ]}
-                    >
+                    <Text style={styles.tooltipPrice}>
                       {formatSharePrice(tooltipData.awayPrice)}
                     </Text>
-                    <Text
-                      style={[
-                        styles.tooltipLabel,
-                        { color: marketData.awayTeam.color },
-                      ]}
-                    >
+                    <Text style={styles.tooltipLabel}>
                       {marketData.awayTeam.abbreviation}
                     </Text>
                   </Animated.View>
@@ -769,23 +835,14 @@ export default function MyChart({
                       styles.tooltip,
                       styles.tooltipLow,
                       animatedTooltipLowStyle,
+                      { borderLeftColor: marketData.homeTeam.color },
                     ]}
                     pointerEvents="none"
                   >
-                    <Text
-                      style={[
-                        styles.tooltipPrice,
-                        { color: marketData.homeTeam.color },
-                      ]}
-                    >
+                    <Text style={styles.tooltipPrice}>
                       {formatSharePrice(tooltipData.homePrice)}
                     </Text>
-                    <Text
-                      style={[
-                        styles.tooltipLabel,
-                        { color: marketData.homeTeam.color },
-                      ]}
-                    >
+                    <Text style={styles.tooltipLabel}>
                       {marketData.homeTeam.abbreviation}
                     </Text>
                   </Animated.View>
@@ -849,6 +906,7 @@ const styles = StyleSheet.create({
     left: padding,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.1)",
+    borderLeftWidth: 3, // Colored left border for team identification
     zIndex: 100, // Ensure tooltips are above everything
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -873,10 +931,12 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontSize: 16,
     marginBottom: 2,
+    color: "#FFFFFF", // White text for contrast on dark background
   },
   tooltipLabel: {
     fontSize: 10,
     opacity: 0.8,
+    color: "#E5E5E5", // Light gray text for contrast on dark background
   },
   // Keep these for potential reuse or if referenced elsewhere
   tooltipHigh: {},

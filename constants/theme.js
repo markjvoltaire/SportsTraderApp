@@ -3,12 +3,12 @@
  * Centralized theme constants following fintech UX best practices
  */
 
-// Color Palette - Modern Sports Prediction Market
+// Color Palette - Dark Theme
 export const Colors = {
   // Primary surfaces
-  background: "#FFFFFF",
-  surface: "#F5F5F5",
-  surfaceAlt: "#F9F9F9",
+  background: "#141414",
+  surface: "#1F1F1F",
+  surfaceAlt: "#2A2A2A",
 
   // Accent - Vibrant sports betting colors
   primary: "#8B5CF6", // Vibrant purple/blue
@@ -19,23 +19,23 @@ export const Colors = {
   accentTeal: "#06B6D4", // Teal for second team
   accentCyan: "#14B8A6",
   success: "#34D399",
-  successMuted: "rgba(52, 211, 153, 0.16)",
+  successMuted: "rgba(52, 211, 153, 0.2)",
   danger: "#F87171",
-  dangerMuted: "rgba(248, 113, 113, 0.16)",
+  dangerMuted: "rgba(248, 113, 113, 0.2)",
   warning: "#FBBF24",
   flame: "#F59E0B", // Orange for flame/bets indicator
 
-  // Text
-  textPrimary: "#111827",
-  textSecondary: "#374151",
-  textTertiary: "#6B7280",
-  textMuted: "#9CA3AF",
+  // Text - Light colors for dark background
+  textPrimary: "#FFFFFF",
+  textSecondary: "#E5E5E5",
+  textTertiary: "#B0B0B0",
+  textMuted: "#808080",
 
   // Glass & borders
-  glassSurface: "rgba(255, 255, 255, 0.68)",
-  glassBorder: "rgba(139, 92, 246, 0.18)",
-  border: "rgba(17, 24, 39, 0.06)",
-  borderFocus: "rgba(139, 92, 246, 0.4)",
+  glassSurface: "rgba(31, 31, 31, 0.8)",
+  glassBorder: "rgba(139, 92, 246, 0.3)",
+  border: "rgba(255, 255, 255, 0.1)",
+  borderFocus: "rgba(139, 92, 246, 0.5)",
 };
 
 // Typography Scale
@@ -120,16 +120,16 @@ export const Shadows = {
     elevation: 24,
   },
   cardShadow: {
-    shadowColor: "rgba(15, 23, 42, 0.1)",
+    shadowColor: "rgba(0, 0, 0, 0.5)",
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.5,
     shadowRadius: 24,
     elevation: 18,
   },
   subtleShadow: {
-    shadowColor: "rgba(15, 23, 42, 0.08)",
+    shadowColor: "rgba(0, 0, 0, 0.4)",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.4,
     shadowRadius: 12,
     elevation: 8,
   },
