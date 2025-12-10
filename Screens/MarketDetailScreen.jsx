@@ -133,7 +133,7 @@ export default function MarketsScreen() {
           contentContainerStyle={styles.scrollContent}
           scrollEventThrottle={16}
         >
-          <View style={[styles.chartContainerWrapper, { top: height * 0.02 }]}>
+          <View style={[styles.chartContainerWrapper, { top: height * 0.01 }]}>
             <MyChart
               onTimestampChange={setCurrentTimestamp}
               onPriceStatsChange={setPriceStats}
@@ -141,77 +141,7 @@ export default function MarketsScreen() {
           </View>
 
           {/* Market Stats Section */}
-          <View style={styles.statsSection}>
-            <Text style={styles.sectionTitle}>Market Stats</Text>
 
-            <View style={styles.statsGrid}>
-              <StatCard
-                label="24hr Volume"
-                value={formattedVolume}
-                subtitle={
-                  marketVolume > 0 ? "Total trading volume" : "No volume yet"
-                }
-              />
-            </View>
-
-            {/* Team High/Low Stats */}
-            {priceStats && market && (
-              <>
-                <Text style={styles.sectionTitle}>Price Range</Text>
-                <View style={styles.statsGrid}>
-                  {/* Away Team Stats */}
-                  {market.awayTeam && (
-                    <>
-                      <StatCard
-                        label={`${
-                          market.awayTeam.abbreviation ||
-                          market.awayTeam.name ||
-                          "Away"
-                        } High`}
-                        value={formatSharePrice(priceStats.awayHigh)}
-                        subtitle="Highest price"
-                      />
-                      <StatCard
-                        label={`${
-                          market.awayTeam.abbreviation ||
-                          market.awayTeam.name ||
-                          "Away"
-                        } Low`}
-                        value={formatSharePrice(priceStats.awayLow)}
-                        subtitle="Lowest price"
-                      />
-                    </>
-                  )}
-
-                  {/* Home Team Stats */}
-                  {market.homeTeam && (
-                    <>
-                      <StatCard
-                        label={`${
-                          market.homeTeam.abbreviation ||
-                          market.homeTeam.name ||
-                          "Home"
-                        } High`}
-                        value={formatSharePrice(priceStats.homeHigh)}
-                        subtitle="Highest price"
-                      />
-                      <StatCard
-                        label={`${
-                          market.homeTeam.abbreviation ||
-                          market.homeTeam.name ||
-                          "Home"
-                        } Low`}
-                        value={formatSharePrice(priceStats.homeLow)}
-                        subtitle="Lowest price"
-                      />
-                    </>
-                  )}
-                </View>
-              </>
-            )}
-          </View>
-
-          <MarketRules market={market} />
           <View style={styles.bottomSpacer} />
         </ScrollView>
       </ScreenTemplate>

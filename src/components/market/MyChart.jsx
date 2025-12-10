@@ -30,6 +30,12 @@ import { formatSharePrice } from "../../utils/formatters";
 import { getTeamColor } from "../../utils/teamColors";
 import ChartSkeleton from "./ChartSkeleton";
 import { normalize, widthPercentage } from "../../utils/dimensions";
+import {
+  Colors,
+  Spacing,
+  BorderRadius,
+  Typography,
+} from "../../constants/theme";
 
 export default function MyChart({
   onTimestampChange,
@@ -40,14 +46,17 @@ export default function MyChart({
   const market = route.params?.game || route.params?.market;
   const { width, height } = Dimensions.get("window");
 
+  console.log("market", market);
+
   const chartPadding = {
-    top: normalize(10),
-    bottom: normalize(10),
-    left: normalize(20),
-    right: normalize(20), // Reduced right padding since we now flip tooltips
+    top: Spacing.md,
+    bottom: Spacing.md,
+    left: Spacing.xl,
+    right: Spacing.xl,
   };
 
-  const chartWidth = widthPercentage(width * 0.23); // use full device width for larger plot area
+  // Use full screen width minus horizontal padding from parent
+  const chartWidth = width; // Use full device width
   const chartHeight = normalize(200);
   const plotWidth = chartWidth - chartPadding.left - chartPadding.right;
   const plotHeight = chartHeight - chartPadding.top - chartPadding.bottom;
@@ -55,6 +64,7 @@ export default function MyChart({
   // Extract market data
   const marketData = useMemo(() => {
     if (!market) {
+      console.log("MyChart: No market data provided");
       return {
         awayTeam: {
           price: 0.5,
@@ -73,27 +83,90 @@ export default function MyChart({
         conditionId: null,
       };
     }
-    const awayAbbreviation = market.awayTeam?.abbreviation || "Away";
-    const homeAbbreviation = market.homeTeam?.abbreviation || "Home";
-    const awayName = market.awayTeam?.name || awayAbbreviation;
-    const homeName = market.homeTeam?.name || homeAbbreviation;
+
+    // Log market structure for debugging
+    console.log("MyChart: Market data:", {
+      conditionId: market.conditionId,
+      condition_id: market.condition_id,
+      id: market.id,
+      slug: market.slug,
+      teamTokenIds: market.teamTokenIds,
+      awayTeam: market.awayTeam,
+      homeTeam: market.homeTeam,
+      title: market.title,
+    });
+
+    // Try multiple ways to get conditionId
+    const conditionId =
+      market.conditionId ||
+      market.condition_id ||
+      market.id || // Sometimes id is the conditionId
+      null;
+
+    console.log("MyChart: Extracted conditionId:", conditionId);
+
+    // Handle new API format with teamTokenIds array
+    let awayTokenId = null;
+    let homeTokenId = null;
+    let awayName = "Away";
+    let homeName = "Home";
+    let awayAbbreviation = "Away";
+    let homeAbbreviation = "Home";
+
+    if (
+      market.teamTokenIds &&
+      Array.isArray(market.teamTokenIds) &&
+      market.teamTokenIds.length >= 2
+    ) {
+      // New format: extract tokenIds from array
+      awayTokenId = market.teamTokenIds[0]?.toString() || null;
+      homeTokenId = market.teamTokenIds[1]?.toString() || null;
+
+      // Extract team names from title (e.g., "Suns vs. Thunder")
+      if (market.title) {
+        const titleMatch = market.title.match(/(.+?)\s+vs\.?\s+(.+)/i);
+        if (titleMatch) {
+          awayName = titleMatch[1].trim();
+          homeName = titleMatch[2].trim();
+          awayAbbreviation = awayName.substring(0, 3).toUpperCase();
+          homeAbbreviation = homeName.substring(0, 3).toUpperCase();
+        }
+      }
+    } else {
+      // Old format: use awayTeam/homeTeam objects
+      awayAbbreviation = market.awayTeam?.abbreviation || "Away";
+      homeAbbreviation = market.homeTeam?.abbreviation || "Home";
+      awayName = market.awayTeam?.name || awayAbbreviation;
+      homeName = market.homeTeam?.name || homeAbbreviation;
+      awayTokenId =
+        market.awayTeam?.tokenId || market.awayTeam?.token_id || null;
+      homeTokenId =
+        market.homeTeam?.tokenId || market.homeTeam?.token_id || null;
+    }
+
+    console.log(
+      "MyChart: Extracted tokenIds - away:",
+      awayTokenId,
+      "home:",
+      homeTokenId
+    );
 
     return {
       awayTeam: {
         price: parseFloat(market.awayTeam?.price) || 0.5,
-        tokenId: market.awayTeam?.tokenId || null,
+        tokenId: awayTokenId,
         abbreviation: awayAbbreviation,
         name: awayName,
         color: getTeamColor(awayAbbreviation, awayName),
       },
       homeTeam: {
         price: parseFloat(market.homeTeam?.price) || 0.5,
-        tokenId: market.homeTeam?.tokenId || null,
+        tokenId: homeTokenId,
         abbreviation: homeAbbreviation,
         name: homeName,
         color: getTeamColor(homeAbbreviation, homeName),
       },
-      conditionId: market.conditionId || market.condition_id || null,
+      conditionId: conditionId,
     };
   }, [market]);
 
@@ -123,11 +196,26 @@ export default function MyChart({
 
   // Fetch price history using candlesticks endpoint
   useEffect(() => {
+    console.log(
+      "MyChart: useEffect triggered, conditionId:",
+      marketData.conditionId
+    );
     if (!marketData.conditionId) {
-      console.warn("No conditionId found in market, cannot fetch candlesticks");
+      console.warn(
+        "MyChart: No conditionId found in market, cannot fetch candlesticks"
+      );
+      console.warn(
+        "MyChart: Market object keys:",
+        market ? Object.keys(market) : "No market"
+      );
       setLoading(false);
       return;
     }
+
+    console.log(
+      "MyChart: Fetching candlesticks for conditionId:",
+      marketData.conditionId
+    );
 
     const fetchPriceHistory = async () => {
       try {
@@ -202,6 +290,18 @@ export default function MyChart({
         }
 
         const data = await response.json();
+        console.log("MyChart: Candlesticks response:", {
+          isArray: Array.isArray(data),
+          hasCandlesticks: !!data?.candlesticks,
+          hasData: !!data?.data,
+          dataLength: Array.isArray(data)
+            ? data.length
+            : data?.candlesticks?.length || data?.data?.length || 0,
+          firstItem: Array.isArray(data)
+            ? data[0]
+            : data?.candlesticks?.[0] || data?.data?.[0] || null,
+        });
+
         let candlesticks = [];
 
         if (Array.isArray(data)) {
@@ -212,8 +312,15 @@ export default function MyChart({
           candlesticks = data.data;
         }
 
+        console.log(
+          "MyChart: Total candlesticks to process:",
+          candlesticks.length
+        );
+
         const extractTokenData = (tokenId) => {
           const tokenCandlesticks = [];
+
+          console.log("MyChart: Extracting data for tokenId:", tokenId);
 
           candlesticks.forEach((item) => {
             let candlestickArray = null;
@@ -230,11 +337,23 @@ export default function MyChart({
                 : [item];
             }
 
+            // Compare tokenIds as strings for exact match
+            const tokenIdStr = tokenId?.toString();
+            const itemTokenIdStr = itemTokenId?.toString();
+
             if (
-              itemTokenId &&
-              itemTokenId.toString() === tokenId?.toString() &&
+              itemTokenIdStr &&
+              tokenIdStr &&
+              itemTokenIdStr === tokenIdStr &&
               Array.isArray(candlestickArray)
             ) {
+              console.log(
+                "MyChart: Found matching tokenId:",
+                itemTokenIdStr,
+                "with",
+                candlestickArray.length,
+                "candles"
+              );
               candlestickArray.forEach((candle) => {
                 let price =
                   parseFloat(candle?.close) ||
@@ -260,6 +379,12 @@ export default function MyChart({
           });
 
           tokenCandlesticks.sort((a, b) => a.timestamp - b.timestamp);
+          console.log(
+            "MyChart: Extracted",
+            tokenCandlesticks.length,
+            "data points for tokenId:",
+            tokenId
+          );
           return tokenCandlesticks.map((point, index) => ({
             x: index,
             y: point.y,
@@ -267,12 +392,25 @@ export default function MyChart({
           }));
         };
 
+        console.log(
+          "MyChart: Fetching history for awayTokenId:",
+          marketData.awayTeam.tokenId,
+          "homeTokenId:",
+          marketData.homeTeam.tokenId
+        );
         const awayHistoryData = marketData.awayTeam.tokenId
           ? extractTokenData(marketData.awayTeam.tokenId)
           : [];
         const homeHistoryData = marketData.homeTeam.tokenId
           ? extractTokenData(marketData.homeTeam.tokenId)
           : [];
+
+        console.log(
+          "MyChart: Away history length:",
+          awayHistoryData.length,
+          "Home history length:",
+          homeHistoryData.length
+        );
 
         const maxLength = Math.max(
           awayHistoryData.length,
@@ -331,20 +469,15 @@ export default function MyChart({
 
   // Process chart data from price history
   const chartData = useMemo(() => {
+    // Don't show default 0.5/0.5 - only show chart when we have actual data
     if (
       !awayHistory ||
       !homeHistory ||
       awayHistory.length === 0 ||
       homeHistory.length === 0
     ) {
-      return [
-        {
-          x: 0,
-          awayPrice: marketData.awayTeam.price,
-          homePrice: marketData.homeTeam.price,
-          timestamp: Date.now() / 1000,
-        },
-      ];
+      // Return empty array - chart will show skeleton/loading state
+      return [];
     }
 
     const maxLength = Math.max(awayHistory.length, homeHistory.length);
@@ -389,7 +522,7 @@ export default function MyChart({
     // For small datasets, use full animation with smooth interpolation
     return {
       enabled: true,
-      duration: 950,
+      duration: 50,
       interpolation: "cardinal", // Very smooth cardinal spline
     };
   }, [chartData.length]);
@@ -448,14 +581,38 @@ export default function MyChart({
 
   const yDomain = useMemo(() => {
     if (!chartData || chartData.length === 0) return [0, 1];
-    const allPrices = chartData.flatMap((d) => [d.awayPrice, d.homePrice]);
+    const allPrices = chartData
+      .flatMap((d) => [d.awayPrice, d.homePrice])
+      .filter((p) => p > 0 && p <= 1);
+
+    if (allPrices.length === 0) return [0, 1];
+
     const priceMin = Math.min(...allPrices);
     const priceMax = Math.max(...allPrices);
     const priceRange = priceMax - priceMin;
-    const minRange = 0.05;
-    const padding = Math.max(priceRange * 0.03, (minRange - priceRange) / 2);
+
+    // Reduced padding to bring lines closer together: 2% of the range, with a minimum of 0.01
+    const paddingPercent = 0.02; // 2% padding
+    const minPadding = 0.01; // Minimum 1% padding
+    const padding = Math.max(priceRange * paddingPercent, minPadding);
+
     const domainMin = Math.max(0, priceMin - padding);
     const domainMax = Math.min(1, priceMax + padding);
+
+    // Ensure we have a valid range
+    if (domainMax <= domainMin) {
+      return [Math.max(0, priceMin - 0.1), Math.min(1, priceMax + 0.1)];
+    }
+
+    console.log("MyChart: yDomain calculated:", {
+      priceMin,
+      priceMax,
+      priceRange,
+      padding,
+      domainMin,
+      domainMax,
+    });
+
     return [domainMin, domainMax];
   }, [chartData]);
 
@@ -623,8 +780,17 @@ export default function MyChart({
     return { opacity: chartOpacity.value };
   });
 
+  // Calculate normalized values outside of worklets (worklets can't call JS functions)
+  const tooltipOffset = normalize(42); // Reduced to bring tooltips closer to chart lines
+  const dateTooltipBottom = normalize(-20);
+  const minSpacing = normalize(12); // Spacing.md value
+  const dateTooltipOffset = normalize(10);
+  const dateTooltipXOffset = normalize(8); // Spacing.sm value
+  const tooltipWidth = 110; // Approximate tooltip width (increased for longer names)
+  const tooltipMargin = normalize(8); // Spacing.sm value
+
   const animatedCursorStyle = useAnimatedStyle(() => {
-    const opacity = isActive.value ? 1 : cursorX.value >= 0 ? 0.5 : 0;
+    const opacity = isActive.value ? 1 : cursorX.value >= 0 ? 0.6 : 0;
     return {
       opacity,
       transform: [{ translateX: cursorX.value - 1 }],
@@ -636,20 +802,20 @@ export default function MyChart({
     "worklet";
     // Check if cursor is in the right 50% of the chart
     if (cursorValue > plotWidth * 0.5) {
-      return cursorValue - 90; // Shift left (approx tooltip width)
+      return cursorValue - tooltipWidth; // Shift left (approx tooltip width)
     }
-    return cursorValue + 10; // Shift right
+    return cursorValue + tooltipMargin; // Shift right
   };
 
   const animatedTooltipHighStyle = useAnimatedStyle(() => {
-    const opacity = isActive.value ? 1 : cursorX.value >= 0 ? 0.7 : 0;
-    // Calculate tooltip Y position
-    const tooltipY = cursorYHigh.value - 30;
-    // If tooltip is too close to top (where date tooltip is at -50), shift it down
-    // Date tooltip occupies roughly -50 to -20 (30px height)
-    const dateTooltipBottom = -20;
+    const opacity = isActive.value ? 1 : cursorX.value >= 0 ? 0.8 : 0;
+    // Calculate tooltip Y position - offset above the line
+    const tooltipY = cursorYHigh.value - tooltipOffset;
+    // If tooltip is too close to top, shift it down to avoid date tooltip overlap
     const adjustedY =
-      tooltipY < dateTooltipBottom + 10 ? dateTooltipBottom + 10 : tooltipY;
+      tooltipY < dateTooltipBottom + minSpacing
+        ? dateTooltipBottom + minSpacing
+        : tooltipY;
     return {
       opacity,
       transform: [
@@ -660,12 +826,12 @@ export default function MyChart({
   });
 
   const animatedTooltipLowStyle = useAnimatedStyle(() => {
-    const opacity = isActive.value ? 1 : cursorX.value >= 0 ? 0.7 : 0;
+    const opacity = isActive.value ? 1 : cursorX.value >= 0 ? 0.8 : 0;
     return {
       opacity,
       transform: [
         { translateX: getTooltipXPosition(cursorX.value) },
-        { translateY: cursorYLow.value - 30 },
+        { translateY: cursorYLow.value - tooltipOffset },
       ],
     };
   });
@@ -676,8 +842,10 @@ export default function MyChart({
     return {
       opacity,
       transform: [
-        { translateX: getTooltipXPosition(cursorX.value) - 10 },
-        { translateY: -50 }, // Position well above chart area to avoid overlap
+        {
+          translateX: getTooltipXPosition(cursorX.value) - dateTooltipXOffset,
+        },
+        { translateY: -dateTooltipOffset },
       ],
     };
   });
@@ -723,7 +891,7 @@ export default function MyChart({
                 width={chartWidth}
                 height={chartHeight}
                 padding={chartPadding}
-                domainPadding={{ x: 0, y: 5 }}
+                domainPadding={{ x: 0, y: 2 }}
                 domain={{ y: yDomain }}
                 scale={{ x: "linear", y: "linear" }}
               >
@@ -732,7 +900,7 @@ export default function MyChart({
                     axis: { stroke: "transparent" },
                     tickLabels: { fill: "transparent" },
                     grid: {
-                      stroke: "rgba(255, 255, 255, 0.1)",
+                      stroke: Colors.border,
                       strokeWidth: 1,
                       strokeDasharray: "4,4",
                     },
@@ -745,61 +913,65 @@ export default function MyChart({
                     axis: { stroke: "transparent" },
                     tickLabels: { fill: "transparent" },
                     grid: {
-                      stroke: "rgba(255, 255, 255, 0.1)",
+                      stroke: Colors.border,
                       strokeWidth: 1,
                       strokeDasharray: "4,4",
                     },
                     ticks: { stroke: "transparent" },
                   }}
                 />
-                <VictoryLine
-                  data={chartData}
-                  x="x"
-                  y="awayPrice"
-                  interpolation={animationConfig.interpolation}
-                  style={{
-                    data: {
-                      stroke: marketData.awayTeam.color,
-                      strokeWidth: 2.5,
-                      strokeLinecap: "round",
-                      strokeLinejoin: "round",
-                      strokeDasharray: "0",
-                    },
-                  }}
-                  animate={
-                    animationConfig.enabled
-                      ? {
-                          duration: animationConfig.duration,
-                          onLoad: { duration: animationConfig.duration },
-                          easing: "back",
-                        }
-                      : undefined
-                  }
-                />
-                <VictoryLine
-                  data={chartData}
-                  x="x"
-                  y="homePrice"
-                  interpolation={animationConfig.interpolation}
-                  style={{
-                    data: {
-                      stroke: marketData.homeTeam.color,
-                      strokeWidth: 2.5,
-                      strokeLinecap: "round",
-                      strokeLinejoin: "round",
-                      strokeDasharray: "0",
-                    },
-                  }}
-                  animate={
-                    animationConfig.enabled
-                      ? {
-                          duration: animationConfig.duration,
-                          onLoad: { duration: animationConfig.duration },
-                          easing: "back",
-                        }
-                      : undefined
-                  }
-                />
+                {chartData.length > 0 && [
+                  <VictoryLine
+                    key="away"
+                    data={chartData}
+                    x="x"
+                    y="awayPrice"
+                    interpolation={animationConfig.interpolation}
+                    style={{
+                      data: {
+                        stroke: marketData.awayTeam.color,
+                        strokeWidth: 3,
+                        strokeLinecap: "round",
+                        strokeLinejoin: "round",
+                        strokeDasharray: "0",
+                      },
+                    }}
+                    animate={
+                      animationConfig.enabled
+                        ? {
+                            duration: animationConfig.duration,
+                            onLoad: { duration: animationConfig.duration },
+                            easing: "back",
+                          }
+                        : undefined
+                    }
+                  />,
+                  <VictoryLine
+                    key="home"
+                    data={chartData}
+                    x="x"
+                    y="homePrice"
+                    interpolation={animationConfig.interpolation}
+                    style={{
+                      data: {
+                        stroke: marketData.homeTeam.color,
+                        strokeWidth: 3,
+                        strokeLinecap: "round",
+                        strokeLinejoin: "round",
+                        strokeDasharray: "0",
+                      },
+                    }}
+                    animate={
+                      animationConfig.enabled
+                        ? {
+                            duration: animationConfig.duration,
+                            onLoad: { duration: animationConfig.duration },
+                            easing: "back",
+                          }
+                        : undefined
+                    }
+                  />,
+                ]}
               </VictoryChart>
 
               {/* Cursor Line */}
@@ -824,8 +996,12 @@ export default function MyChart({
                     <Text style={styles.tooltipPrice}>
                       {formatSharePrice(tooltipData.awayPrice)}
                     </Text>
-                    <Text style={styles.tooltipLabel}>
-                      {marketData.awayTeam.abbreviation}
+                    <Text
+                      style={styles.tooltipLabel}
+                      numberOfLines={2}
+                      ellipsizeMode="tail"
+                    >
+                      {marketData.awayTeam.name}
                     </Text>
                   </Animated.View>
 
@@ -842,8 +1018,12 @@ export default function MyChart({
                     <Text style={styles.tooltipPrice}>
                       {formatSharePrice(tooltipData.homePrice)}
                     </Text>
-                    <Text style={styles.tooltipLabel}>
-                      {marketData.homeTeam.abbreviation}
+                    <Text
+                      style={styles.tooltipLabel}
+                      numberOfLines={2}
+                      ellipsizeMode="tail"
+                    >
+                      {marketData.homeTeam.name}
                     </Text>
                   </Animated.View>
                 </>
@@ -858,16 +1038,16 @@ export default function MyChart({
 
 // Calculate responsive dimensions
 const chartHeight = normalize(360);
-const chartMargin = normalize(8);
+const chartMargin = Spacing.sm;
 const cursorWidth = normalize(2);
-const cursorHeight = normalize(300);
-const padding = normalize(20);
+const cursorHeight = normalize(180);
+const padding = Spacing.xl;
 
 const styles = StyleSheet.create({
   chartContainer: {
     width: "100%",
-
     position: "relative",
+    backgroundColor: Colors.background,
   },
   skeletonContainer: {
     position: "absolute",
@@ -884,30 +1064,34 @@ const styles = StyleSheet.create({
   chartWrapper: {
     width: "100%",
     position: "relative",
-    bottom: 10,
+    bottom: Spacing.md,
   },
   cursorLine: {
     position: "absolute",
     width: cursorWidth,
-    backgroundColor: "rgba(255, 255, 255, 0.4)", // Lighter for dark mode usually
+    backgroundColor: Colors.textPrimary,
+    opacity: 0.5,
     height: cursorHeight,
-    top: padding,
+    top: padding - 10,
     left: padding,
     zIndex: 10,
   },
   tooltip: {
     position: "absolute",
-    backgroundColor: "rgba(23, 23, 23, 0.95)", // Dark background
-    padding: 8,
-    borderRadius: 8,
-    minWidth: 80,
+    backgroundColor: Colors.surface,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.md,
+    minWidth: 100,
+    maxWidth: 200,
     alignItems: "center",
+    justifyContent: "center",
     top: padding,
     left: padding,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-    borderLeftWidth: 3, // Colored left border for team identification
-    zIndex: 100, // Ensure tooltips are above everything
+    borderColor: Colors.border,
+    borderLeftWidth: 3,
+    zIndex: 100,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
@@ -915,28 +1099,30 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   dateTooltip: {
-    backgroundColor: "rgba(40, 40, 40, 0.95)",
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 4,
-    zIndex: 101, // Date on top of price tooltips if they overlap
+    backgroundColor: Colors.surfaceAlt,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    zIndex: 101,
     minWidth: 100,
   },
   dateText: {
-    color: "#e5e5e5",
-    fontSize: 11,
+    ...Typography.caption,
+    color: Colors.textSecondary,
     fontWeight: "600",
   },
   tooltipPrice: {
-    fontWeight: "bold",
-    fontSize: 16,
-    marginBottom: 2,
-    color: "#FFFFFF", // White text for contrast on dark background
+    ...Typography.bodyLarge,
+    fontWeight: "700",
+    marginBottom: Spacing.xs / 2,
+    color: Colors.textPrimary,
   },
   tooltipLabel: {
+    ...Typography.label,
     fontSize: 10,
-    opacity: 0.8,
-    color: "#E5E5E5", // Light gray text for contrast on dark background
+    opacity: 0.9,
+    color: Colors.textTertiary,
+    textAlign: "center",
   },
   // Keep these for potential reuse or if referenced elsewhere
   tooltipHigh: {},
@@ -949,6 +1135,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    backgroundColor: Colors.background,
   },
 });

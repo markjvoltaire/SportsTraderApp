@@ -21,6 +21,7 @@ import FilterCarousel from "../src/components/ui/FilterCarousel";
 import SearchBar from "../src/components/ui/SearchBar";
 import { Colors, Spacing } from "../constants/theme";
 import ScreenTemplate from "./ScreenTemplate";
+import MarketCard from "../src/components/market/MarketCard";
 
 // Animated wrapper component for GameCard with fade-in
 function AnimatedGameCard({ market, onPress, index }) {
@@ -51,7 +52,8 @@ function AnimatedGameCard({ market, onPress, index }) {
 
   return (
     <Animated.View style={animatedStyle}>
-      <GameCard market={market} onPress={onPress} />
+      {/* <GameCard market={market} onPress={onPress} /> */}
+      <MarketCard market={market} onPress={onPress} />
     </Animated.View>
   );
 }
@@ -137,37 +139,55 @@ export default function HomeScreen() {
       setLoading(true);
       setError(null);
 
-      // Build query parameters
-      const params = new URLSearchParams();
-      if (selectedFilter !== "all") {
-        params.append("sport", selectedFilter);
+      // Build URL based on selected filter
+      // Calculate end date (10 days from now)
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + 10);
+      const endDateMax = endDate.toISOString().split("T")[0]; // Format as YYYY-MM-DD
+
+      let url;
+      if (selectedFilter === "all") {
+        // For "all", use NBA as default
+        url = `${API_BASE_URL}/api/polymarketSports/nba/events?limit=20&closed=false&endDateMax=${endDateMax}`;
+      } else {
+        // Use the sport-specific endpoint
+        url = `${API_BASE_URL}/api/polymarketSports/${selectedFilter}/events?limit=20&closed=false&endDateMax=${endDateMax}`;
       }
 
-      const queryString = params.toString();
-      const url = `${API_BASE_URL}/api/markets/gameWinners${
-        queryString ? `?${queryString}` : ""
-      }`;
-
-      console.log("url", url);
+      console.log("Fetching from URL:", url);
 
       const response = await fetch(url);
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
+
       const jsonData = await response.json();
+
+      // Validate response is an array
+      if (!Array.isArray(jsonData)) {
+        console.warn("Expected array but received:", typeof jsonData);
+        setMarkets([]);
+        setError("Invalid response format from server");
+        return;
+      }
+
+      console.log(`Received ${jsonData.length} markets`);
+      console.log("All markets:", JSON.stringify(jsonData, null, 2));
 
       // Store in cache
       marketsCache[cacheKey] = jsonData;
 
+      // Set markets - now expects simplified format: [{id, slug, endDate, line?}, ...]
       setMarkets(jsonData);
     } catch (err) {
       setError(err.message);
       console.error("Error fetching data:", err);
+      setMarkets([]); // Clear markets on error
     } finally {
       setLoading(false);
     }
   };
-
   useEffect(() => {
     fetchData();
   }, [selectedFilter]);
