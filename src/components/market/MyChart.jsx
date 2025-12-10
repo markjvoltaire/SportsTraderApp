@@ -40,6 +40,8 @@ import {
 export default function MyChart({
   onTimestampChange,
   onPriceStatsChange,
+  onPriceChange,
+  onLoadingChange,
   timeFrame = "24H",
 }) {
   const route = useRoute();
@@ -209,6 +211,7 @@ export default function MyChart({
         market ? Object.keys(market) : "No market"
       );
       setLoading(false);
+      if (onLoadingChange) onLoadingChange(false);
       return;
     }
 
@@ -220,6 +223,7 @@ export default function MyChart({
     const fetchPriceHistory = async () => {
       try {
         setLoading(true);
+        if (onLoadingChange) onLoadingChange(true);
         setError(null);
 
         // Calculate time range based on selected time frame
@@ -456,6 +460,7 @@ export default function MyChart({
         setError(err.message);
       } finally {
         setLoading(false);
+        if (onLoadingChange) onLoadingChange(false);
       }
     };
 
@@ -716,12 +721,19 @@ export default function MyChart({
       setShowTooltip(true);
 
       if (onTimestampChange) onTimestampChange(data.timestamp);
+      if (onPriceChange) {
+        onPriceChange({
+          awayPrice: data.awayPrice,
+          homePrice: data.homePrice,
+        });
+      }
     },
     [
       getValueAtX,
       cursorYHigh,
       cursorYLow,
       onTimestampChange,
+      onPriceChange,
       marketData,
       chartData.length,
     ]

@@ -48,6 +48,12 @@ export default function MarketsScreen() {
   // State for price stats (high/low) from chart
   const [priceStats, setPriceStats] = useState(null);
 
+  // State for current prices from chart cursor
+  const [currentPrices, setCurrentPrices] = useState(null);
+
+  // State for chart loading
+  const [chartLoading, setChartLoading] = useState(true);
+
   // Extract description - use current timestamp if available, otherwise use game date
   const marketDescription = useMemo(() => {
     // If we have a timestamp from the chart cursor, use that
@@ -133,10 +139,12 @@ export default function MarketsScreen() {
           contentContainerStyle={styles.scrollContent}
           scrollEventThrottle={16}
         >
-          <View style={[styles.chartContainerWrapper, { top: height * 0.01 }]}>
+          <View style={[styles.chartContainerWrapper, { top: height * 0.03 }]}>
             <MyChart
               onTimestampChange={setCurrentTimestamp}
               onPriceStatsChange={setPriceStats}
+              onPriceChange={setCurrentPrices}
+              onLoadingChange={setChartLoading}
             />
           </View>
 
@@ -154,7 +162,11 @@ export default function MarketsScreen() {
         ]}
         pointerEvents="box-none"
       >
-        <ButtonRow market={market} />
+        <ButtonRow
+          market={market}
+          currentPrices={currentPrices}
+          loading={chartLoading}
+        />
       </View>
     </>
   );
