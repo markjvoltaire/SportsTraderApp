@@ -1,26 +1,29 @@
+import { StyleSheet, View } from "react-native";
 import React from "react";
-import { View, StyleSheet, ActivityIndicator } from "react-native";
-import { Colors } from "../../constants/theme";
+import LottieView from "lottie-react-native";
 
 export default function ChartSkeleton() {
-  const chartWidth = 350;
-  const chartHeight = 300;
-
   return (
-    <View
-      style={[styles.container, { width: chartWidth, height: chartHeight }]}
-    >
-      <ActivityIndicator size="large" color={Colors.primary} />
+    <View style={styles.container}>
+      <LottieView
+        source={require("../../../assets/lottie/Loading.json")}
+        autoPlay
+        loop
+        style={styles.lottie}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    position: "relative",
-
-    borderRadius: 8,
-    alignItems: "center",
+    flex: 1,
     justifyContent: "center",
+    alignItems: "center",
+    minHeight: 200,
+  },
+  lottie: {
+    width: 200,
+    height: 100,
   },
 });

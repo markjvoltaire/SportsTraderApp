@@ -11,7 +11,6 @@ import { useNavigation, useScrollToTop } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, Typography } from "../constants/theme";
 import { formatCurrency, formatPrice } from "../src/utils/formatters";
-import { getTeamColor } from "../src/utils/teamColors";
 
 // Hard-coded portfolio data
 const PORTFOLIO_DATA = {
@@ -151,7 +150,7 @@ function PositionCard({ position, onPress }) {
   const isPositive = position.pnl >= 0;
   const isWon = position.status === "won";
   const isLost = position.status === "lost";
-  const teamColor = getTeamColor(position.team, position.teamName);
+  const teamColor = Colors.primary;
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);

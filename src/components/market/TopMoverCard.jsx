@@ -3,7 +3,6 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, Typography } from "../../constants/theme";
 import { formatPrice, formatCurrency } from "../../utils/formatters";
-import { getTeamColor } from "../../utils/teamColors";
 
 export default function TopMoverCard({ market, onPress, rank }) {
   if (!market) return null;
@@ -20,14 +19,8 @@ export default function TopMoverCard({ market, onPress, rank }) {
   // Get team info
   const team1 = market.awayTeam?.abbreviation || market.awayTeam?.name || "Away";
   const team2 = market.homeTeam?.abbreviation || market.homeTeam?.name || "Home";
-  const team1Color = getTeamColor(
-    market.awayTeam?.abbreviation,
-    market.awayTeam?.name
-  );
-  const team2Color = getTeamColor(
-    market.homeTeam?.abbreviation,
-    market.homeTeam?.name
-  );
+  const team1Color = market.awayTeam?.color || Colors.primary;
+  const team2Color = market.homeTeam?.color || Colors.accentTeal;
 
   // Get volume
   const volume =

@@ -120,3 +120,4 @@ The app is already configured with:
 - Phone numbers are validated before sending OTP
 - All authentication flows use Supabase's secure infrastructure
 
+

@@ -15,12 +15,9 @@ import Animated, {
   Easing,
 } from "react-native-reanimated";
 import API_BASE_URL from "../src/config/api";
-import GameCard from "../src/components/market/GameCard";
 import GameCardSkeleton from "../src/components/market/GameCardSkeleton";
 import FilterCarousel from "../src/components/ui/FilterCarousel";
-import SearchBar from "../src/components/ui/SearchBar";
 import { Colors, Spacing } from "../constants/theme";
-import ScreenTemplate from "./ScreenTemplate";
 import MarketCard from "../src/components/market/MarketCard";
 
 // Animated wrapper component for GameCard with fade-in
@@ -52,7 +49,6 @@ function AnimatedGameCard({ market, onPress, index }) {
 
   return (
     <Animated.View style={animatedStyle}>
-      {/* <GameCard market={market} onPress={onPress} /> */}
       <MarketCard market={market} onPress={onPress} />
     </Animated.View>
   );
@@ -123,7 +119,6 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [selectedFilter, setSelectedFilter] = useState("all");
-  const [searchQuery, setSearchQuery] = useState("");
 
   const fetchData = async (forceRefresh = false) => {
     try {
@@ -154,8 +149,6 @@ export default function HomeScreen() {
         url = `${API_BASE_URL}/api/polymarketSports/${selectedFilter}/events?limit=20&closed=false&endDateMax=${endDateMax}`;
       }
 
-      console.log("Fetching from URL:", url);
-
       const response = await fetch(url);
 
       if (!response.ok) {
@@ -171,9 +164,6 @@ export default function HomeScreen() {
         setError("Invalid response format from server");
         return;
       }
-
-      console.log(`Received ${jsonData.length} markets`);
-      console.log("All markets:", JSON.stringify(jsonData, null, 2));
 
       // Store in cache
       marketsCache[cacheKey] = jsonData;
@@ -223,76 +213,9 @@ export default function HomeScreen() {
     }
   }
 
-  // Filter markets by search query
-  const filteredMarketsArray = React.useMemo(() => {
-    if (!searchQuery.trim()) {
-      return marketsArray;
-    }
-
-    const query = searchQuery.toLowerCase().trim();
-    return marketsArray.filter((market) => {
-      // Search in team names/abbreviations (new format)
-      if (market.awayTeam && market.homeTeam) {
-        const awayTeamName = (
-          market.awayTeam.abbreviation ||
-          market.awayTeam.name ||
-          ""
-        ).toLowerCase();
-        const homeTeamName = (
-          market.homeTeam.abbreviation ||
-          market.homeTeam.name ||
-          ""
-        ).toLowerCase();
-        if (awayTeamName.includes(query) || homeTeamName.includes(query)) {
-          return true;
-        }
-      }
-
-      // Search in teams array (old format)
-      if (market.teams && Array.isArray(market.teams)) {
-        const teamMatches = market.teams.some((team) => {
-          const teamName = (
-            team.name ||
-            team.short ||
-            team.abbreviation ||
-            ""
-          ).toLowerCase();
-          return teamName.includes(query);
-        });
-        if (teamMatches) return true;
-      }
-
-      // Search in title/question
-      const title = (market.title || market.question || "").toLowerCase();
-      if (title.includes(query)) {
-        return true;
-      }
-
-      // Search in ticker
-      const ticker = (market.ticker || "").toLowerCase();
-      if (ticker.includes(query)) {
-        return true;
-      }
-
-      return false;
-    });
-  }, [marketsArray, searchQuery]);
-
-  useEffect(() => {
-    if (marketsArray.length > 0) {
-      console.log("Sample market:", JSON.stringify(marketsArray[0], null, 2));
-      console.log("Game time:", marketsArray[0].gameTime);
-    }
-  }, [marketsArray]);
-
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        {/* <SearchBar
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholder="Search teams, matchups, questions"
-        /> */}
         <FilterCarousel
           options={FILTER_OPTIONS}
           selectedKey={selectedFilter}
@@ -328,17 +251,13 @@ export default function HomeScreen() {
             Array.from({ length: 4 }).map((_, index) => (
               <GameCardSkeleton key={`skeleton-${index}`} />
             ))
-          ) : filteredMarketsArray.length === 0 ? (
+          ) : marketsArray.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>
-                {searchQuery
-                  ? `No markets found for "${searchQuery}"`
-                  : "No market data available"}
-              </Text>
+              <Text style={styles.emptyText}>No market data available</Text>
             </View>
           ) : (
             // Show actual game cards with fade-in animation
-            filteredMarketsArray.map((market, index) => (
+            marketsArray.map((market, index) => (
               <AnimatedGameCard
                 key={market.id || market.market_id || market.game_id || index}
                 market={market}

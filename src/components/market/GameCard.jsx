@@ -3,7 +3,6 @@ import { StyleSheet, Text, TouchableOpacity, View, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, Typography } from "../../constants/theme";
 import { formatPrice, formatCurrency } from "../../utils/formatters";
-import { getTeamColor } from "../../utils/teamColors";
 
 /**
  * Normalize date string to ISO format
@@ -115,8 +114,8 @@ function getTeamInitial(teamName) {
 function transformMarketData(market) {
   let team1 = "Team 1";
   let team2 = "Team 2";
-  let team1Color = "#9333EA"; // Default purple
-  let team2Color = "#06B6D4"; // Default teal
+  let team1Color = Colors.primary;
+  let team2Color = Colors.accentTeal;
   let team1Price = 0.5;
   let team2Price = 0.5;
   let team1Abbreviation = null;
@@ -139,9 +138,9 @@ function transformMarketData(market) {
     team1Price = parseFloat(awayTeam.price) || 0.5;
     team2Price = parseFloat(homeTeam.price) || 0.5;
 
-    // Get team colors based on abbreviation
-    team1Color = getTeamColor(team1Abbreviation, team1);
-    team2Color = getTeamColor(team2Abbreviation, team2);
+    // Get team colors from API or use defaults
+    team1Color = awayTeam.color || Colors.primary;
+    team2Color = homeTeam.color || Colors.accentTeal;
   }
   // Extract teams from teams array (preferred)
   else if (
@@ -156,9 +155,9 @@ function transformMarketData(market) {
     team1Abbreviation = team1Data.abbreviation || null;
     team2Abbreviation = team2Data.abbreviation || null;
 
-    // Get team colors based on abbreviation or name
-    team1Color = getTeamColor(team1Abbreviation, team1);
-    team2Color = getTeamColor(team2Abbreviation, team2);
+    // Get team colors from API or use defaults
+    team1Color = team1Data.color || Colors.primary;
+    team2Color = team2Data.color || Colors.accentTeal;
   }
   // Fallback: parse teams from question/title
   else if (market?.question || market?.title) {
@@ -169,9 +168,9 @@ function transformMarketData(market) {
         team1 = teams[0].trim();
         team2 = teams[1].trim();
 
-        // Try to extract abbreviations from team names
-        team1Color = getTeamColor(null, team1);
-        team2Color = getTeamColor(null, team2);
+        // Use default colors
+        team1Color = Colors.primary;
+        team2Color = Colors.accentTeal;
       }
     }
   }
@@ -253,12 +252,12 @@ function transformMarketData(market) {
     team2Price = team2Price / totalPrice;
   }
 
-  // If we don't have team colors yet, try to get them from team names
-  if (team1Color === "#9333EA" && team1 !== "Team 1") {
-    team1Color = getTeamColor(team1Abbreviation, team1);
+  // Ensure colors are set (use defaults if still default values)
+  if (team1Color === Colors.primary || team1 === "Team 1") {
+    team1Color = Colors.primary;
   }
-  if (team2Color === "#06B6D4" && team2 !== "Team 2") {
-    team2Color = getTeamColor(team2Abbreviation, team2);
+  if (team2Color === Colors.accentTeal || team2 === "Team 2") {
+    team2Color = Colors.accentTeal;
   }
 
   return {

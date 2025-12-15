@@ -25,9 +25,9 @@ import Animated, {
   Easing,
 } from "react-native-reanimated";
 import { useRoute } from "@react-navigation/native";
+import * as Haptics from "expo-haptics";
 import API_BASE_URL from "../../config/api";
 import { formatSharePrice } from "../../utils/formatters";
-import { getTeamColor } from "../../utils/teamColors";
 import ChartSkeleton from "./ChartSkeleton";
 import { normalize, widthPercentage } from "../../utils/dimensions";
 import {
@@ -43,12 +43,12 @@ export default function MyChart({
   onPriceChange,
   onLoadingChange,
   timeFrame = "24H",
+  awayColor,
+  homeColor,
 }) {
   const route = useRoute();
   const market = route.params?.game || route.params?.market;
   const { width, height } = Dimensions.get("window");
-
-  console.log("market", market);
 
   const chartPadding = {
     top: Spacing.md,
@@ -66,7 +66,6 @@ export default function MyChart({
   // Extract market data
   const marketData = useMemo(() => {
     if (!market) {
-      console.log("MyChart: No market data provided");
       return {
         awayTeam: {
           price: 0.5,
@@ -86,26 +85,12 @@ export default function MyChart({
       };
     }
 
-    // Log market structure for debugging
-    console.log("MyChart: Market data:", {
-      conditionId: market.conditionId,
-      condition_id: market.condition_id,
-      id: market.id,
-      slug: market.slug,
-      teamTokenIds: market.teamTokenIds,
-      awayTeam: market.awayTeam,
-      homeTeam: market.homeTeam,
-      title: market.title,
-    });
-
     // Try multiple ways to get conditionId
     const conditionId =
       market.conditionId ||
       market.condition_id ||
       market.id || // Sometimes id is the conditionId
       null;
-
-    console.log("MyChart: Extracted conditionId:", conditionId);
 
     // Handle new API format with teamTokenIds array
     let awayTokenId = null;
@@ -146,31 +131,24 @@ export default function MyChart({
         market.homeTeam?.tokenId || market.homeTeam?.token_id || null;
     }
 
-    console.log(
-      "MyChart: Extracted tokenIds - away:",
-      awayTokenId,
-      "home:",
-      homeTokenId
-    );
-
     return {
       awayTeam: {
         price: parseFloat(market.awayTeam?.price) || 0.5,
         tokenId: awayTokenId,
         abbreviation: awayAbbreviation,
         name: awayName,
-        color: getTeamColor(awayAbbreviation, awayName),
+        color: awayColor || Colors.primary,
       },
       homeTeam: {
         price: parseFloat(market.homeTeam?.price) || 0.5,
         tokenId: homeTokenId,
         abbreviation: homeAbbreviation,
         name: homeName,
-        color: getTeamColor(homeAbbreviation, homeName),
+        color: homeColor || Colors.accentTeal,
       },
       conditionId: conditionId,
     };
-  }, [market]);
+  }, [market, awayColor, homeColor]);
 
   // State for price history
   const [awayHistory, setAwayHistory] = useState(null);
@@ -214,11 +192,6 @@ export default function MyChart({
       if (onLoadingChange) onLoadingChange(false);
       return;
     }
-
-    console.log(
-      "MyChart: Fetching candlesticks for conditionId:",
-      marketData.conditionId
-    );
 
     const fetchPriceHistory = async () => {
       try {
@@ -294,17 +267,6 @@ export default function MyChart({
         }
 
         const data = await response.json();
-        console.log("MyChart: Candlesticks response:", {
-          isArray: Array.isArray(data),
-          hasCandlesticks: !!data?.candlesticks,
-          hasData: !!data?.data,
-          dataLength: Array.isArray(data)
-            ? data.length
-            : data?.candlesticks?.length || data?.data?.length || 0,
-          firstItem: Array.isArray(data)
-            ? data[0]
-            : data?.candlesticks?.[0] || data?.data?.[0] || null,
-        });
 
         let candlesticks = [];
 
@@ -323,8 +285,6 @@ export default function MyChart({
 
         const extractTokenData = (tokenId) => {
           const tokenCandlesticks = [];
-
-          console.log("MyChart: Extracting data for tokenId:", tokenId);
 
           candlesticks.forEach((item) => {
             let candlestickArray = null;
@@ -527,7 +487,7 @@ export default function MyChart({
     // For small datasets, use full animation with smooth interpolation
     return {
       enabled: true,
-      duration: 50,
+      duration: 450,
       interpolation: "cardinal", // Very smooth cardinal spline
     };
   }, [chartData.length]);
@@ -609,15 +569,6 @@ export default function MyChart({
       return [Math.max(0, priceMin - 0.1), Math.min(1, priceMax + 0.1)];
     }
 
-    console.log("MyChart: yDomain calculated:", {
-      priceMin,
-      priceMax,
-      priceRange,
-      padding,
-      domainMin,
-      domainMax,
-    });
-
     return [domainMin, domainMax];
   }, [chartData]);
 
@@ -689,11 +640,17 @@ export default function MyChart({
   const lastUpdateTimeRef = useRef(0);
   const THROTTLE_MS = 16; // ~60fps
 
+  // Track last data point index for haptic feedback
+  const lastDataIndexRef = useRef(-1);
+  const lastHapticTimeRef = useRef(0);
+  const HAPTIC_INTERVAL_MS = 50; // Minimum time between haptics (20 haptics per second max)
+
   const updateCursorData = useCallback(
     (xPos) => {
       if (xPos < 0) {
         setShowTooltip(false);
         if (onTimestampChange) onTimestampChange(null);
+        lastDataIndexRef.current = -1;
         return;
       }
 
@@ -708,6 +665,21 @@ export default function MyChart({
       lastUpdateTimeRef.current = now;
 
       const data = getValueAtX(xPos);
+      const currentDataIndex = Math.floor(data.index);
+
+      // Trigger haptic feedback when crossing data point boundaries
+      if (
+        currentDataIndex !== lastDataIndexRef.current &&
+        currentDataIndex >= 0 &&
+        currentDataIndex < chartData.length &&
+        now - lastHapticTimeRef.current >= HAPTIC_INTERVAL_MS
+      ) {
+        lastDataIndexRef.current = currentDataIndex;
+        lastHapticTimeRef.current = now;
+        // Use light impact for smooth scrolling feel
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+
       setTooltipData({
         index: data.index,
         awayPrice: data.awayPrice,
@@ -739,6 +711,10 @@ export default function MyChart({
     ]
   );
 
+  const triggerHapticStart = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  }, []);
+
   const panGesture = useMemo(
     () =>
       Gesture.Pan()
@@ -748,6 +724,7 @@ export default function MyChart({
           if (touchX >= 0 && touchX <= plotWidth) {
             cursorX.value = touchX;
             isActive.value = true;
+            runOnJS(triggerHapticStart)();
             runOnJS(updateCursorData)(touchX);
           }
         })
@@ -765,7 +742,14 @@ export default function MyChart({
           cursorX.value = plotWidth;
           runOnJS(updateCursorData)(plotWidth);
         }),
-    [chartPadding.left, plotWidth, cursorX, isActive, updateCursorData]
+    [
+      chartPadding.left,
+      plotWidth,
+      cursorX,
+      isActive,
+      updateCursorData,
+      triggerHapticStart,
+    ]
   );
 
   useEffect(() => {

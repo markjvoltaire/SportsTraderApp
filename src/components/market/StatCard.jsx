@@ -2,9 +2,14 @@ import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Colors, Spacing, Typography } from "../../constants/theme";
 
-export default function StatCard({ label, value, subtitle }) {
+export default function StatCard({ label, value, subtitle, color }) {
   return (
-    <View style={styles.container}>
+    <View
+      style={[
+        styles.container,
+        color && { borderLeftColor: color, borderLeftWidth: 3 },
+      ]}
+    >
       <Text style={styles.label}>{label}</Text>
       <Text style={styles.value}>{value ?? "—"}</Text>
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}

@@ -37,43 +37,63 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const signIn = async (email, password) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    return { data, error };
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        console.error("Sign in error:", {
+          message: error.message,
+          status: error.status,
+          name: error.name,
+        });
+      }
+
+      return { data, error };
+    } catch (err) {
+      console.error("Sign in exception:", err);
+      return {
+        data: null,
+        error: {
+          message: err.message || "Network request failed",
+          name: err.name || "AuthError",
+        },
+      };
+    }
   };
 
   const signUp = async (email, password) => {
-    const normalizedEmail = email.trim().toLowerCase();
+    try {
+      const normalizedEmail = email.trim().toLowerCase();
 
-    // 1. Create the user in Supabase
-    const { data, error } = await supabase.auth.signUp({
-      email: normalizedEmail,
-      password,
-    });
+      // 1. Create the user in Supabase
+      const { data, error } = await supabase.auth.signUp({
+        email: normalizedEmail,
+        password,
+      });
 
-    if (error) return { data, error };
-
-    // 2. If signup successful, call Edge Function to create wallet
-    if (data?.user?.id) {
-      try {
-        const res = await fetch(
-          "/functions/v1/create-safe-wallet", // your Supabase function URL
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ user_id: data.user.id }),
-          }
-        );
-        const walletResult = await res.json();
-        console.log("Wallet created:", walletResult.walletAddress);
-      } catch (walletErr) {
-        console.error("Failed to create wallet:", walletErr);
+      if (error) {
+        console.error("Sign up error:", {
+          message: error.message,
+          status: error.status,
+          name: error.name,
+        });
+        return { data, error };
       }
-    }
 
-    return { data, error };
+      return { data, error };
+    } catch (err) {
+      console.error("Sign up exception:", err);
+      return {
+        data: null,
+        error: {
+          message: err.message || "Network request failed",
+          name: err.name || "AuthError",
+        },
+      };
+    }
   };
 
   const signOut = async () => {

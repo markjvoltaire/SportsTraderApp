@@ -1,6 +1,11 @@
 import React from "react";
 import { StatusBar } from "expo-status-bar";
-import { StyleSheet, ActivityIndicator, View } from "react-native";
+import {
+  StyleSheet,
+  ActivityIndicator,
+  View,
+  TouchableOpacity,
+} from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
@@ -24,20 +29,82 @@ const AuthStack = createNativeStackNavigator();
 
 function HomeStackScreen() {
   return (
-    <HomeStack.Navigator screenOptions={{ headerShown: false }}>
-      <HomeStack.Screen name="HomeList" component={HomeScreen} />
+    <HomeStack.Navigator>
+      <HomeStack.Screen
+        name="Home"
+        component={HomeScreen}
+        options={{ headerShown: false, headerBackTitle: "Homefsd" }}
+      />
       <HomeStack.Screen
         name="MarketDetail"
         component={MarketDetailScreen}
-        options={({ route }) => ({
-          headerShown: true,
-          headerTitle: "",
-          headerBackTitleVisible: false,
-          headerBackTitle: "",
-          headerTintColor: Colors.textPrimary,
-          headerStyle: { backgroundColor: Colors.background },
-          headerShadowVisible: false,
-        })}
+        options={({ route }) => {
+          const market = route.params?.game || route.params?.market;
+          const getMarketTitle = (market) => {
+            if (!market) return "Markets";
+            if (market.title) return market.title;
+            if (market.question) return market.question;
+            if (market.awayTeam && market.homeTeam) {
+              const awayName =
+                market.awayTeam.abbreviation || market.awayTeam.name || "Away";
+              const homeName =
+                market.homeTeam.abbreviation || market.homeTeam.name || "Home";
+              return `${awayName} vs ${homeName}`;
+            }
+            return "Markets";
+          };
+          return {
+            headerShown: true,
+            headerTitle: getMarketTitle(market),
+            headerBackTitleVisible: false,
+            headerBackTitle: "",
+            headerTintColor: Colors.textPrimary,
+            headerStyle: { backgroundColor: Colors.background },
+            headerShadowVisible: false,
+            headerRight: () => (
+              <View style={{ flexDirection: "row", gap: Spacing.sm }}>
+                <TouchableOpacity
+                  style={{
+                    paddingHorizontal: Spacing.sm,
+                    paddingVertical: Spacing.xs,
+                  }}
+                  onPress={() => {
+                    // TODO: Implement share functionality
+                    console.log(
+                      "Share pressed for market:",
+                      getMarketTitle(market)
+                    );
+                  }}
+                >
+                  <Ionicons
+                    name="share-outline"
+                    size={24}
+                    color={Colors.textPrimary}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{
+                    paddingHorizontal: Spacing.sm,
+                    paddingVertical: Spacing.xs,
+                  }}
+                  onPress={() => {
+                    // TODO: Implement options functionality
+                    console.log(
+                      "Options pressed for market:",
+                      getMarketTitle(market)
+                    );
+                  }}
+                >
+                  <Ionicons
+                    name="ellipsis-vertical"
+                    size={24}
+                    color={Colors.textPrimary}
+                  />
+                </TouchableOpacity>
+              </View>
+            ),
+          };
+        }}
       />
     </HomeStack.Navigator>
   );
@@ -50,15 +117,73 @@ function MarketsStackScreen() {
       <MarketsStack.Screen
         name="MarketDetail"
         component={MarketDetailScreen}
-        options={({ route }) => ({
-          headerShown: true,
-          headerTitle: "",
-          headerBackTitleVisible: false,
-          headerBackTitle: "",
-          headerTintColor: Colors.textPrimary,
-          headerStyle: { backgroundColor: Colors.background },
-          headerShadowVisible: false,
-        })}
+        options={({ route }) => {
+          const market = route.params?.game || route.params?.market;
+          const getMarketTitle = (market) => {
+            if (!market) return "Markets";
+            if (market.title) return market.title;
+            if (market.question) return market.question;
+            if (market.awayTeam && market.homeTeam) {
+              const awayName =
+                market.awayTeam.abbreviation || market.awayTeam.name || "Away";
+              const homeName =
+                market.homeTeam.abbreviation || market.homeTeam.name || "Home";
+              return `${awayName} vs ${homeName}`;
+            }
+            return "Markets";
+          };
+          return {
+            headerShown: true,
+            headerTitle: getMarketTitle(market),
+            headerBackTitleVisible: false,
+            headerBackTitle: "",
+            headerTintColor: Colors.textPrimary,
+            headerStyle: { backgroundColor: Colors.background },
+            headerShadowVisible: false,
+            headerRight: () => (
+              <View style={{ flexDirection: "row", gap: Spacing.sm }}>
+                <TouchableOpacity
+                  style={{
+                    paddingHorizontal: Spacing.sm,
+                    paddingVertical: Spacing.xs,
+                  }}
+                  onPress={() => {
+                    // TODO: Implement share functionality
+                    console.log(
+                      "Share pressed for market:",
+                      getMarketTitle(market)
+                    );
+                  }}
+                >
+                  <Ionicons
+                    name="share-outline"
+                    size={24}
+                    color={Colors.textPrimary}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{
+                    paddingHorizontal: Spacing.sm,
+                    paddingVertical: Spacing.xs,
+                  }}
+                  onPress={() => {
+                    // TODO: Implement options functionality
+                    console.log(
+                      "Options pressed for market:",
+                      getMarketTitle(market)
+                    );
+                  }}
+                >
+                  <Ionicons
+                    name="ellipsis-vertical"
+                    size={24}
+                    color={Colors.textPrimary}
+                  />
+                </TouchableOpacity>
+              </View>
+            ),
+          };
+        }}
       />
     </MarketsStack.Navigator>
   );
@@ -76,7 +201,6 @@ function AuthNavigator() {
         name="ForgotPassword"
         component={ForgotPasswordScreen}
       />
-      <AuthStack.Screen name="App" component={AppNavigator} />
     </AuthStack.Navigator>
   );
 }
@@ -90,7 +214,7 @@ function AppNavigator() {
         headerShown: false,
         tabBarStyle: styles.tabBar,
         tabBarItemStyle: styles.tabItem,
-        tabBarActiveTintColor: Colors.primary,
+        tabBarActiveTintColor: "#FFFFFF",
         tabBarInactiveTintColor: Colors.textTertiary,
         tabBarLabelStyle: styles.tabLabel,
       }}
@@ -99,17 +223,12 @@ function AppNavigator() {
         name="Home"
         component={HomeStackScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Markets"
-        component={MarketsStackScreen}
-        options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="stats-chart-outline" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "home" : "home-outline"}
+              size={size}
+              color={color}
+            />
           ),
         }}
       />
@@ -117,8 +236,12 @@ function AppNavigator() {
         name="Portfolio"
         component={PortfolioScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="briefcase-outline" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "briefcase" : "briefcase-outline"}
+              size={size}
+              color={color}
+            />
           ),
         }}
       />
@@ -127,8 +250,12 @@ function AppNavigator() {
           name="Profile"
           component={ProfileScreen}
           options={{
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="person-outline" size={size} color={color} />
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={focused ? "person" : "person-outline"}
+                size={size}
+                color={color}
+              />
             ),
           }}
         />
@@ -148,9 +275,8 @@ function RootNavigator() {
     );
   }
 
-  // Always show the main app (HomeScreen) as initial screen
-  // Users can access login/auth screens from Profile tab if needed
-  return <AppNavigator />;
+  // Show auth stack (Welcome/Login) if not signed in, otherwise show main app
+  return session ? <AppNavigator /> : <AuthNavigator />;
 }
 
 export default function App() {

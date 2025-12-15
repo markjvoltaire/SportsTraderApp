@@ -1,65 +1,161 @@
-import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator } from "react-native";
+import {
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  ActivityIndicator,
+} from "react-native";
 import React from "react";
-import { getTeamColor } from "../../utils/teamColors";
 import { formatSharePrice } from "../../utils/formatters";
 import { normalize, normalizeFont } from "../../utils/dimensions";
 import { Colors, Spacing } from "../../constants/theme";
 
-export default function ButtonRow({ market, currentPrices, loading = false }) {
+export default function ButtonRow({
+  market,
+  currentPrices,
+  loading = false,
+  onBuyAway,
+  onBuyHome,
+}) {
   if (!market) {
     return null;
   }
 
-  // Extract team data
-  const awayTeam = market.awayTeam || {
-    name: "Away",
-    abbreviation: "Away",
-    price: 0.5,
-    color: "#9333EA",
-  };
-  const homeTeam = market.homeTeam || {
-    name: "Home",
-    abbreviation: "Home",
-    price: 0.5,
-    color: "#06B6D4",
-  };
-
-  // Extract team names - prioritize title extraction for accurate names
+  // Extract team data - consistent with MarketCard and MarketDetailScreen
+  let awayTeamData = null;
+  let homeTeamData = null;
   let awayName = "Away";
   let homeName = "Home";
+  let awayAbbreviation = null;
+  let homeAbbreviation = null;
+  let awayColor = null;
+  let homeColor = null;
+  let awayPrice = 0.5;
+  let homePrice = 0.5;
 
-  // First, try to extract from market title (most reliable source)
-  if (market.title) {
+  // First, try to get from teams array (new API format)
+  if (
+    market?.teams &&
+    Array.isArray(market.teams) &&
+    market.teams.length >= 2
+  ) {
+    awayTeamData = market.teams[0];
+    homeTeamData = market.teams[1];
+    // Prefer alias over name (alias is shorter)
+    awayName = awayTeamData.alias || awayTeamData.name || "Away";
+    homeName = homeTeamData.alias || homeTeamData.name || "Home";
+    awayAbbreviation = awayTeamData.abbreviation || null;
+    homeAbbreviation = homeTeamData.abbreviation || null;
+    awayColor = awayTeamData.color || null;
+    homeColor = homeTeamData.color || null;
+  }
+  // Fallback to awayTeam/homeTeam objects
+  else if (market?.awayTeam || market?.homeTeam) {
+    awayTeamData = market.awayTeam;
+    homeTeamData = market.homeTeam;
+    awayName = market.awayTeam?.name || market.awayTeam?.abbreviation || "Away";
+    homeName = market.homeTeam?.name || market.homeTeam?.abbreviation || "Home";
+    awayAbbreviation = market.awayTeam?.abbreviation || null;
+    homeAbbreviation = market.homeTeam?.abbreviation || null;
+    awayColor = market.awayTeam?.color || null;
+    homeColor = market.homeTeam?.color || null;
+  }
+  // Last resort: extract from title
+  else if (market?.title) {
     const titleMatch = market.title.match(/(.+?)\s+vs\.?\s+(.+)/i);
     if (titleMatch) {
-      awayName = titleMatch[1].trim();
-      homeName = titleMatch[2].trim();
+      awayName = titleMatch[1].trim().replace(/\.$/, ""); // Remove trailing period
+      homeName = titleMatch[2].trim().replace(/\.$/, ""); // Remove trailing period
     }
   }
 
-  // Fallback to team object names/abbreviations if title extraction didn't work
-  if (awayName === "Away" || homeName === "Home") {
-    awayName = awayTeam.name || awayTeam.abbreviation || "Away";
-    homeName = homeTeam.name || homeTeam.abbreviation || "Home";
+  // Extract prices from prices array or team objects
+  // Handle new API format with prices array
+  if (
+    market?.prices &&
+    Array.isArray(market.prices) &&
+    market.prices.length >= 2
+  ) {
+    // If we have team data from teams array, match by team id/abbreviation
+    if (awayTeamData && homeTeamData && awayTeamData.id && homeTeamData.id) {
+      for (const priceObj of market.prices) {
+        const priceTeam = priceObj?.team;
+        if (
+          priceTeam &&
+          (priceTeam.id === awayTeamData.id ||
+            priceTeam.abbreviation === awayAbbreviation?.toLowerCase())
+        ) {
+          const rawPrice =
+            parseFloat(priceObj?.sellPrice ?? priceObj?.price) || 0.5;
+          awayPrice = Math.round(rawPrice * 100) / 100;
+        } else if (
+          priceTeam &&
+          (priceTeam.id === homeTeamData.id ||
+            priceTeam.abbreviation === homeAbbreviation?.toLowerCase())
+        ) {
+          const rawPrice =
+            parseFloat(priceObj?.sellPrice ?? priceObj?.price) || 0.5;
+          homePrice = Math.round(rawPrice * 100) / 100;
+        }
+      }
+    }
+    // Last resort: use array order (first = away, second = home)
+    else {
+      const rawAwayPrice =
+        parseFloat(market.prices[0]?.sellPrice ?? market.prices[0]?.price) ||
+        0.5;
+      const rawHomePrice =
+        parseFloat(market.prices[1]?.sellPrice ?? market.prices[1]?.price) ||
+        0.5;
+      awayPrice = Math.round(rawAwayPrice * 100) / 100;
+      homePrice = Math.round(rawHomePrice * 100) / 100;
+    }
+  } else if (market?.awayTeam && market?.homeTeam) {
+    // Fallback to old format with awayTeam/homeTeam objects
+    const rawAwayPrice = parseFloat(market.awayTeam.price) || 0.5;
+    const rawHomePrice = parseFloat(market.homeTeam.price) || 0.5;
+    awayPrice = Math.round(rawAwayPrice * 100) / 100;
+    homePrice = Math.round(rawHomePrice * 100) / 100;
   }
+
+  // Get team colors - use from API if available, otherwise use default colors
+  const finalAwayColor = awayColor || Colors.primary;
+  const finalHomeColor = homeColor || Colors.accentTeal;
+
   // Use current prices from chart cursor if available, otherwise use market prices
-  const awayPrice = currentPrices?.awayPrice !== undefined 
-    ? parseFloat(currentPrices.awayPrice) 
-    : parseFloat(awayTeam.price) || 0.5;
-  const homePrice = currentPrices?.homePrice !== undefined 
-    ? parseFloat(currentPrices.homePrice) 
-    : parseFloat(homeTeam.price) || 0.5;
-  const awayColor = getTeamColor(awayTeam.abbreviation, awayName);
-  const homeColor = getTeamColor(homeTeam.abbreviation, homeName);
+  const finalAwayPrice =
+    currentPrices?.awayPrice !== undefined
+      ? parseFloat(currentPrices.awayPrice)
+      : awayPrice;
+  const finalHomePrice =
+    currentPrices?.homePrice !== undefined
+      ? parseFloat(currentPrices.homePrice)
+      : homePrice;
 
   const handleBuyAway = () => {
-    console.log("Buy Away Team:", awayName, "at", awayPrice);
-    // Add your buy logic here - uses current price from chart if available
+    if (onBuyAway) {
+      onBuyAway({
+        team: awayName,
+        price: finalAwayPrice,
+        color: finalAwayColor,
+        teamData: awayTeamData,
+      });
+    } else {
+      console.log("Buy Away Team:", awayName, "at", finalAwayPrice);
+    }
   };
 
   const handleBuyHome = () => {
-    console.log("Buy Home Team:", homeName, "at", homePrice);
-    // Add your buy logic here - uses current price from chart if available
+    if (onBuyHome) {
+      onBuyHome({
+        team: homeName,
+        price: finalHomePrice,
+        color: finalHomeColor,
+        teamData: homeTeamData,
+      });
+    } else {
+      console.log("Buy Home Team:", homeName, "at", finalHomePrice);
+    }
   };
 
   return (
@@ -67,7 +163,7 @@ export default function ButtonRow({ market, currentPrices, loading = false }) {
       <TouchableOpacity
         style={[
           styles.button,
-          { backgroundColor: awayColor },
+          { backgroundColor: finalAwayColor },
           loading && styles.buttonDisabled,
         ]}
         onPress={handleBuyAway}
@@ -80,7 +176,7 @@ export default function ButtonRow({ market, currentPrices, loading = false }) {
           <View style={styles.buttonContent}>
             <Text style={styles.teamName}>{awayName}</Text>
             <Text style={styles.teamPrice}>
-              {formatSharePrice(awayPrice)}
+              {formatSharePrice(finalAwayPrice)}
             </Text>
           </View>
         )}
@@ -89,7 +185,7 @@ export default function ButtonRow({ market, currentPrices, loading = false }) {
       <TouchableOpacity
         style={[
           styles.button,
-          { backgroundColor: homeColor },
+          { backgroundColor: finalHomeColor },
           loading && styles.buttonDisabled,
         ]}
         onPress={handleBuyHome}
@@ -102,7 +198,7 @@ export default function ButtonRow({ market, currentPrices, loading = false }) {
           <View style={styles.buttonContent}>
             <Text style={styles.teamName}>{homeName}</Text>
             <Text style={styles.teamPrice}>
-              {formatSharePrice(homePrice)}
+              {formatSharePrice(finalHomePrice)}
             </Text>
           </View>
         )}
@@ -129,12 +225,12 @@ const styles = StyleSheet.create({
   },
   button: {
     flex: 1,
-    paddingVertical: Spacing.lg,
+    paddingVertical: Spacing.xs,
     paddingHorizontal: Spacing.md,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 56,
+    minHeight: 50,
     shadowColor: "rgba(0, 0, 0, 0.3)",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1,
@@ -150,7 +246,7 @@ const styles = StyleSheet.create({
   },
   teamName: {
     color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: "700",
     letterSpacing: 0.3,
     marginBottom: Spacing.xs / 2,
