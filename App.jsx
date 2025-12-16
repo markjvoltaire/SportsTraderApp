@@ -6,6 +6,7 @@ import {
   View,
   TouchableOpacity,
 } from "react-native";
+import { useFonts } from "expo-font";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
@@ -21,6 +22,7 @@ import PortfolioScreen from "./Screens/PortfolioScreen";
 import ProfileScreen from "./Screens/ProfileScreen";
 import MarketDetailScreen from "./Screens/MarketDetailScreen";
 import { Colors, Spacing, Typography } from "./src/constants/theme";
+import ChartScreen from "./Screens/ChartScreen";
 
 const Tab = createBottomTabNavigator();
 const HomeStack = createNativeStackNavigator();
@@ -34,6 +36,17 @@ function HomeStackScreen() {
         name="Home"
         component={HomeScreen}
         options={{ headerShown: false, headerBackTitle: "Homefsd" }}
+      />
+
+      <HomeStack.Screen
+        name="Chart"
+        component={ChartScreen}
+        options={({ route }) => {
+          return {
+            // Custom in-screen header to match the matchup UI reference
+            headerShown: false,
+          };
+        }}
       />
       <HomeStack.Screen
         name="MarketDetail"
@@ -107,85 +120,6 @@ function HomeStackScreen() {
         }}
       />
     </HomeStack.Navigator>
-  );
-}
-
-function MarketsStackScreen() {
-  return (
-    <MarketsStack.Navigator screenOptions={{ headerShown: false }}>
-      <MarketsStack.Screen name="MarketsList" component={MarketsScreen} />
-      <MarketsStack.Screen
-        name="MarketDetail"
-        component={MarketDetailScreen}
-        options={({ route }) => {
-          const market = route.params?.game || route.params?.market;
-          const getMarketTitle = (market) => {
-            if (!market) return "Markets";
-            if (market.title) return market.title;
-            if (market.question) return market.question;
-            if (market.awayTeam && market.homeTeam) {
-              const awayName =
-                market.awayTeam.abbreviation || market.awayTeam.name || "Away";
-              const homeName =
-                market.homeTeam.abbreviation || market.homeTeam.name || "Home";
-              return `${awayName} vs ${homeName}`;
-            }
-            return "Markets";
-          };
-          return {
-            headerShown: true,
-            headerTitle: getMarketTitle(market),
-            headerBackTitleVisible: false,
-            headerBackTitle: "",
-            headerTintColor: Colors.textPrimary,
-            headerStyle: { backgroundColor: Colors.background },
-            headerShadowVisible: false,
-            headerRight: () => (
-              <View style={{ flexDirection: "row", gap: Spacing.sm }}>
-                <TouchableOpacity
-                  style={{
-                    paddingHorizontal: Spacing.sm,
-                    paddingVertical: Spacing.xs,
-                  }}
-                  onPress={() => {
-                    // TODO: Implement share functionality
-                    console.log(
-                      "Share pressed for market:",
-                      getMarketTitle(market)
-                    );
-                  }}
-                >
-                  <Ionicons
-                    name="share-outline"
-                    size={24}
-                    color={Colors.textPrimary}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={{
-                    paddingHorizontal: Spacing.sm,
-                    paddingVertical: Spacing.xs,
-                  }}
-                  onPress={() => {
-                    // TODO: Implement options functionality
-                    console.log(
-                      "Options pressed for market:",
-                      getMarketTitle(market)
-                    );
-                  }}
-                >
-                  <Ionicons
-                    name="ellipsis-vertical"
-                    size={24}
-                    color={Colors.textPrimary}
-                  />
-                </TouchableOpacity>
-              </View>
-            ),
-          };
-        }}
-      />
-    </MarketsStack.Navigator>
   );
 }
 
@@ -280,6 +214,20 @@ function RootNavigator() {
 }
 
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    "Poppins-Regular": require("./assets/fonts/Poppins-Regular.ttf"),
+    "Poppins-SemiBold": require("./assets/fonts/Poppins-SemiBold.ttf"),
+    "Poppins-Bold": require("./assets/fonts/Poppins-Bold.ttf"),
+  });
+
+  if (!fontsLoaded) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
+
   return (
     <AuthProvider>
       <NavigationContainer>

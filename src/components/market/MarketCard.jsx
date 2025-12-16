@@ -1,9 +1,13 @@
 import { StyleSheet, Text, View, TouchableOpacity, Image } from "react-native";
 import React from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
-import { Colors, Spacing, Typography } from "../../constants/theme";
-import { formatCurrency, formatSharePrice } from "../../utils/formatters";
+import {
+  Colors,
+  Spacing,
+  Typography,
+  BorderRadius,
+} from "../../constants/theme";
+import { formatCurrency } from "../../utils/formatters";
 
 /**
  * Normalize date string to ISO format
@@ -91,13 +95,6 @@ export default function MarketCard({ market, onPress }) {
       </View>
     );
   }
-
-  // Format game time - check for gameTime object first, then gameTime string
-  const gameTimeString = market?.gameTime?.timeString
-    ? market.gameTime.timeString
-    : market?.gameTime
-    ? formatGameTime(market.gameTime)
-    : "TBD";
 
   // Extract market data
   const title = market?.title || market?.question || market?.slug || "Market";
@@ -287,15 +284,52 @@ export default function MarketCard({ market, onPress }) {
   const finalAwayColor = awayColor || Colors.primary;
   const finalHomeColor = homeColor || Colors.accentTeal;
 
-  const handleAwayPress = () => {
-    // Navigate to market detail or handle away team action
-    onPress?.(market);
+  // Calculate percentages
+  const awayPct = Math.round(awayPrice * 100);
+  const homePct = Math.round(homePrice * 100);
+
+  // Get sport/league name
+  const sportName =
+    market?.sportMetadata?.sport ||
+    market?.league ||
+    market?.sportMetadata?.name ||
+    "Sports";
+
+  // Format sport name nicely
+  const formatSportName = (sport) => {
+    const sportMap = {
+      nba: "Pro Basketball",
+      nfl: "Pro Football",
+      nhl: "Pro Hockey",
+      ufc: "Mixed Martial Arts",
+      soccer: "Soccer",
+      cfb: "College Football",
+      boxing: "Boxing",
+      cbb: "College Basketball",
+      wbna: "Women's Basketball",
+    };
+    return sportMap[sport?.toLowerCase()] || sport || "Sports";
   };
 
-  const handleHomePress = () => {
-    // Navigate to market detail or handle home team action
-    onPress?.(market);
+  const formattedSportName = formatSportName(sportName);
+
+  // Get sport icon name
+  const getSportIcon = (sport) => {
+    const iconMap = {
+      nba: "basketball",
+      nfl: "football",
+      nhl: "ice-hockey",
+      ufc: "fitness",
+      soccer: "football",
+      cfb: "school",
+      boxing: "fitness",
+      cbb: "basketball",
+      wbna: "basketball",
+    };
+    return iconMap[sport?.toLowerCase()] || "ellipse";
   };
+
+  const sportIcon = getSportIcon(sportName);
 
   return (
     <TouchableOpacity
@@ -303,69 +337,93 @@ export default function MarketCard({ market, onPress }) {
       activeOpacity={0.7}
       onPress={() => onPress?.(market)}
     >
-      {/* Top gradient for away team */}
-      <LinearGradient
-        colors={[`${finalAwayColor}33`, `${finalAwayColor}00`]}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={styles.topGradient}
-        pointerEvents="none"
-      />
-
-      {/* Bottom gradient for home team */}
-      <LinearGradient
-        colors={[`${finalHomeColor}00`, `${finalHomeColor}33`]}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={styles.bottomGradient}
-        pointerEvents="none"
-      />
-
-      {/* Date/Time Header */}
-      <View style={styles.dateRow}>
-        <Ionicons name="time-outline" size={14} color={Colors.textTertiary} />
-        <Text style={styles.dateText}>{gameTimeString}</Text>
-      </View>
+      {/* Title */}
+      <Text style={styles.title} numberOfLines={1}>
+        {title}
+      </Text>
 
       {/* Teams Section */}
       <View style={styles.teamsContainer}>
         {/* Away Team */}
         <View style={styles.teamRow}>
-          {awayTeamData?.logo && (
-            <Image
-              source={{ uri: awayTeamData.logo }}
-              style={styles.teamLogo}
-            />
-          )}
-          <View style={styles.teamInfo}>
-            <Text style={styles.teamName}>{awayName}</Text>
-            {awayTeamData?.record && (
-              <Text style={styles.teamRecord}>{awayTeamData.record}</Text>
+          <View style={styles.teamLeft}>
+            {awayTeamData?.logo ? (
+              <Image
+                source={{ uri: awayTeamData.logo }}
+                style={styles.teamLogo}
+                resizeMode="contain"
+              />
+            ) : (
+              <View
+                style={[
+                  styles.teamLogoFallback,
+                  { backgroundColor: finalAwayColor },
+                ]}
+              >
+                <Ionicons
+                  name={`${sportIcon}-outline`}
+                  size={16}
+                  color="#000"
+                />
+              </View>
             )}
+            <View style={styles.teamText}>
+              <Text style={styles.teamName} numberOfLines={1}>
+                {awayName}
+              </Text>
+              {awayTeamData?.record && (
+                <Text style={styles.teamRecord}>{awayTeamData.record}</Text>
+              )}
+            </View>
           </View>
-          <View style={[styles.priceBadge, { borderLeftWidth: 3, borderLeftColor: finalAwayColor }]}>
-            <Text style={styles.priceText}>{formatSharePrice(awayPrice)}</Text>
+          <View style={styles.pctPill}>
+            <Text style={styles.pctText}>{awayPct}%</Text>
           </View>
         </View>
 
         {/* Home Team */}
         <View style={styles.teamRow}>
-          {homeTeamData?.logo && (
-            <Image
-              source={{ uri: homeTeamData.logo }}
-              style={styles.teamLogo}
-            />
-          )}
-          <View style={styles.teamInfo}>
-            <Text style={styles.teamName}>{homeName}</Text>
-            {homeTeamData?.record && (
-              <Text style={styles.teamRecord}>{homeTeamData.record}</Text>
+          <View style={styles.teamLeft}>
+            {homeTeamData?.logo ? (
+              <Image
+                source={{ uri: homeTeamData.logo }}
+                style={styles.teamLogo}
+                resizeMode="contain"
+              />
+            ) : (
+              <View
+                style={[
+                  styles.teamLogoFallback,
+                  { backgroundColor: finalHomeColor },
+                ]}
+              >
+                <Ionicons
+                  name={`${sportIcon}-outline`}
+                  size={16}
+                  color="#000"
+                />
+              </View>
             )}
+            <View style={styles.teamText}>
+              <Text style={styles.teamName} numberOfLines={1}>
+                {homeName}
+              </Text>
+              {homeTeamData?.record && (
+                <Text style={styles.teamRecord}>{homeTeamData.record}</Text>
+              )}
+            </View>
           </View>
-          <View style={[styles.priceBadge, { borderLeftWidth: 3, borderLeftColor: finalHomeColor }]}>
-            <Text style={styles.priceText}>{formatSharePrice(homePrice)}</Text>
+          <View style={styles.pctPill}>
+            <Text style={styles.pctText}>{homePct}%</Text>
           </View>
         </View>
+      </View>
+
+      {/* Volume and Category */}
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>
+          {formattedVolume} Vol. • {formattedSportName}
+        </Text>
       </View>
     </TouchableOpacity>
   );
@@ -374,100 +432,83 @@ export default function MarketCard({ market, onPress }) {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: Colors.surface,
-    borderRadius: 16,
+    borderRadius: BorderRadius.lg,
     marginBottom: Spacing.md,
     marginHorizontal: Spacing.md,
-    shadowColor: "rgba(0, 0, 0, 0.5)",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 3,
+    padding: Spacing.sm + 2,
     borderWidth: 1,
     borderColor: Colors.border,
-    overflow: "hidden",
-    position: "relative",
   },
-  topGradient: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    height: 80,
-    zIndex: 0,
-  },
-  bottomGradient: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 80,
-    zIndex: 0,
-  },
-  dateRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.sm,
-    zIndex: 1,
-  },
-  dateText: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: Colors.textSecondary,
-    marginLeft: Spacing.xs,
+  title: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: Colors.textPrimary,
+    marginBottom: 8,
   },
   teamsContainer: {
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.lg,
-    zIndex: 1,
+    marginBottom: 4,
   },
   teamRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: Spacing.sm,
-    gap: Spacing.md,
+    justifyContent: "space-between",
+    marginBottom: 8,
+    gap: Spacing.xs,
   },
-  teamLogo: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: Colors.background,
-  },
-  teamInfo: {
+  teamLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     flex: 1,
   },
+  teamLogo: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.background,
+  },
+  teamLogoFallback: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  teamText: {
+    flex: 1,
+    minWidth: 0,
+  },
   teamName: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: Colors.textPrimary,
-    marginBottom: 2,
+    fontSize: 14,
+    fontWeight: "600",
+    color: Colors.textSecondary,
   },
   teamRecord: {
     fontSize: 11,
     fontWeight: "500",
-    color: Colors.textTertiary,
+    color: Colors.textMuted,
+    marginTop: 0,
   },
-  priceBadge: {
-    backgroundColor: Colors.surface,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    minWidth: 60,
+  pctPill: {
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    minWidth: 54,
     alignItems: "center",
-    shadowColor: "rgba(0, 0, 0, 0.3)",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 4,
-    elevation: 2,
   },
-  priceText: {
-    fontSize: 15,
+  pctText: {
+    fontSize: 13,
     fontWeight: "700",
-    color: Colors.textPrimary,
-    letterSpacing: 0.3,
+    color: Colors.textSecondary,
+  },
+  footer: {
+    marginTop: 2,
+  },
+  footerText: {
+    color: Colors.textTertiary,
+    fontSize: 11,
+    fontWeight: "500",
   },
   errorText: {
     fontSize: 14,

@@ -7,7 +7,8 @@ import {
   View,
   Pressable,
 } from "react-native";
-import { Colors, Spacing, Typography } from "../../constants/theme";
+import { Ionicons } from "@expo/vector-icons";
+import { Colors, Spacing, Typography, BorderRadius } from "../../constants/theme";
 
 export default function FilterCarousel({ options, selectedKey, onSelect }) {
   const scrollViewRef = useRef(null);
@@ -45,31 +46,87 @@ export default function FilterCarousel({ options, selectedKey, onSelect }) {
     >
       {options.map((option) => {
         const isActive = selectedKey === option.key;
+        
+        // Get icon name for sports
+        const getIconName = (key) => {
+          const iconMap = {
+            nba: "basketball-outline",
+            nfl: "football-outline",
+            nhl: "ice-hockey-outline",
+            ufc: "fitness-outline",
+            soccer: "football-outline",
+            cfb: "school-outline",
+            boxing: "fitness-outline",
+            cbb: "basketball-outline",
+            wbna: "basketball-outline",
+            all: "compass-outline",
+          };
+          return iconMap[key] || "ellipse-outline";
+        };
+
+        // Get color for icon background
+        const getIconColor = (key) => {
+          const colorMap = {
+            all: "#10B981", // Green for Explore
+            nba: "#8B5CF6", // Purple for NBA
+            nfl: "#F87171", // Pink/Red for NFL
+            nhl: "#3B82F6", // Blue for NHL
+            ufc: "#F59E0B", // Orange for UFC
+            soccer: "#10B981", // Green for Soccer
+            cfb: "#06B6D4", // Cyan for CFB
+            boxing: "#EF4444", // Red for Boxing
+            cbb: "#8B5CF6", // Purple for CBB
+            wbna: "#EC4899", // Pink for WNBA
+          };
+          return colorMap[key] || Colors.primary;
+        };
+
+        const iconColor = getIconColor(option.key);
+        const iconName = getIconName(option.key);
+
         return (
           <Pressable
             key={option.key}
             style={({ pressed }) => [
-              styles.button,
+              styles.buttonContainer,
               pressed && styles.buttonPressed,
             ]}
             onPressIn={handlePressIn}
             onPressOut={(e) => handlePressOut(option.key, e)}
           >
-            {option.icon ? (
-              <Image
-                source={option.icon}
-                style={[styles.icon, isActive && styles.iconActive]}
-                resizeMode="contain"
-              />
-            ) : (
-              <View style={styles.iconPlaceholder}>
-                <Text
-                  style={[styles.iconText, isActive && styles.iconTextActive]}
-                >
-                  {option.label.charAt(0)}
-                </Text>
+            <View
+              style={[
+                styles.button,
+                isActive && [
+                  styles.buttonActive,
+                  { borderColor: iconColor },
+                ],
+              ]}
+            >
+              {/* Colored square icon area */}
+              <View
+                style={[
+                  styles.iconContainer,
+                  { backgroundColor: iconColor },
+                  isActive && styles.iconContainerActive,
+                ]}
+              >
+                <Ionicons
+                  name={iconName}
+                  size={18}
+                  color="#000000"
+                />
               </View>
-            )}
+              {/* Text label */}
+              <Text
+                style={[
+                  styles.label,
+                  isActive && styles.labelActive,
+                ]}
+              >
+                {option.label}
+              </Text>
+            </View>
           </Pressable>
         );
       })}
@@ -79,60 +136,55 @@ export default function FilterCarousel({ options, selectedKey, onSelect }) {
 
 const styles = StyleSheet.create({
   carousel: {
-    marginBottom: Spacing.lg,
-    top: 10,
+    marginBottom: Spacing.md,
   },
   content: {
     paddingRight: Spacing.xl,
+    paddingLeft: Spacing.sm,
+  },
+  buttonContainer: {
+    marginRight: Spacing.sm,
   },
   button: {
-    width: 70,
-    height: 70,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginRight: Spacing.sm,
-    backgroundColor: Colors.surface,
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden", // Ensure icon doesn't extend beyond button bounds
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
+    minHeight: 44,
+    gap: Spacing.sm,
+  },
+  buttonActive: {
+    backgroundColor: "rgba(255, 255, 255, 0.12)",
+    borderWidth: 2,
   },
   buttonPressed: {
     opacity: 0.8,
   },
-  icon: {
-    width: 63,
-    height: 63,
-    opacity: 0.7,
-  },
-  iconActive: {
-    opacity: 1,
-  },
-  iconPlaceholder: {
+  iconContainer: {
     width: 32,
     height: 32,
-    marginBottom: Spacing.xs,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
   },
-  iconText: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: Colors.textSecondary,
-    opacity: 0.7,
-  },
-  iconTextActive: {
-    color: "#FFFFFF",
-    opacity: 1,
+  iconContainerActive: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
   },
   label: {
-    fontSize: 11,
+    ...Typography.caption,
+    color: "#FFFFFF",
     fontWeight: "600",
-    color: Colors.textSecondary,
-    marginTop: 2,
-    textAlign: "center",
+    fontSize: 14,
+    opacity: 0.7,
   },
   labelActive: {
-    color: "#FFFFFF",
+    opacity: 1,
+    fontWeight: "700",
   },
 });

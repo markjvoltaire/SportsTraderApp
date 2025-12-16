@@ -45,41 +45,48 @@ export const Typography = {
     fontWeight: "700",
     color: Colors.textPrimary,
     letterSpacing: 0.4,
+    fontFamily: "Poppins-Bold",
   },
   pageTitle: {
     fontSize: 40,
     fontWeight: "700",
     color: Colors.textPrimary,
     letterSpacing: 0.2,
+    fontFamily: "Poppins-Bold",
   },
   sectionTitle: {
     fontSize: 32,
     fontWeight: "600",
     color: Colors.textPrimary,
     letterSpacing: 0.15,
+    fontFamily: "Poppins-SemiBold",
   },
   cardTitle: {
     fontSize: 22,
     fontWeight: "600",
     color: Colors.textPrimary,
+    fontFamily: "Poppins-SemiBold",
   },
   bodyLarge: {
     fontSize: 18,
     fontWeight: "500",
     color: Colors.textSecondary,
     lineHeight: 26,
+    fontFamily: "Poppins-Regular",
   },
   body: {
     fontSize: 16,
     fontWeight: "400",
     color: Colors.textSecondary,
     lineHeight: 24,
+    fontFamily: "Poppins-Regular",
   },
   caption: {
     fontSize: 13,
     fontWeight: "400",
     color: Colors.textTertiary,
     lineHeight: 18,
+    fontFamily: "Poppins-Regular",
   },
   label: {
     fontSize: 12,
@@ -87,6 +94,7 @@ export const Typography = {
     color: Colors.textMuted,
     textTransform: "uppercase",
     letterSpacing: 1.6,
+    fontFamily: "Poppins-SemiBold",
   },
 };
 
@@ -195,6 +203,7 @@ export const CommonStyles = {
     fontSize: 16,
     fontWeight: "700",
     letterSpacing: 0.5,
+    fontFamily: "Poppins-Bold",
   },
 
   // Secondary Button
@@ -218,6 +227,7 @@ export const CommonStyles = {
     fontSize: 16,
     fontWeight: "600",
     letterSpacing: 0.3,
+    fontFamily: "Poppins-SemiBold",
   },
 
   // Card Container

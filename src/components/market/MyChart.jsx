@@ -38,6 +38,7 @@ import {
 } from "../../constants/theme";
 
 export default function MyChart({
+  market: marketProp,
   onTimestampChange,
   onPriceStatsChange,
   onPriceChange,
@@ -47,7 +48,8 @@ export default function MyChart({
   homeColor,
 }) {
   const route = useRoute();
-  const market = route.params?.game || route.params?.market;
+  // Prefer explicitly passed market; fall back to navigation params
+  const market = marketProp || route.params?.game || route.params?.market;
   const { width, height } = Dimensions.get("window");
 
   const chartPadding = {
@@ -989,8 +991,15 @@ export default function MyChart({
                     ]}
                     pointerEvents="none"
                   >
-                    <Text style={styles.tooltipPrice}>
-                      {formatSharePrice(tooltipData.awayPrice)}
+                    <Text
+                      style={[
+                        styles.tooltipPrice,
+                        { color: marketData.awayTeam.color },
+                      ]}
+                    >
+                      {`${Math.round(
+                        (Number(tooltipData.awayPrice) || 0) * 100
+                      )}%`}
                     </Text>
                     <Text
                       style={styles.tooltipLabel}
@@ -1011,8 +1020,15 @@ export default function MyChart({
                     ]}
                     pointerEvents="none"
                   >
-                    <Text style={styles.tooltipPrice}>
-                      {formatSharePrice(tooltipData.homePrice)}
+                    <Text
+                      style={[
+                        styles.tooltipPrice,
+                        { color: marketData.homeTeam.color },
+                      ]}
+                    >
+                      {`${Math.round(
+                        (Number(tooltipData.homePrice) || 0) * 100
+                      )}%`}
                     </Text>
                     <Text
                       style={styles.tooltipLabel}
@@ -1048,7 +1064,7 @@ const styles = StyleSheet.create({
   skeletonContainer: {
     position: "absolute",
     top: 0,
-    left: 0,
+    left: 10,
     right: 0,
     bottom: 0,
     alignItems: "center",
@@ -1074,7 +1090,7 @@ const styles = StyleSheet.create({
   },
   tooltip: {
     position: "absolute",
-    backgroundColor: Colors.surface,
+    backgroundColor: "transparent",
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.md,
     borderRadius: BorderRadius.md,
@@ -1084,18 +1100,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     top: padding,
     left: padding,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderLeftWidth: 3,
+    borderWidth: 0,
+    borderLeftWidth: 0,
     zIndex: 100,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowColor: "transparent",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
   dateTooltip: {
-    backgroundColor: Colors.surfaceAlt,
+    backgroundColor: "transparent",
     paddingVertical: Spacing.xs,
     paddingHorizontal: Spacing.sm,
     borderRadius: BorderRadius.sm,
@@ -1112,6 +1127,11 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginBottom: Spacing.xs / 2,
     color: Colors.textPrimary,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    paddingHorizontal: Spacing.xs,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.sm,
+    overflow: "hidden",
   },
   tooltipLabel: {
     ...Typography.label,
