@@ -190,7 +190,7 @@ export default function HomeScreen() {
   };
 
   const handleGamePress = (market) => {
-    navigation.navigate("Chart", { game: market });
+    navigation.navigate("MarketDetail", { game: market });
   };
 
   // Handle both single market object and array of markets
