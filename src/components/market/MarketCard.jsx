@@ -1,7 +1,6 @@
 import { StyleSheet, Text, View, TouchableOpacity, Image } from "react-native";
 import React from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { Colors, Spacing, Typography } from "../../constants/theme";
 import { formatCurrency, formatSharePrice } from "../../utils/formatters";
 
@@ -303,24 +302,6 @@ export default function MarketCard({ market, onPress }) {
       activeOpacity={0.7}
       onPress={() => onPress?.(market)}
     >
-      {/* Top gradient for away team */}
-      <LinearGradient
-        colors={[`${finalAwayColor}33`, `${finalAwayColor}00`]}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={styles.topGradient}
-        pointerEvents="none"
-      />
-
-      {/* Bottom gradient for home team */}
-      <LinearGradient
-        colors={[`${finalHomeColor}00`, `${finalHomeColor}33`]}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={styles.bottomGradient}
-        pointerEvents="none"
-      />
-
       {/* Date/Time Header */}
       <View style={styles.dateRow}>
         <Ionicons name="time-outline" size={14} color={Colors.textTertiary} />
@@ -396,22 +377,6 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     overflow: "hidden",
     position: "relative",
-  },
-  topGradient: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    height: 80,
-    zIndex: 0,
-  },
-  bottomGradient: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 80,
-    zIndex: 0,
   },
   dateRow: {
     flexDirection: "row",

@@ -51,72 +51,8 @@ function HomeStackScreen() {
       <HomeStack.Screen
         name="MarketDetail"
         component={MarketDetailScreen}
-        options={({ route }) => {
-          const market = route.params?.game || route.params?.market;
-          const getMarketTitle = (market) => {
-            if (!market) return "Markets";
-            if (market.title) return market.title;
-            if (market.question) return market.question;
-            if (market.awayTeam && market.homeTeam) {
-              const awayName =
-                market.awayTeam.abbreviation || market.awayTeam.name || "Away";
-              const homeName =
-                market.homeTeam.abbreviation || market.homeTeam.name || "Home";
-              return `${awayName} vs ${homeName}`;
-            }
-            return "Markets";
-          };
-          return {
-            headerShown: true,
-            headerTitle: getMarketTitle(market),
-            headerBackTitleVisible: false,
-            headerBackTitle: "",
-            headerTintColor: Colors.textPrimary,
-            headerStyle: { backgroundColor: Colors.background },
-            headerShadowVisible: false,
-            headerRight: () => (
-              <View style={{ flexDirection: "row", gap: Spacing.sm }}>
-                <TouchableOpacity
-                  style={{
-                    paddingHorizontal: Spacing.sm,
-                    paddingVertical: Spacing.xs,
-                  }}
-                  onPress={() => {
-                    // TODO: Implement share functionality
-                    console.log(
-                      "Share pressed for market:",
-                      getMarketTitle(market)
-                    );
-                  }}
-                >
-                  <Ionicons
-                    name="share-outline"
-                    size={24}
-                    color={Colors.textPrimary}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={{
-                    paddingHorizontal: Spacing.sm,
-                    paddingVertical: Spacing.xs,
-                  }}
-                  onPress={() => {
-                    // TODO: Implement options functionality
-                    console.log(
-                      "Options pressed for market:",
-                      getMarketTitle(market)
-                    );
-                  }}
-                >
-                  <Ionicons
-                    name="ellipsis-vertical"
-                    size={24}
-                    color={Colors.textPrimary}
-                  />
-                </TouchableOpacity>
-              </View>
-            ),
-          };
+        options={{
+          headerShown: false,
         }}
       />
     </HomeStack.Navigator>

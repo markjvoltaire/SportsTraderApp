@@ -981,6 +981,23 @@ export default function MyChart({
               {/* Tooltips */}
               {showTooltip && (
                 <>
+                  {/* Date Tooltip */}
+                  <Animated.View
+                    style={[
+                      styles.dateTooltip,
+                      animatedDateTooltipStyle,
+                      {
+                        top: padding,
+                        left: padding,
+                      },
+                    ]}
+                    pointerEvents="none"
+                  >
+                    <Text style={styles.dateText}>
+                      {formatDateTooltip(tooltipData.timestamp)}
+                    </Text>
+                  </Animated.View>
+
                   {/* Away Team Tooltip */}
                   <Animated.View
                     style={[
@@ -1110,6 +1127,7 @@ const styles = StyleSheet.create({
     elevation: 0,
   },
   dateTooltip: {
+    position: "absolute",
     backgroundColor: "transparent",
     paddingVertical: Spacing.xs,
     paddingHorizontal: Spacing.sm,
@@ -1137,7 +1155,7 @@ const styles = StyleSheet.create({
     ...Typography.label,
     fontSize: 10,
     opacity: 0.9,
-    color: Colors.textTertiary,
+    color: "white",
     textAlign: "center",
   },
   // Keep these for potential reuse or if referenced elsewhere

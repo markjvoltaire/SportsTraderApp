@@ -247,14 +247,16 @@ const styles = StyleSheet.create({
   teamName: {
     color: "#FFFFFF",
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "800",
+    fontFamily: "Poppins-Bold",
     letterSpacing: 0.3,
     marginBottom: Spacing.xs / 2,
   },
   teamPrice: {
     color: "#FFFFFF",
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "800",
+    fontFamily: "Poppins-Regular",
     opacity: 0.9,
   },
 });
