@@ -121,3 +121,9 @@ The app is already configured with:
 - All authentication flows use Supabase's secure infrastructure
 
 
+
+
+
+
+
+

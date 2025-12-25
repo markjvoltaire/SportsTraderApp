@@ -1,7 +1,21 @@
 import { StyleSheet, Text, View, TouchableOpacity, Image } from "react-native";
-import React from "react";
+import React, { useState, useEffect } from "react";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  cancelAnimation,
+  Easing,
+} from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors, Spacing, Typography } from "../../constants/theme";
+import {
+  Colors,
+  Spacing,
+  Typography,
+  Shadows,
+  BorderRadius,
+} from "../../constants/theme";
 import { formatCurrency, formatSharePrice } from "../../utils/formatters";
 
 /**
@@ -81,7 +95,90 @@ function formatGameTime(dateString) {
 }
 
 export default function MarketCard({ market, onPress }) {
-  console.log("market", market);
+  const [isLive, setIsLive] = useState(false);
+  const liveDotOpacity = useSharedValue(1);
+
+  // Check if market is live
+  useEffect(() => {
+    if (!market) {
+      setIsLive(false);
+      return;
+    }
+
+    const dateString =
+      market.gameTime?.timeString ||
+      market.gameTime ||
+      market.gameStartTime ||
+      market.date ||
+      market.eventDate ||
+      market.startTime ||
+      market.startDate;
+
+    if (!dateString) {
+      setIsLive(false);
+      return;
+    }
+
+    // Normalize date string
+    let normalizedDate = dateString;
+    if (
+      typeof dateString === "string" &&
+      dateString.includes(" ") &&
+      dateString.includes("+")
+    ) {
+      normalizedDate = dateString.replace(" ", "T");
+      if (normalizedDate.match(/\+00(:00)?$/)) {
+        normalizedDate = normalizedDate.replace(/\+00(:00)?$/, "Z");
+      }
+    }
+
+    const gameDate = new Date(normalizedDate);
+    if (Number.isNaN(gameDate.getTime())) {
+      setIsLive(false);
+      return;
+    }
+
+    const checkLive = () => {
+      const now = new Date();
+      setIsLive(now >= gameDate);
+    };
+
+    // Check immediately
+    checkLive();
+
+    // Update every second
+    const interval = setInterval(checkLive, 1000);
+
+    return () => clearInterval(interval);
+  }, [market]);
+
+  // Flash animation for live dot
+  useEffect(() => {
+    if (isLive) {
+      // Cancel any existing animation first
+      cancelAnimation(liveDotOpacity);
+      // Start the flashing animation
+      liveDotOpacity.value = withRepeat(
+        withTiming(0.3, {
+          duration: 800,
+          easing: Easing.inOut(Easing.ease),
+        }),
+        -1, // Repeat infinitely
+        true // Reverse the animation (ping-pong effect)
+      );
+    } else {
+      // Cancel animation and reset to full opacity
+      cancelAnimation(liveDotOpacity);
+      liveDotOpacity.value = 1;
+    }
+  }, [isLive]);
+
+  // Animated style for live dot
+  const liveDotAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      opacity: liveDotOpacity.value,
+    };
+  });
 
   if (!market) {
     return (
@@ -304,8 +401,16 @@ export default function MarketCard({ market, onPress }) {
     >
       {/* Date/Time Header */}
       <View style={styles.dateRow}>
-        <Ionicons name="time-outline" size={14} color={Colors.textTertiary} />
-        <Text style={styles.dateText}>{gameTimeString}</Text>
+        <View style={styles.dateRowLeft}>
+          <Ionicons name="time-outline" size={14} color={Colors.textTertiary} />
+          <Text style={styles.dateText}>{gameTimeString}</Text>
+        </View>
+        {isLive && (
+          <View style={styles.livePill}>
+            <Animated.View style={[styles.liveDot, liveDotAnimatedStyle]} />
+            <Text style={styles.liveText}>LIVE</Text>
+          </View>
+        )}
       </View>
 
       {/* Teams Section */}
@@ -364,15 +469,15 @@ export default function MarketCard({ market, onPress }) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: Colors.surface,
+    backgroundColor: "transparent",
     borderRadius: 16,
     marginBottom: Spacing.md,
     marginHorizontal: Spacing.md,
-    shadowColor: "rgba(0, 0, 0, 0.5)",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowColor: Shadows.cardShadow.shadowColor,
+    shadowOffset: Shadows.cardShadow.shadowOffset,
+    shadowOpacity: Shadows.cardShadow.shadowOpacity,
+    shadowRadius: Shadows.cardShadow.shadowRadius,
+    elevation: Shadows.cardShadow.elevation,
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: "hidden",
@@ -381,16 +486,39 @@ const styles = StyleSheet.create({
   dateRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
     paddingBottom: Spacing.sm,
     zIndex: 1,
+  },
+  dateRowLeft: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   dateText: {
     fontSize: 13,
     fontWeight: "500",
     color: Colors.textSecondary,
     marginLeft: Spacing.xs,
+  },
+  livePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    right: 10,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.danger,
+  },
+  liveText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Colors.danger,
+    letterSpacing: 0.8,
   },
   teamsContainer: {
     paddingHorizontal: Spacing.lg,
@@ -424,13 +552,13 @@ const styles = StyleSheet.create({
     color: Colors.textTertiary,
   },
   priceBadge: {
-    backgroundColor: Colors.surface,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
+    backgroundColor: "transparent",
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: Colors.border,
-    minWidth: 60,
+    minWidth: 90,
     alignItems: "center",
     shadowColor: "rgba(0, 0, 0, 0.3)",
     shadowOffset: { width: 0, height: 2 },
@@ -439,7 +567,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   priceText: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: "700",
     color: Colors.textPrimary,
     letterSpacing: 0.3,

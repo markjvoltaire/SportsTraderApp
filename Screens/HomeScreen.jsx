@@ -143,7 +143,7 @@ export default function HomeScreen() {
       let url;
       if (selectedFilter === "all") {
         // For "all", use NBA as default
-        url = `${API_BASE_URL}/api/polymarketSports/nba/events?limit=20&closed=false&endDateMax=${endDateMax}`;
+        url = `${API_BASE_URL}/api/polymarketSports/nba/events?limit=5&closed=false&endDateMax=${endDateMax}`;
       } else {
         // Use the sport-specific endpoint
         url = `${API_BASE_URL}/api/polymarketSports/${selectedFilter}/events?limit=20&closed=false&endDateMax=${endDateMax}`;
@@ -290,6 +290,7 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+    marginBottom: 20,
   },
 
   scrollContent: {

@@ -1,3 +1,8 @@
+// Import required polyfills first
+import 'fast-text-encoding';
+import 'react-native-get-random-values';
+import '@ethersproject/shims';
+
 import "react-native-gesture-handler";
 import "react-native-reanimated";
 import { registerRootComponent } from "expo";

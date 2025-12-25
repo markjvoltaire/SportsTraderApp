@@ -17,6 +17,7 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
+  withRepeat,
   Easing,
 } from "react-native-reanimated";
 import { BlurView } from "expo-blur";
@@ -99,6 +100,8 @@ export default function MarketsScreen() {
   const navigation = useNavigation();
   const market = route.params?.game || route.params?.market;
 
+  console.log("market", market);
+
   const { height } = Dimensions.get("window");
 
   // Get safe area insets for proper button positioning
@@ -159,6 +162,9 @@ export default function MarketsScreen() {
   const awayTeamOpacity = useSharedValue(0);
   const homeTeamOpacity = useSharedValue(0);
 
+  // Animation value for live dot flashing
+  const liveDotOpacity = useSharedValue(1);
+
   // Trigger slide-in animation on mount
   useEffect(() => {
     awayTeamTranslateX.value = withTiming(0, {
@@ -178,6 +184,22 @@ export default function MarketsScreen() {
       easing: Easing.out(Easing.ease),
     });
   }, []);
+
+  // Flash animation for live dot
+  useEffect(() => {
+    if (timeRemaining === "LIVE") {
+      liveDotOpacity.value = withRepeat(
+        withTiming(0.3, {
+          duration: 800,
+          easing: Easing.inOut(Easing.ease),
+        }),
+        -1, // Repeat infinitely
+        true // Reverse the animation (ping-pong effect)
+      );
+    } else {
+      liveDotOpacity.value = 1;
+    }
+  }, [timeRemaining]);
 
   // Handler for buy buttons
   const handleBuyAway = (data) => {
@@ -572,6 +594,13 @@ export default function MarketsScreen() {
     };
   });
 
+  // Animated style for live dot
+  const liveDotAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      opacity: liveDotOpacity.value,
+    };
+  });
+
   return (
     <>
       <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -590,7 +619,7 @@ export default function MarketsScreen() {
 
           {timeRemaining === "LIVE" ? (
             <View style={styles.livePill}>
-              <View style={styles.liveDot} />
+              <Animated.View style={[styles.liveDot, liveDotAnimatedStyle]} />
               <Text style={styles.liveText}>LIVE</Text>
             </View>
           ) : (
@@ -633,31 +662,8 @@ export default function MarketsScreen() {
               )}
             </Animated.View>
 
-            {/* Center: Percentage Bar, Volume */}
-            <View style={styles.scoreBlock}>
-              <View style={styles.percentageBar}>
-                <View
-                  style={[
-                    styles.percentageBarLeft,
-                    {
-                      width: `${gameHeaderData.pctAway}%`,
-                      backgroundColor: teamData.awayColor,
-                    },
-                  ]}
-                />
-                <View
-                  style={[
-                    styles.percentageBarRight,
-                    {
-                      width: `${gameHeaderData.pctHome}%`,
-                      backgroundColor: teamData.homeColor,
-                    },
-                  ]}
-                />
-              </View>
-
-              <Text style={styles.volumeText}>{formattedVolume}</Text>
-            </View>
+            {/* Center: Empty space */}
+            <View style={styles.scoreBlock}></View>
 
             {/* Right Team */}
             <Animated.View
@@ -749,24 +755,6 @@ export default function MarketsScreen() {
         ]}
         pointerEvents="box-none"
       >
-        {/* Left gradient for away team */}
-        <LinearGradient
-          colors={[`${teamData.awayColor}33`, `${teamData.awayColor}00`]}
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={styles.leftGradient}
-          pointerEvents="none"
-        />
-
-        {/* Right gradient for home team */}
-        <LinearGradient
-          colors={[`${teamData.homeColor}00`, `${teamData.homeColor}33`]}
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={styles.rightGradient}
-          pointerEvents="none"
-        />
-
         <View style={styles.buttonRowWrapper}>
           <ButtonRow
             market={market}
@@ -924,7 +912,7 @@ export default function MarketsScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: "#000000",
   },
   topBar: {
     flexDirection: "row",
@@ -989,6 +977,13 @@ const styles = StyleSheet.create({
   teamBlockRight: {
     width: "28%",
     alignItems: "flex-end",
+  },
+  teamLogo: {
+    width: 54,
+    height: 54,
+    borderRadius: 32,
+    backgroundColor: Colors.background,
+    marginBottom: Spacing.xs,
   },
   teamAbbreviation: {
     fontSize: 22,
@@ -1100,7 +1095,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    backgroundColor: Colors.background,
+    backgroundColor: "#000000",
     width: "100%",
     paddingHorizontal: Spacing.xl, // Match ScreenTemplate padding
     paddingTop: Spacing.md,
@@ -1263,7 +1258,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.md,
-    backgroundColor: "rgba(15,15,15,0.65)",
+    backgroundColor: "#000000",
   },
   chatLeft: {
     flexDirection: "row",

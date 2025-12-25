@@ -6,7 +6,7 @@
 // Color Palette - Dark Theme
 export const Colors = {
   // Primary surfaces
-  background: "#141414",
+  background: "black",
   surface: "#1F1F1F",
   surfaceAlt: "#2A2A2A",
 

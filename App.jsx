@@ -11,6 +11,9 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
+import { PrivyProvider } from "@privy-io/expo";
+import { PrivyElements } from "@privy-io/expo/ui";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AuthProvider, useAuth } from "./src/contexts/AuthContext";
 import WelcomeScreen from "./Screens/WelcomeScreen";
@@ -23,6 +26,7 @@ import ProfileScreen from "./Screens/ProfileScreen";
 import MarketDetailScreen from "./Screens/MarketDetailScreen";
 import { Colors, Spacing, Typography } from "./src/constants/theme";
 import ChartScreen from "./Screens/ChartScreen";
+import ErrorBoundary from "./src/components/ErrorBoundary";
 
 const Tab = createBottomTabNavigator();
 const HomeStack = createNativeStackNavigator();
@@ -156,6 +160,22 @@ export default function App() {
     "Poppins-Bold": require("./assets/fonts/Poppins-Bold.ttf"),
   });
 
+  // Get Privy App ID and Client ID from environment variables
+  const PRIVY_APP_ID = process.env.EXPO_PUBLIC_PRIVY_APP_ID;
+  const PRIVY_CLIENT_ID = process.env.EXPO_PUBLIC_PRIVY_CLIENT_ID;
+
+  if (!PRIVY_APP_ID) {
+    console.warn(
+      "⚠️ EXPO_PUBLIC_PRIVY_APP_ID not set. Privy features will not work."
+    );
+  }
+
+  if (!PRIVY_CLIENT_ID) {
+    console.warn(
+      "⚠️ EXPO_PUBLIC_PRIVY_CLIENT_ID not set. Privy features will not work properly."
+    );
+  }
+
   if (!fontsLoaded) {
     return (
       <View style={styles.loadingContainer}>
@@ -165,12 +185,33 @@ export default function App() {
   }
 
   return (
-    <AuthProvider>
-      <NavigationContainer>
-        <StatusBar style="light" />
-        <RootNavigator />
-      </NavigationContainer>
-    </AuthProvider>
+    <ErrorBoundary>
+      <PrivyProvider
+        appId={PRIVY_APP_ID || "placeholder-app-id"}
+        clientId={PRIVY_CLIENT_ID || "placeholder-client-id"}
+        config={{
+          embeddedWallets: {
+            ethereum: {
+              createOnLogin: "users-without-wallets",
+            },
+          },
+          appearance: {
+            theme: "dark",
+            accentColor: "#6366F1",
+          },
+        }}
+      >
+        <AuthProvider>
+          <SafeAreaProvider>
+            <NavigationContainer>
+              <StatusBar style="light" />
+              <RootNavigator />
+              <PrivyElements />
+            </NavigationContainer>
+          </SafeAreaProvider>
+        </AuthProvider>
+      </PrivyProvider>
+    </ErrorBoundary>
   );
 }
 
@@ -188,7 +229,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     height: 72,
     borderRadius: 0,
-    backgroundColor: Colors.background,
+    backgroundColor: "#000000",
     opacity: 1,
     borderTopWidth: 1,
     borderTopColor: Colors.border,

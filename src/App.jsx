@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback } from "react";
 import { StatusBar } from "expo-status-bar";
 import {
   StyleSheet,
@@ -10,8 +10,17 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
+import { PrivyProvider } from "@privy-io/expo";
+import { PrivyElements } from "@privy-io/expo/ui";
+import {
+  useFonts,
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+} from "@expo-google-fonts/inter";
 
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { usePrivyWalletSync } from "./hooks/usePrivyWalletSync";
 import WelcomeScreen from "./Screens/WelcomeScreen";
 import LoginScreen from "./Screens/LoginScreen";
 import ForgotPasswordScreen from "./Screens/ForgotPasswordScreen";
@@ -44,8 +53,10 @@ function HomeStackScreen() {
             if (market.title) return market.title;
             if (market.question) return market.question;
             if (market.awayTeam && market.homeTeam) {
-              const awayName = market.awayTeam.abbreviation || market.awayTeam.name || "Away";
-              const homeName = market.homeTeam.abbreviation || market.homeTeam.name || "Home";
+              const awayName =
+                market.awayTeam.abbreviation || market.awayTeam.name || "Away";
+              const homeName =
+                market.homeTeam.abbreviation || market.homeTeam.name || "Home";
               return `${awayName} vs ${homeName}`;
             }
             return "Markets";
@@ -78,10 +89,16 @@ function HomeStackScreen() {
             headerRight: () => (
               <View style={{ flexDirection: "row", gap: Spacing.sm }}>
                 <TouchableOpacity
-                  style={{ paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs }}
+                  style={{
+                    paddingHorizontal: Spacing.sm,
+                    paddingVertical: Spacing.xs,
+                  }}
                   onPress={() => {
                     // TODO: Implement share functionality
-                    console.log("Share pressed for market:", getMarketTitle(market));
+                    console.log(
+                      "Share pressed for market:",
+                      getMarketTitle(market)
+                    );
                   }}
                 >
                   <Ionicons
@@ -91,10 +108,16 @@ function HomeStackScreen() {
                   />
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={{ paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs }}
+                  style={{
+                    paddingHorizontal: Spacing.sm,
+                    paddingVertical: Spacing.xs,
+                  }}
                   onPress={() => {
                     // TODO: Implement options functionality
-                    console.log("Options pressed for market:", getMarketTitle(market));
+                    console.log(
+                      "Options pressed for market:",
+                      getMarketTitle(market)
+                    );
                   }}
                 >
                   <Ionicons
@@ -131,6 +154,8 @@ function AuthNavigator() {
 
 function AppNavigator() {
   const { session } = useAuth();
+  // Sync Privy wallet with backend when user is logged in
+  usePrivyWalletSync();
 
   return (
     <Tab.Navigator
@@ -218,13 +243,56 @@ function RootNavigator() {
 }
 
 export default function App() {
+  // Load Inter fonts for Privy UI components
+  const [fontsLoaded] = useFonts({
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+  });
+
+  // Get Privy App ID from environment variable
+  const PRIVY_APP_ID = process.env.EXPO_PUBLIC_PRIVY_APP_ID;
+
+  if (!PRIVY_APP_ID) {
+    console.warn(
+      "⚠️ EXPO_PUBLIC_PRIVY_APP_ID not set. Privy features will not work."
+    );
+  }
+
+  // Show loading screen while fonts are loading
+  if (!fontsLoaded) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#6366F1" />
+      </View>
+    );
+  }
+
   return (
-    <AuthProvider>
-      <NavigationContainer>
-        <StatusBar style="dark" />
-        <RootNavigator />
-      </NavigationContainer>
-    </AuthProvider>
+    <PrivyProvider
+      appId={PRIVY_APP_ID || ""}
+      clientId={PRIVY_APP_ID || ""}
+      config={{
+        embeddedWallets: {
+          ethereum: {
+            createOnLogin: "users-without-wallets",
+          },
+        },
+        appearance: {
+          theme: "dark",
+          accentColor: "#6366F1",
+        },
+      }}
+    >
+      <AuthProvider>
+        <NavigationContainer>
+          <StatusBar style="dark" />
+          <RootNavigator />
+          {/* PrivyElements must be mounted once for UI components to work */}
+          <PrivyElements />
+        </NavigationContainer>
+      </AuthProvider>
+    </PrivyProvider>
   );
 }
 
@@ -242,7 +310,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     height: 72,
     borderRadius: 0,
-    backgroundColor: Colors.background,
+    backgroundColor: "#000000",
     opacity: 1,
     borderTopWidth: 1,
     borderTopColor: Colors.border,

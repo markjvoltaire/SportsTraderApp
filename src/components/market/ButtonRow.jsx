@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "800",
-    fontFamily: "Poppins-Regular",
+    fontFamily: "Poppins-Bold",
     opacity: 0.9,
   },
 });

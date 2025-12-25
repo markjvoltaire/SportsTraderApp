@@ -1,58 +1,43 @@
-import { createClient } from "@supabase/supabase-js";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { createClient } from '@supabase/supabase-js';
 
-// Supabase project URL and anon key
-// You can find the anon key in your Supabase project settings > API
-// Support both EXPO_PUBLIC_ prefixed and non-prefixed env vars
-const SUPABASE_URL =
-  process.env.EXPO_PUBLIC_SUPABASE_URL ||
-  process.env.SUPABASE_URL ||
-  "https://tuoumlfvwmittqlnzpvg.supabase.co";
-const SUPABASE_ANON_KEY =
-  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
-  process.env.SUPABASE_ANON_KEY ||
-  "YOUR_SUPABASE_ANON_KEY";
+// Get Supabase credentials from environment variables
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
-// Debug: Log configuration (only first few chars of key for security)
-console.log("🔧 Supabase Config:", {
-  url: SUPABASE_URL,
-  hasAnonKey:
-    !!SUPABASE_ANON_KEY && SUPABASE_ANON_KEY !== "YOUR_SUPABASE_ANON_KEY",
-  keyPreview: SUPABASE_ANON_KEY?.substring(0, 20) + "...",
-  envUrlExpo: process.env.EXPO_PUBLIC_SUPABASE_URL ? "✅ Set" : "❌ Not set",
-  envUrl: process.env.SUPABASE_URL ? "✅ Set" : "❌ Not set",
-  envKeyExpo: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
-    ? "✅ Set"
-    : "❌ Not set",
-  envKey: process.env.SUPABASE_ANON_KEY ? "✅ Set" : "❌ Not set",
-});
+// Create Supabase client only if URL is provided
+// If Supabase is not configured, create a mock client that fails gracefully
+let supabase;
 
-// Validate configuration
-if (!SUPABASE_URL || SUPABASE_URL.includes("YOUR_SUPABASE")) {
-  console.warn("⚠️ Supabase URL is not configured properly");
+if (supabaseUrl && supabaseAnonKey) {
+  try {
+    supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    });
+  } catch (error) {
+    console.warn('Failed to create Supabase client:', error);
+    // Create a mock client that won't crash but will return errors
+    supabase = {
+      auth: {
+        getSession: async () => ({ data: { session: null }, error: new Error('Supabase not configured') }),
+        signIn: async () => ({ data: null, error: new Error('Supabase not configured') }),
+        signOut: async () => ({ error: new Error('Supabase not configured') }),
+      },
+    };
+  }
+} else {
+  // Create a mock client when Supabase is not configured
+  console.warn('Supabase credentials not found. Using mock client.');
+  supabase = {
+    auth: {
+      getSession: async () => ({ data: { session: null }, error: null }),
+      signIn: async () => ({ data: null, error: new Error('Supabase not configured') }),
+      signOut: async () => ({ error: null }),
+    },
+  };
 }
 
-const isAnonKeyConfigured =
-  SUPABASE_ANON_KEY && SUPABASE_ANON_KEY !== "YOUR_SUPABASE_ANON_KEY";
+export { supabase };
 
-if (!isAnonKeyConfigured) {
-  console.error(
-    "❌ Supabase anon key is not configured!\n" +
-      "Please do one of the following:\n" +
-      "1. Create a .env file with: EXPO_PUBLIC_SUPABASE_ANON_KEY=your_key_here\n" +
-      "2. Or update src/config/supabase.js directly\n" +
-      "Get your key from: Supabase Dashboard > Project Settings > API > anon public key"
-  );
-}
-
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: {
-    storage: AsyncStorage,
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: false,
-  },
-});
-
-// Export a helper to check if configured
-export const isSupabaseConfigured = () => isAnonKeyConfigured;

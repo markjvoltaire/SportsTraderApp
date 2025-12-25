@@ -892,15 +892,16 @@ export default function MyChart({
                 domainPadding={{ x: 0, y: 2 }}
                 domain={{ y: yDomain }}
                 scale={{ x: "linear", y: "linear" }}
+                style={{
+                  background: { fill: "#000000" },
+                }}
               >
                 <VictoryAxis
                   style={{
                     axis: { stroke: "transparent" },
                     tickLabels: { fill: "transparent" },
                     grid: {
-                      stroke: Colors.border,
-                      strokeWidth: 1,
-                      strokeDasharray: "4,4",
+                      stroke: "transparent",
                     },
                     ticks: { stroke: "transparent" },
                   }}
@@ -911,9 +912,7 @@ export default function MyChart({
                     axis: { stroke: "transparent" },
                     tickLabels: { fill: "transparent" },
                     grid: {
-                      stroke: Colors.border,
-                      strokeWidth: 1,
-                      strokeDasharray: "4,4",
+                      stroke: "transparent",
                     },
                     ticks: { stroke: "transparent" },
                   }}
@@ -1076,7 +1075,7 @@ const styles = StyleSheet.create({
   chartContainer: {
     width: "100%",
     position: "relative",
-    backgroundColor: Colors.background,
+    backgroundColor: "#000000",
   },
   skeletonContainer: {
     position: "absolute",
@@ -1169,6 +1168,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: Colors.background,
+    backgroundColor: "#000000",
   },
 });
