@@ -10,6 +10,7 @@ import { usePrivy, useEmbeddedEthereumWallet } from "@privy-io/expo";
 import { setupPrivyUser } from "../services/walletService";
 import { getPolicyIds } from "../config/privy";
 import API_BASE_URL from "../config/api";
+import { useSupabase } from "./SupabaseContext";
 
 const AuthContext = createContext({});
 
@@ -26,12 +27,20 @@ export const AuthProvider = ({ children }) => {
   const privy = usePrivy();
   const { user: privyUser, isReady, logout } = privy;
 
+  // Supabase (DB) context
+  const { supabase, isInitialized: supabaseInitialized } = useSupabase();
+
   // Get wallet context
   const walletContext = useEmbeddedEthereumWallet();
   const wallets = walletContext?.wallets ?? [];
   const createWallet = walletContext?.create ?? null; // Fix: should be 'create', not 'createWallet'
   const embeddedWallet =
     Array.isArray(wallets) && wallets.length > 0 ? wallets[0] : null;
+
+  // Supabase user row (DB user profile)
+  const [supabaseUser, setSupabaseUser] = useState(null);
+  const [supabaseUserStatus, setSupabaseUserStatus] = useState("idle"); // idle | loading | success | not_found | error
+  const [supabaseUserError, setSupabaseUserError] = useState(null);
 
   // Backend setup state (user+wallet attach, Polymarket link, etc.)
   const [backendSetup, setBackendSetup] = useState({
@@ -51,24 +60,86 @@ export const AuthProvider = ({ children }) => {
     privyUserRef.current = privyUser;
   }, [privyUser]);
 
-  // Log Privy user for debugging
-  useEffect(() => {
-    console.log("🔐 Privy User:", JSON.stringify(privyUser, null, 2));
-  }, [privyUser]);
+  const refreshSupabaseUser = async () => {
+    const privyUserId = privyUserRef.current?.id;
+    if (!privyUserId) {
+      setSupabaseUser(null);
+      setSupabaseUserStatus("idle");
+      setSupabaseUserError(null);
+      return;
+    }
 
-  // Log wallet info for debugging
+    if (
+      !supabaseInitialized ||
+      !supabase ||
+      typeof supabase.from !== "function"
+    ) {
+      // Not configured / not ready
+      setSupabaseUser(null);
+      setSupabaseUserStatus("idle");
+      setSupabaseUserError(null);
+      return;
+    }
+
+    setSupabaseUserStatus("loading");
+    setSupabaseUserError(null);
+
+    try {
+      // IMPORTANT: Do NOT fetch `polymarket_credentials` into the client context
+      const { data, error } = await supabase
+        .from("users")
+        .select(
+          "id, privy_wallet_id, wallet_address, polymarket_linked_at, created_at, updated_at"
+        )
+        .eq("id", privyUserId)
+        .single();
+
+      if (error) {
+        // "not configured" is not an app error
+        if (error?.message?.includes("not configured")) {
+          setSupabaseUser(null);
+          setSupabaseUserStatus("idle");
+          setSupabaseUserError(null);
+          return;
+        }
+
+        // "No rows" => user not present yet
+        if (error.code === "PGRST116" || error?.message?.includes("No rows")) {
+          setSupabaseUser(null);
+          setSupabaseUserStatus("not_found");
+          setSupabaseUserError(null);
+          return;
+        }
+
+        setSupabaseUser(null);
+        setSupabaseUserStatus("error");
+        setSupabaseUserError(error?.message || "Failed to fetch user");
+        return;
+      }
+
+      setSupabaseUser(data ?? null);
+      setSupabaseUserStatus(data ? "success" : "not_found");
+      setSupabaseUserError(null);
+    } catch (e) {
+      const message =
+        e?.message || (typeof e === "string" ? e : "Failed to fetch user");
+      if (message.includes("not configured")) {
+        setSupabaseUser(null);
+        setSupabaseUserStatus("idle");
+        setSupabaseUserError(null);
+        return;
+      }
+      setSupabaseUser(null);
+      setSupabaseUserStatus("error");
+      setSupabaseUserError(message);
+    }
+  };
+
+  // Fetch the Supabase user row whenever the Privy user changes
   useEffect(() => {
-    console.log("💼 Privy Wallets:", {
-      walletCount: wallets?.length || 0,
-      wallets: wallets?.map((w) => ({
-        id: w.id,
-        address: w.address,
-      })),
-      createWalletAvailable: !!createWallet,
-      backendSetupStatus: backendSetup.status,
-      backendSetupData: backendSetup.data ? "✅ Present" : "❌ Null",
-    });
-  }, [wallets, createWallet, backendSetup.status]);
+    refreshSupabaseUser();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [privyUser?.id, supabaseInitialized]);
 
   const retryBackendSetup = () => {
     // allow the next effect run to attempt again
@@ -86,18 +157,7 @@ export const AuthProvider = ({ children }) => {
   // Backend should be idempotent and return wallet info if already provisioned.
   useEffect(() => {
     const run = async () => {
-      console.log(
-        "🔄 AuthContext useEffect triggered - checking if ready to setup wallet"
-      );
-      console.log(
-        "  isReady:",
-        isReady,
-        "privyUser:",
-        privyUser ? privyUser.id : "null"
-      );
-
       if (!isReady || !privyUser) {
-        console.log("❌ Not ready - skipping backend setup");
         return;
       }
 
@@ -105,17 +165,11 @@ export const AuthProvider = ({ children }) => {
         backendSetup.status === "pending" ||
         backendSetup.status === "success"
       ) {
-        console.log(
-          "⏳ Backend setup already",
-          backendSetup.status,
-          "- skipping"
-        );
         return;
       }
 
       const privyUserId = privyUser.id;
       const setupKey = `${privyUserId}`;
-      console.log("🚀 Starting backend setup for user:", privyUserId);
 
       // If we already tried for this exact key and we're still in error, don't spam.
       if (
@@ -143,68 +197,24 @@ export const AuthProvider = ({ children }) => {
           privyUserJwt = await privy.getAccessToken?.();
 
           if (!privyUserJwt) {
-            // If getAccessToken doesn't exist, check what methods are available for debugging
-            console.log(
-              "🔍 getAccessToken returned null/undefined. Available token/auth methods:",
-              Object.keys(privy).filter(
-                (k) =>
-                  k.includes("token") ||
-                  k.includes("Token") ||
-                  k.includes("auth") ||
-                  k.includes("Auth")
-              )
-            );
-
             // Try getAuthToken as fallback (but NOT getIdToken)
             if (typeof privy.getAuthToken === "function") {
               privyUserJwt = await privy.getAuthToken?.();
             }
           }
 
-          if (privyUserJwt) {
-            const jwtPreview =
-              privyUserJwt.length > 12
-                ? `${privyUserJwt.slice(0, 6)}...${privyUserJwt.slice(-6)}`
-                : "***";
-            console.log("✅ Privy access token retrieved:", {
-              length: privyUserJwt.length,
-              preview: jwtPreview,
-              source:
-                privyUserJwt === (await privy.getAccessToken?.())
-                  ? "getAccessToken"
-                  : "getAuthToken",
-            });
-          } else {
+          if (!privyUserJwt) {
             throw new Error(
               "Could not retrieve Privy access token. getAccessToken() returned null/undefined. " +
                 "Backend wallet creation will fail. Do NOT use getIdToken() as it won't work."
             );
           }
         } catch (jwtError) {
-          console.error(
-            "❌ Error retrieving Privy access token:",
-            jwtError?.message || jwtError
-          );
           throw jwtError; // Re-throw so setup fails if we can't get access token
         }
 
         // Step 2: Get policy IDs for server-side wallet authorization
         const policyIds = getPolicyIds();
-
-        if (policyIds.length === 0) {
-          console.warn(
-            "⚠️ No policy IDs available - backend server-side operations may fail with 401 error"
-          );
-        } else {
-          console.log("✅ Policy IDs loaded:", policyIds);
-        }
-
-        console.log("📡 Calling backend to create wallet:", {
-          policyIds: policyIds.length > 0 ? policyIds : "⚠️ None",
-          hasJwt: !!privyUserJwt,
-          sponsorGas: true,
-          linkPolymarket: true,
-        });
 
         // ============================================================
         // 🎯 STEP 3: BACKEND WALLET CREATION CALL - ACTUAL HTTP REQUEST
@@ -215,8 +225,6 @@ export const AuthProvider = ({ children }) => {
         const userIdEnc = encodeURIComponent(privyUserId);
         const requestUrl = `${API_BASE_URL}/api/users/${userIdEnc}/setup`;
 
-        console.log("privyUserJwt", privyUserJwt);
-
         const requestBody = {
           policyIds: policyIds,
           sponsorGas: true,
@@ -224,21 +232,12 @@ export const AuthProvider = ({ children }) => {
           privyUserJwt: privyUserJwt, // Backend uses this JWT to create wallet
         };
 
-        console.log("🌐 Making HTTP request to:", requestUrl);
-        console.log("📦 Request body:", JSON.stringify(requestBody, null, 2));
-
         const response = await fetch(requestUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify(requestBody),
-        });
-
-        console.log("📥 Response received:", {
-          status: response.status,
-          statusText: response.statusText,
-          ok: response.ok,
         });
 
         if (!response.ok) {
@@ -257,26 +256,7 @@ export const AuthProvider = ({ children }) => {
         }
 
         const data = await response.json();
-        console.log("📄 Response JSON:", data);
 
-        // Response should contain:
-        // {
-        //   "success": true,
-        //   "privyWalletId": "eyqxjeb9gaqk23oavdfnxyqk",
-        //   "walletAddress": "0x9Af167C1E68eA357aFeF103C1B8f391d98D57777",
-        //   "chainType": "ethereum",
-        //   "alreadyLinked": false,
-        //   "polymarketLinked": false
-        // }
-
-        // No error if we got here - response was successful
-        console.log("✅ Backend wallet creation response:", {
-          success: data?.success,
-          hasWalletId: !!data?.privyWalletId,
-          hasWalletAddress: !!data?.walletAddress,
-        });
-
-        console.log("✅ Backend setup success:", data);
         setBackendSetup({
           status: "success",
           data: data ?? null,
@@ -288,15 +268,6 @@ export const AuthProvider = ({ children }) => {
         const message =
           e?.message ||
           (typeof e === "string" ? e : "Backend setup failed (unknown error)");
-        console.warn(
-          "⚠️ Backend setup failed (expected until backend is ready):",
-          message
-        );
-        console.log("❌ Backend setup error details:", {
-          error: e,
-          message: message,
-          privyUserId: privyUser?.id,
-        });
         setBackendSetup({
           status: "error",
           data: null,
@@ -335,7 +306,6 @@ export const AuthProvider = ({ children }) => {
       await logout();
       return { error: null };
     } catch (error) {
-      console.error("Sign out error:", error);
       return { error };
     }
   };
@@ -347,6 +317,10 @@ export const AuthProvider = ({ children }) => {
     signOut,
     backendSetup,
     retryBackendSetup,
+    supabaseUser,
+    supabaseUserStatus,
+    supabaseUserError,
+    refreshSupabaseUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

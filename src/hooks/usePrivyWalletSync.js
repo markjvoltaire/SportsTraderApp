@@ -39,7 +39,7 @@ export function usePrivyWalletSync() {
             setSynced(true);
           }
         } catch (error) {
-          console.error("Wallet sync error:", error);
+          // Error syncing wallet
         } finally {
           setSyncing(false);
         }
@@ -61,7 +61,7 @@ export function usePrivyWalletSync() {
             }
           }
         } catch (error) {
-          console.error("Wallet creation error:", error);
+          // Error creating wallet
         } finally {
           setSyncing(false);
         }

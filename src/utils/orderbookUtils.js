@@ -17,7 +17,6 @@ export async function fetchOrderbook(tokenId) {
     }
     return await response.json();
   } catch (error) {
-    console.error("Error fetching orderbook:", error);
     throw error;
   }
 }

@@ -20,6 +20,7 @@ import {
 } from "@expo-google-fonts/inter";
 
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { SupabaseProvider } from "./contexts/SupabaseContext";
 import { usePrivyWalletSync } from "./hooks/usePrivyWalletSync";
 import WelcomeScreen from "./Screens/WelcomeScreen";
 import LoginScreen from "./Screens/LoginScreen";
@@ -284,14 +285,16 @@ export default function App() {
         },
       }}
     >
-      <AuthProvider>
-        <NavigationContainer>
-          <StatusBar style="dark" />
-          <RootNavigator />
-          {/* PrivyElements must be mounted once for UI components to work */}
-          <PrivyElements />
-        </NavigationContainer>
-      </AuthProvider>
+      <SupabaseProvider>
+        <AuthProvider>
+          <NavigationContainer>
+            <StatusBar style="dark" />
+            <RootNavigator />
+            {/* PrivyElements must be mounted once for UI components to work */}
+            <PrivyElements />
+          </NavigationContainer>
+        </AuthProvider>
+      </SupabaseProvider>
     </PrivyProvider>
   );
 }

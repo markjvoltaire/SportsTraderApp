@@ -1,17 +1,6 @@
 import API_BASE_URL from "../config/api";
 
 async function fetchJson(path, { method = "GET", body, authToken } = {}) {
-  console.log("📡 fetchJson called:", {
-    url: `${API_BASE_URL}${path}`,
-    method,
-    hasBody: !!body,
-    hasAuthToken: !!authToken
-  });
-
-  if (body) {
-    console.log("📦 Request body:", JSON.stringify(body, null, 2));
-  }
-
   const headers = {};
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";
@@ -20,42 +9,29 @@ async function fetchJson(path, { method = "GET", body, authToken } = {}) {
     headers.Authorization = `Bearer ${authToken}`;
   }
 
-  console.log("⏳ Making HTTP request...");
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
-  console.log("📥 Response received:", {
-    status: response.status,
-    statusText: response.statusText,
-    ok: response.ok
-  });
-
   if (!response.ok) {
-    console.log("❌ HTTP request failed:", response.status, response.statusText);
     let message = `Request failed (${response.status})`;
     try {
       const errorJson = await response.json();
-      console.log("❌ Error response JSON:", errorJson);
       message =
         errorJson?.message || errorJson?.details || errorJson?.error || message;
     } catch (_e) {
-      console.log("❌ Could not parse error response as JSON");
       // ignore json parsing errors
     }
-    console.log("💥 Throwing error:", message);
     throw new Error(message);
   }
 
   // Some endpoints may return no body
   try {
     const jsonData = await response.json();
-    console.log("📄 Response JSON:", jsonData);
     return jsonData;
   } catch (_e) {
-    console.log("⚠️ Response was not JSON");
     return null;
   }
 }
@@ -79,7 +55,6 @@ export async function createPrivyWallet(
     });
     return { data, error: null };
   } catch (error) {
-    console.error("Error creating Privy wallet:", error);
     return { data: null, error };
   }
 }
@@ -110,7 +85,6 @@ export async function linkUserToPolymarket(
 
     return { data, error: null };
   } catch (error) {
-    console.error("Error linking to Polymarket:", error);
     return { data: null, error };
   }
 }
@@ -130,7 +104,6 @@ export async function checkPolymarketStatus(privyUserId, authToken) {
     );
     return { data, error: null };
   } catch (error) {
-    console.error("Error checking Polymarket status:", error);
     return { data: null, error };
   }
 }
@@ -152,31 +125,11 @@ export async function setupPrivyUser(
     privyUserJwt = null,
   } = {},
   authToken
-) {
-  console.log("🔧 setupPrivyUser called with:", {
-    privyUserId: privyUserId?.substring(0, 8) + "...",
-    policyIds,
-    sponsorGas,
-    linkPolymarket,
-    privyWalletId: privyWalletId ? privyWalletId.substring(0, 8) + "..." : "null",
-    walletAddress: walletAddress || "null",
-    hasJwt: !!privyUserJwt,
-    hasAuthToken: !!authToken
-  });
+  ) {
+    try {
+      if (!privyUserId) throw new Error("privyUserId is required");
 
-  try {
-    if (!privyUserId) throw new Error("privyUserId is required");
-
-    const userIdEnc = encodeURIComponent(privyUserId);
-    
-    // ============================================================
-    // 🌐 BACKEND API ENDPOINT - WALLET CREATION REQUEST
-    // ============================================================
-    // This is the actual HTTP request to the backend
-    // Endpoint: POST /api/users/:userId/setup
-    // The backend endpoint at this URL will create the wallet
-    // ============================================================
-    console.log("🌐 Making API call to:", `/api/users/${userIdEnc}/setup`);
+      const userIdEnc = encodeURIComponent(privyUserId);
 
     const body = {
       policyIds,
@@ -218,10 +171,8 @@ export async function setupPrivyUser(
       authToken,
     });
 
-    console.log("✅ setupPrivyUser success:", { data: data ? "present" : "null" });
     return { data, error: null };
   } catch (error) {
-    console.error("❌ Error in Privy user setup:", error);
     return { data: null, error };
   }
 }
@@ -254,7 +205,32 @@ export async function getWalletBalance(privyUserId, authToken) {
     });
     return { data, error: null };
   } catch (error) {
-    console.error("Error getting wallet balance:", error);
+    return { data: null, error };
+  }
+}
+
+/**
+ * Process fiat payment and convert to credits/balance
+ * This endpoint handles fiat-to-crypto conversion behind the scenes
+ */
+export async function processFiatPayment(
+  privyUserId,
+  { amount, paymentMethod },
+  authToken
+) {
+  try {
+    const userIdEnc = encodeURIComponent(privyUserId);
+    const data = await fetchJson(`/api/onramp`, {
+      method: "POST",
+      body: {
+        amount,
+        paymentMethod,
+        userId: privyUserId,
+      },
+      authToken,
+    });
+    return { data, error: null };
+  } catch (error) {
     return { data: null, error };
   }
 }

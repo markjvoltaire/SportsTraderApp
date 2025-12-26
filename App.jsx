@@ -16,6 +16,7 @@ import { PrivyElements } from "@privy-io/expo/ui";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AuthProvider, useAuth } from "./src/contexts/AuthContext";
+import { SupabaseProvider, useSupabase } from "./src/contexts/SupabaseContext";
 import WelcomeScreen from "./Screens/WelcomeScreen";
 import LoginScreen from "./Screens/LoginScreen";
 import ForgotPasswordScreen from "./Screens/ForgotPasswordScreen";
@@ -23,6 +24,7 @@ import HomeScreen from "./Screens/HomeScreen";
 import MarketsScreen from "./Screens/MarketsScreen";
 import PortfolioScreen from "./Screens/PortfolioScreen";
 import ProfileScreen from "./Screens/ProfileScreen";
+import AddFundsScreen from "./Screens/AddFundsScreen";
 import MarketDetailScreen from "./Screens/MarketDetailScreen";
 import { Colors, Spacing, Typography } from "./src/constants/theme";
 import ChartScreen from "./Screens/ChartScreen";
@@ -31,15 +33,16 @@ import ErrorBoundary from "./src/components/ErrorBoundary";
 const Tab = createBottomTabNavigator();
 const HomeStack = createNativeStackNavigator();
 const MarketsStack = createNativeStackNavigator();
+const ProfileStack = createNativeStackNavigator();
 const AuthStack = createNativeStackNavigator();
 
 function HomeStackScreen() {
   return (
     <HomeStack.Navigator>
       <HomeStack.Screen
-        name="Home"
+        name="HomeMain"
         component={HomeScreen}
-        options={{ headerShown: false, headerBackTitle: "Homefsd" }}
+        options={{ headerShown: false, headerBackTitle: "Home" }}
       />
 
       <HomeStack.Screen
@@ -60,6 +63,23 @@ function HomeStackScreen() {
         }}
       />
     </HomeStack.Navigator>
+  );
+}
+
+function ProfileStackScreen() {
+  return (
+    <ProfileStack.Navigator>
+      <ProfileStack.Screen
+        name="ProfileMain"
+        component={ProfileScreen}
+        options={{ headerShown: false }}
+      />
+      <ProfileStack.Screen
+        name="AddFunds"
+        component={AddFundsScreen}
+        options={{ headerShown: false }}
+      />
+    </ProfileStack.Navigator>
   );
 }
 
@@ -122,7 +142,7 @@ function AppNavigator() {
       {session && (
         <Tab.Screen
           name="Profile"
-          component={ProfileScreen}
+          component={ProfileStackScreen}
           options={{
             tabBarIcon: ({ color, size, focused }) => (
               <Ionicons
@@ -136,6 +156,21 @@ function AppNavigator() {
       )}
     </Tab.Navigator>
   );
+}
+
+// Component to wait for Supabase initialization before rendering app
+function SupabaseInitializedWrapper({ children }) {
+  const { isInitialized } = useSupabase();
+
+  if (!isInitialized) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
+
+  return children;
 }
 
 function RootNavigator() {
@@ -164,18 +199,6 @@ export default function App() {
   const PRIVY_APP_ID = process.env.EXPO_PUBLIC_PRIVY_APP_ID;
   const PRIVY_CLIENT_ID = process.env.EXPO_PUBLIC_PRIVY_CLIENT_ID;
 
-  if (!PRIVY_APP_ID) {
-    console.warn(
-      "⚠️ EXPO_PUBLIC_PRIVY_APP_ID not set. Privy features will not work."
-    );
-  }
-
-  if (!PRIVY_CLIENT_ID) {
-    console.warn(
-      "⚠️ EXPO_PUBLIC_PRIVY_CLIENT_ID not set. Privy features will not work properly."
-    );
-  }
-
   if (!fontsLoaded) {
     return (
       <View style={styles.loadingContainer}>
@@ -201,15 +224,19 @@ export default function App() {
           },
         }}
       >
-        <AuthProvider>
-          <SafeAreaProvider>
-            <NavigationContainer>
-              <StatusBar style="light" />
-              <RootNavigator />
-              <PrivyElements />
-            </NavigationContainer>
-          </SafeAreaProvider>
-        </AuthProvider>
+        <SupabaseProvider>
+          <SupabaseInitializedWrapper>
+            <AuthProvider>
+              <SafeAreaProvider>
+                <NavigationContainer>
+                  <StatusBar style="light" />
+                  <RootNavigator />
+                  <PrivyElements />
+                </NavigationContainer>
+              </SafeAreaProvider>
+            </AuthProvider>
+          </SupabaseInitializedWrapper>
+        </SupabaseProvider>
       </PrivyProvider>
     </ErrorBoundary>
   );

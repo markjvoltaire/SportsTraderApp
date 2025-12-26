@@ -14,6 +14,7 @@ export const Colors = {
   primary: "#8B5CF6", // Vibrant purple/blue
   primaryDark: "#6D28D9",
   primaryLight: "#A78BFA",
+  primaryMuted: "rgba(139, 92, 246, 0.2)",
   primaryGradient: ["#8B5CF6", "#A78BFA"],
   accentGradient: ["#7C3AED", "#C4B5FD"],
   accentTeal: "#06B6D4", // Teal for second team

@@ -13,7 +13,6 @@ export function useSafePrivy() {
     privyContext = usePrivy();
   } catch (err) {
     error = err;
-    console.warn("Privy context error:", err?.message || "PrivyProvider not properly initialized");
   }
 
   try {
@@ -23,7 +22,6 @@ export function useSafePrivy() {
     if (!error) {
       error = err;
     }
-    console.warn("Embedded wallet context error:", err?.message || "PrivyProvider not properly initialized");
   }
 
   // Safely extract values with null checks

@@ -8,12 +8,6 @@
 // You can find this in your Privy dashboard under Policies or from your backend configuration
 export const PRIVY_POLICY_ID = process.env.EXPO_PUBLIC_PRIVY_POLICY_ID || null;
 
-// Log for debugging at module load time
-if (PRIVY_POLICY_ID) {
-  console.log("✅ Privy Policy ID loaded:", PRIVY_POLICY_ID.substring(0, 8) + "...");
-} else {
-  console.warn("⚠️ EXPO_PUBLIC_PRIVY_POLICY_ID not set. Server-side wallet operations may fail.");
-}
 
 // Array of policy IDs to use for wallet operations
 // Add more policy IDs here if needed (e.g., for different contract interactions)
@@ -25,9 +19,6 @@ export const PRIVY_POLICY_IDS = PRIVY_POLICY_ID ? [PRIVY_POLICY_ID] : [];
  */
 export function getPolicyIds() {
   if (!PRIVY_POLICY_ID) {
-    console.warn(
-      "⚠️ EXPO_PUBLIC_PRIVY_POLICY_ID not set. Server-side wallet operations may fail."
-    );
     return [];
   }
   return PRIVY_POLICY_IDS;

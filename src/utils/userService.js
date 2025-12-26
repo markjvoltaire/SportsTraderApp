@@ -61,7 +61,7 @@ export async function getUserWallet(privyUserId, authToken = null) {
           };
         }
       } catch (error) {
-        console.warn("Could not fetch wallet from backend:", error);
+        // Could not fetch wallet from backend
       }
     }
     
@@ -72,7 +72,6 @@ export async function getUserWallet(privyUserId, authToken = null) {
       privyWalletId: null,
     };
   } catch (error) {
-    console.error("Error getting user wallet:", error);
     return {
       hasWallet: false,
       walletAddress: null,
@@ -111,7 +110,6 @@ export async function isPolymarketLinked(privyUserId, authToken = null) {
       linkedAt: null,
     };
   } catch (error) {
-    console.error("Error checking Polymarket link status:", error);
     return {
       linked: false,
       linkedAt: null,
