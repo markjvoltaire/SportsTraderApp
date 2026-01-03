@@ -98,9 +98,55 @@ const DUMMY_MESSAGES = [
 export default function MarketsScreen() {
   const route = useRoute();
   const navigation = useNavigation();
-  const market = route.params?.game || route.params?.market;
+  const rawMarket = route.params?.game || route.params?.market;
 
-  console.log("market", market);
+  // Limit markets array to first 2 if it exists
+  const market = useMemo(() => {
+    if (!rawMarket) return null;
+
+    if (rawMarket.markets && Array.isArray(rawMarket.markets)) {
+      return {
+        ...rawMarket,
+        markets: rawMarket.markets.slice(0, 2),
+      };
+    }
+
+    return rawMarket;
+  }, [rawMarket]);
+
+  console.log("route", route);
+
+  // Find and log CLOB token IDs from the moneyline/game market
+  useEffect(() => {
+    // Search in rawMarket to find moneyline market (not limited to first 2)
+    if (rawMarket?.markets && Array.isArray(rawMarket.markets)) {
+      // Find the moneyline market (the actual game market)
+      const moneylineMarket = rawMarket.markets.find(
+        (m) =>
+          m.sportsMarketType === "moneyline" ||
+          (m.question &&
+            m.question.includes("vs.") &&
+            !m.question.includes(":"))
+      );
+
+      if (moneylineMarket) {
+        try {
+          const tokenIds = JSON.parse(moneylineMarket.clobTokenIds || "[]");
+          console.log("Game Market (Moneyline) CLOB Token IDs:", {
+            marketId: moneylineMarket.id,
+            question: moneylineMarket.question,
+            tokenIds: tokenIds,
+            tokenId1: tokenIds[0], // First side (e.g., Thunder)
+            tokenId2: tokenIds[1], // Second side (e.g., Warriors)
+          });
+        } catch (e) {
+          console.error("Error parsing clobTokenIds for moneyline market:", e);
+        }
+      } else {
+        console.log("Moneyline market not found in markets array");
+      }
+    }
+  }, [rawMarket]);
 
   const { height } = Dimensions.get("window");
 
@@ -392,21 +438,38 @@ export default function MarketsScreen() {
       Array.isArray(market.prices) &&
       market.prices.length >= 2
     ) {
+      // Keep only the first 2 markets
+      const limitedPrices = market.prices.slice(0, 2);
+
       // Match prices to teams by tokenId if teamTokenIds array exists
       if (market.teamTokenIds && Array.isArray(market.teamTokenIds)) {
         const awayTokenId = market.teamTokenIds[0];
         const homeTokenId = market.teamTokenIds[1];
 
-        const awayPriceObj = market.prices.find(
+        // Log CLOB token IDs for each side
+        console.log("CLOB Token IDs:", {
+          awayTokenId: awayTokenId,
+          homeTokenId: homeTokenId,
+        });
+
+        const awayPriceObj = limitedPrices.find(
           (p) =>
             p.tokenId === awayTokenId ||
             p.tokenId?.toString() === awayTokenId?.toString()
         );
-        const homePriceObj = market.prices.find(
+        const homePriceObj = limitedPrices.find(
           (p) =>
             p.tokenId === homeTokenId ||
             p.tokenId?.toString() === homeTokenId?.toString()
         );
+
+        // Also log token IDs from price objects if they exist
+        if (awayPriceObj) {
+          console.log("Away Price Object Token ID:", awayPriceObj.tokenId);
+        }
+        if (homePriceObj) {
+          console.log("Home Price Object Token ID:", homePriceObj.tokenId);
+        }
 
         awayPrice = awayPriceObj
           ? parseFloat(awayPriceObj.price || awayPriceObj.sellPrice)
@@ -417,10 +480,10 @@ export default function MarketsScreen() {
       } else {
         // Fallback to index-based matching (first price = away, second = home)
         awayPrice = parseFloat(
-          market.prices[0]?.price || market.prices[0]?.sellPrice
+          limitedPrices[0]?.price || limitedPrices[0]?.sellPrice
         );
         homePrice = parseFloat(
-          market.prices[1]?.price || market.prices[1]?.sellPrice
+          limitedPrices[1]?.price || limitedPrices[1]?.sellPrice
         );
       }
     } else {
@@ -912,7 +975,7 @@ export default function MarketsScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: "#000000",
+    backgroundColor: Colors.background,
   },
   topBar: {
     flexDirection: "row",
@@ -959,7 +1022,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: Colors.textPrimary,
-    fontFamily: "Poppins-Bold",
     letterSpacing: 0.3,
   },
   gameHeader: {
@@ -988,7 +1050,6 @@ const styles = StyleSheet.create({
   teamAbbreviation: {
     fontSize: 22,
     fontWeight: "800",
-    fontFamily: "Poppins-Bold",
   },
   teamName: {
     ...Typography.caption,
@@ -1011,14 +1072,12 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: Colors.textPrimary,
     letterSpacing: 0.5,
-    fontFamily: "Poppins-Bold",
   },
   countdownText: {
     fontSize: 28,
     fontWeight: "800",
     color: Colors.textPrimary,
     letterSpacing: 0.5,
-    fontFamily: "Poppins-Bold",
     textAlign: "center",
   },
   scoreDash: {
@@ -1095,7 +1154,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    backgroundColor: "#000000",
+    backgroundColor: Colors.background,
     width: "100%",
     paddingHorizontal: Spacing.xl, // Match ScreenTemplate padding
     paddingTop: Spacing.md,
@@ -1258,7 +1317,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.md,
-    backgroundColor: "#000000",
+    backgroundColor: Colors.background,
   },
   chatLeft: {
     flexDirection: "row",

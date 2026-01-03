@@ -3,39 +3,40 @@
  * Centralized theme constants following fintech UX best practices
  */
 
-// Color Palette - Dark Theme
+// Color Palette - Black and White Theme
 export const Colors = {
   // Primary surfaces
   background: "black",
-  surface: "#1F1F1F",
-  surfaceAlt: "#2A2A2A",
+  surface: "black",
+  surfaceAlt: "black",
 
-  // Accent - Vibrant sports betting colors
-  primary: "#8B5CF6", // Vibrant purple/blue
-  primaryDark: "#6D28D9",
-  primaryLight: "#A78BFA",
-  primaryGradient: ["#8B5CF6", "#A78BFA"],
-  accentGradient: ["#7C3AED", "#C4B5FD"],
-  accentTeal: "#06B6D4", // Teal for second team
-  accentCyan: "#14B8A6",
-  success: "#34D399",
-  successMuted: "rgba(52, 211, 153, 0.2)",
-  danger: "#F87171",
-  dangerMuted: "rgba(248, 113, 113, 0.2)",
-  warning: "#FBBF24",
-  flame: "#F59E0B", // Orange for flame/bets indicator
+  // Accent - Black and white colors
+  primary: "#FFFFFF", // White for primary actions
+  primaryDark: "#FFFFFF",
+  primaryLight: "#FFFFFF",
+  primaryMuted: "rgba(255, 255, 255, 0.2)",
+  primaryGradient: ["#FFFFFF", "#FFFFFF"],
+  accentGradient: ["#FFFFFF", "#FFFFFF"],
+  accentTeal: "#FFFFFF", // White for second team
+  accentCyan: "#FFFFFF",
+  success: "#FFFFFF",
+  successMuted: "rgba(255, 255, 255, 0.2)",
+  danger: "#FFFFFF",
+  dangerMuted: "rgba(255, 255, 255, 0.2)",
+  warning: "#FFFFFF",
+  flame: "#FFFFFF", // White for flame/bets indicator
 
-  // Text - Light colors for dark background
+  // Text - Pure white
   textPrimary: "#FFFFFF",
-  textSecondary: "#E5E5E5",
-  textTertiary: "#B0B0B0",
-  textMuted: "#808080",
+  textSecondary: "#FFFFFF",
+  textTertiary: "#FFFFFF",
+  textMuted: "#FFFFFF",
 
   // Glass & borders
-  glassSurface: "rgba(31, 31, 31, 0.8)",
-  glassBorder: "rgba(139, 92, 246, 0.3)",
+  glassSurface: "rgba(0, 0, 0, 0.8)",
+  glassBorder: "rgba(255, 255, 255, 0.2)",
   border: "rgba(255, 255, 255, 0.1)",
-  borderFocus: "rgba(139, 92, 246, 0.5)",
+  borderFocus: "rgba(255, 255, 255, 0.5)",
 };
 
 // Typography Scale
@@ -45,48 +46,41 @@ export const Typography = {
     fontWeight: "700",
     color: Colors.textPrimary,
     letterSpacing: 0.4,
-    fontFamily: "Poppins-Bold",
   },
   pageTitle: {
-    fontSize: 40,
+    fontSize: 20,
     fontWeight: "700",
     color: Colors.textPrimary,
     letterSpacing: 0.2,
-    fontFamily: "Poppins-Bold",
   },
   sectionTitle: {
     fontSize: 32,
     fontWeight: "600",
     color: Colors.textPrimary,
     letterSpacing: 0.15,
-    fontFamily: "Poppins-SemiBold",
   },
   cardTitle: {
     fontSize: 22,
     fontWeight: "600",
     color: Colors.textPrimary,
-    fontFamily: "Poppins-SemiBold",
   },
   bodyLarge: {
     fontSize: 18,
     fontWeight: "500",
     color: Colors.textSecondary,
     lineHeight: 26,
-    fontFamily: "Poppins-Regular",
   },
   body: {
     fontSize: 16,
     fontWeight: "400",
     color: Colors.textSecondary,
     lineHeight: 24,
-    fontFamily: "Poppins-Regular",
   },
   caption: {
     fontSize: 13,
     fontWeight: "400",
     color: Colors.textTertiary,
     lineHeight: 18,
-    fontFamily: "Poppins-Regular",
   },
   label: {
     fontSize: 12,
@@ -94,7 +88,6 @@ export const Typography = {
     color: Colors.textMuted,
     textTransform: "uppercase",
     letterSpacing: 1.6,
-    fontFamily: "Poppins-SemiBold",
   },
 };
 
@@ -121,9 +114,9 @@ export const BorderRadius = {
 // Shadow/Glow Effects
 export const Shadows = {
   primaryGlow: {
-    shadowColor: "rgba(139, 92, 246, 0.45)",
+    shadowColor: "rgba(255, 255, 255, 0.2)",
     shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.45,
+    shadowOpacity: 0.2,
     shadowRadius: 28,
     elevation: 24,
   },
@@ -142,9 +135,9 @@ export const Shadows = {
     elevation: 8,
   },
   glassShadow: {
-    shadowColor: "rgba(124, 58, 237, 0.35)",
+    shadowColor: "rgba(255, 255, 255, 0.15)",
     shadowOffset: { width: 0, height: 18 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.15,
     shadowRadius: 32,
     elevation: 26,
   },
@@ -203,7 +196,6 @@ export const CommonStyles = {
     fontSize: 16,
     fontWeight: "700",
     letterSpacing: 0.5,
-    fontFamily: "Poppins-Bold",
   },
 
   // Secondary Button
@@ -227,7 +219,6 @@ export const CommonStyles = {
     fontSize: 16,
     fontWeight: "600",
     letterSpacing: 0.3,
-    fontFamily: "Poppins-SemiBold",
   },
 
   // Card Container

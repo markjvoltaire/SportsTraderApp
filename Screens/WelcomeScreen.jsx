@@ -188,7 +188,7 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#000000",
+    backgroundColor: "#1C1C1C",
   },
   backgroundImage: {
     position: "absolute",

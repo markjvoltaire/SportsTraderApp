@@ -81,7 +81,7 @@ export default function MyChart({
           tokenId: null,
           abbreviation: "Home",
           name: "Home",
-          color: "#06B6D4",
+          color: "#FFFFFF",
         },
         conditionId: null,
       };
@@ -893,7 +893,7 @@ export default function MyChart({
                 domain={{ y: yDomain }}
                 scale={{ x: "linear", y: "linear" }}
                 style={{
-                  background: { fill: "#000000" },
+                  background: { fill: Colors.background },
                 }}
               >
                 <VictoryAxis
@@ -1075,7 +1075,7 @@ const styles = StyleSheet.create({
   chartContainer: {
     width: "100%",
     position: "relative",
-    backgroundColor: "#000000",
+    backgroundColor: Colors.background,
   },
   skeletonContainer: {
     position: "absolute",
@@ -1168,6 +1168,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#000000",
+    backgroundColor: Colors.background,
   },
 });

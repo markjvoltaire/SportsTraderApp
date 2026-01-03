@@ -3,12 +3,12 @@ import {
   Text,
   View,
   TouchableOpacity,
-  ActivityIndicator,
 } from "react-native";
 import React from "react";
 import { formatSharePrice } from "../../utils/formatters";
 import { normalize, normalizeFont } from "../../utils/dimensions";
 import { Colors, Spacing } from "../../constants/theme";
+import LottieLoader from "../ui/LottieLoader";
 
 export default function ButtonRow({
   market,
@@ -171,7 +171,7 @@ export default function ButtonRow({
         disabled={loading}
       >
         {loading ? (
-          <ActivityIndicator size="small" color="#FFFFFF" />
+          <LottieLoader size="small" />
         ) : (
           <View style={styles.buttonContent}>
             <Text style={styles.teamName}>{awayName}</Text>
@@ -193,7 +193,7 @@ export default function ButtonRow({
         disabled={loading}
       >
         {loading ? (
-          <ActivityIndicator size="small" color="#FFFFFF" />
+          <LottieLoader size="small" />
         ) : (
           <View style={styles.buttonContent}>
             <Text style={styles.teamName}>{homeName}</Text>
@@ -248,7 +248,6 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 13,
     fontWeight: "800",
-    fontFamily: "Poppins-Bold",
     letterSpacing: 0.3,
     marginBottom: Spacing.xs / 2,
   },
@@ -256,7 +255,6 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "800",
-    fontFamily: "Poppins-Bold",
     opacity: 0.9,
   },
 });

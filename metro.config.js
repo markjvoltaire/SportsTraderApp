@@ -13,6 +13,24 @@ const resolveRequestWithPackageExports = (context, moduleName, platform) => {
     return ctx.resolveRequest(ctx, moduleName, platform);
   }
 
+  // Package exports in `ox` (a `viem` dependency) are incompatible
+  if (moduleName === "ox" || moduleName.startsWith("ox/")) {
+    const ctx = {
+      ...context,
+      unstable_enablePackageExports: false,
+    };
+    return ctx.resolveRequest(ctx, moduleName, platform);
+  }
+
+  // Handle viem/chains imports - disable package exports
+  if (moduleName.startsWith("viem/chains")) {
+    const ctx = {
+      ...context,
+      unstable_enablePackageExports: false,
+    };
+    return ctx.resolveRequest(ctx, moduleName, platform);
+  }
+
   // Package exports in `zustand@4` are incompatible
   if (moduleName.startsWith("zustand")) {
     const ctx = {
@@ -47,6 +65,8 @@ const resolveRequestWithPackageExports = (context, moduleName, platform) => {
 config.resolver.resolveRequest = resolveRequestWithPackageExports;
 
 module.exports = config;
+
+
 
 
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import {
   View,
   Text,
@@ -6,15 +6,12 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
-  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 
 import { useAuth } from "../src/contexts/AuthContext";
-import { usePrivy, useEmbeddedEthereumWallet } from "@privy-io/expo";
 
 import {
   Colors,
@@ -25,59 +22,60 @@ import {
 import { normalizeFont } from "../src/utils/dimensions";
 
 export default function ProfileScreen() {
+  const { signOut, user } = useAuth();
   const navigation = useNavigation();
-  const {
-    signOut,
-    user: privyUser,
-    supabaseUser,
-    supabaseUserStatus,
-    supabaseUserError,
-    refreshSupabaseUser,
-  } = useAuth();
-  const privy = usePrivy();
-  const walletContext = useEmbeddedEthereumWallet();
-  const wallets = walletContext?.wallets ?? [];
-  const wallet =
-    Array.isArray(wallets) && wallets.length > 0 ? wallets[0] : null;
-  const isReady = privy?.isReady ?? false;
-  const createWallet = walletContext?.create ?? null; // Expo SDK: `create`
 
-  console.log("supabaseUser", supabaseUser);
+  // Get username from user object
+  const username =
+    user?.username ||
+    user?.email?.split("@")[0] ||
+    user?.id?.slice(0, 15) ||
+    "@MoonlitDragon4887";
 
-  const [creatingWallet, setCreatingWallet] = useState(false);
+  // Format username with @ if not already present
+  const displayUsername = username.startsWith("@") ? username : `@${username}`;
 
-  // Check if user has a wallet, if not create one
-  useEffect(() => {
-    const ensureWallet = async () => {
-      if (!isReady || !privyUser?.id) return;
-
-      if (!wallet && createWallet && !creatingWallet) {
-        setCreatingWallet(true);
-        try {
-          await createWallet();
-        } catch (error) {
-          Alert.alert(
-            "Wallet Creation Failed",
-            "Could not create your wallet. Please try again."
-          );
-        } finally {
-          setCreatingWallet(false);
-        }
-      }
-    };
-
-    ensureWallet();
-  }, [isReady, privyUser?.id, wallet, createWallet, creatingWallet]);
+  // Statistics (placeholder - would come from backend)
+  const tradeVolume = "$0.00";
+  const followers = 0;
+  const following = 0;
 
   // -------------------------
-  // Add Funds - Navigate to Add Funds Screen
+  // Handle Edit Profile
   // -------------------------
-  const handleAddFunds = () => {
-    navigation.navigate("AddFunds");
+  const handleEditProfile = () => {
+    // TODO: Navigate to edit profile screen
+    Alert.alert("Edit Profile", "Edit profile functionality coming soon");
   };
 
   // -------------------------
-  // Sign out
+  // Handle Deposit
+  // -------------------------
+  const handleDeposit = () => {
+    handleFundWallet();
+  };
+
+  // -------------------------
+  // Handle Fund Wallet - Navigate to Deposit Screen
+  // -------------------------
+  const handleFundWallet = () => {
+    // Find the embedded wallet from linked_accounts
+    const embeddedWallet = user?.linked_accounts?.find(
+      (account) =>
+        account.type === "wallet" && account.wallet_client_type === "privy"
+    );
+
+    if (!embeddedWallet?.address) {
+      Alert.alert("No wallet found", "Connect or create a wallet first.");
+      return;
+    }
+
+    // Navigate to DepositAmount screen
+    navigation.navigate("DepositAmount");
+  };
+
+  // -------------------------
+  // Sign Out
   // -------------------------
   const handleLogout = () => {
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
@@ -96,139 +94,100 @@ export default function ProfileScreen() {
   };
 
   return (
-    <LinearGradient
-      colors={["#0A0E27", "#1A1F3A", "#2D1B3D", "#1A0F2E"]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={styles.container}
-    >
-      <SafeAreaView style={styles.safeArea}>
+    <View style={styles.container}>
+      <SafeAreaView style={styles.safeArea} edges={["top"]}>
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* -------------------------
-              Wallet Info
-          ------------------------- */}
-          {creatingWallet && (
-            <View style={styles.userInfoCard}>
-              <ActivityIndicator size="small" color={Colors.primary} />
-              <Text style={styles.loadingText}>Creating your wallet...</Text>
-            </View>
-          )}
-
-          {!creatingWallet && wallet && (
-            <View style={styles.userInfoCard}>
-              <Text style={styles.sectionTitle}>Wallet</Text>
-
-              <View style={styles.userInfoRow}>
-                <Text style={styles.userInfoLabel}>Address:</Text>
-                <Text style={styles.userInfoValue} numberOfLines={1}>
-                  {wallet.address}
-                </Text>
-              </View>
-
-              <View style={[styles.userInfoRow, { borderBottomWidth: 0 }]}>
-                <Text style={styles.userInfoLabel}>Chain:</Text>
-                <Text style={styles.userInfoValue}>
-                  {wallet.chainId || "Ethereum"}
-                </Text>
-              </View>
-            </View>
-          )}
-
-          {supabaseUserStatus === "error" && supabaseUserError && (
-            <View style={styles.errorCard}>
+          {/* Header with back button and username */}
+          <View style={styles.header}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+            >
               <Ionicons
-                name="alert-circle-outline"
-                size={normalizeFont(20)}
-                color={Colors.danger}
+                name="chevron-back"
+                size={24}
+                color={Colors.textPrimary}
               />
-              <Text style={styles.errorText}>
-                Could not fetch user from Supabase: {supabaseUserError}
-              </Text>
-            </View>
-          )}
+            </TouchableOpacity>
+            <Text style={styles.headerUsername}>{displayUsername}</Text>
+            <View style={styles.headerSpacer} />
+          </View>
 
-          {supabaseUserStatus === "not_found" && (
-            <View style={styles.errorCard}>
-              <Ionicons
-                name="information-circle-outline"
-                size={normalizeFont(20)}
-                color={Colors.textSecondary}
-              />
-              <Text style={[styles.errorText, { color: Colors.textSecondary }]}>
-                No user row found yet for this Privy user ID.
-              </Text>
+          {/* Profile Section */}
+          <View style={styles.profileSection}>
+            {/* Profile Picture */}
+            <View style={styles.profilePictureContainer}>
+              <View style={styles.profilePicture}>
+                <Ionicons
+                  name="headset-outline"
+                  size={48}
+                  color={Colors.textPrimary}
+                />
+              </View>
+            </View>
+
+            {/* Statistics */}
+            <View style={styles.statsContainer}>
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{tradeVolume}</Text>
+                <Text style={styles.statLabel}>Trade Volume</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{followers}</Text>
+                <Text style={styles.statLabel}>Followers</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{following}</Text>
+                <Text style={styles.statLabel}>Following</Text>
+              </View>
+            </View>
+
+            {/* Username */}
+            <Text style={styles.username}>{displayUsername}</Text>
+
+            {/* Action Buttons */}
+            <View style={styles.actionButtonsContainer}>
               <TouchableOpacity
-                onPress={refreshSupabaseUser}
+                style={styles.editProfileButton}
+                onPress={handleEditProfile}
                 activeOpacity={0.85}
-                style={{ paddingLeft: Spacing.sm }}
               >
-                <Text style={{ color: Colors.primary, fontWeight: "600" }}>
-                  Refresh
-                </Text>
+                <Text style={styles.editProfileText}>Edit Profile</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.shareProfileButton}
+                onPress={handleDeposit}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.shareProfileText}>Deposit</Text>
               </TouchableOpacity>
             </View>
-          )}
+          </View>
 
-          {/* -------------------------
-              Add Funds Button
-          ------------------------- */}
-          <TouchableOpacity
-            style={[
-              styles.fundButton,
-              (!wallet || !isReady) && styles.fundButtonDisabled,
-            ]}
-            onPress={handleAddFunds}
-            activeOpacity={0.85}
-            disabled={!wallet || !isReady || creatingWallet}
-          >
-            {creatingWallet ? (
-              <>
-                <ActivityIndicator size="small" color={Colors.primary} />
-                <Text style={styles.fundText}>Creating Wallet...</Text>
-              </>
-            ) : (
-              <>
-                <Ionicons
-                  name="wallet-outline"
-                  size={normalizeFont(20)}
-                  color={
-                    wallet && isReady ? Colors.primary : Colors.textSecondary
-                  }
-                />
-                <Text
-                  style={[
-                    styles.fundText,
-                    (!wallet || !isReady) && styles.fundTextDisabled,
-                  ]}
-                >
-                  Add Funds (USDC)
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
-
-          {/* -------------------------
-              Sign Out Button
-          ------------------------- */}
-          <TouchableOpacity
-            style={styles.signOutButton}
-            onPress={handleLogout}
-            activeOpacity={0.85}
-          >
-            <Ionicons
-              name="log-out-outline"
-              size={normalizeFont(20)}
-              color={Colors.danger}
-            />
-            <Text style={styles.signOutText}>Sign Out</Text>
-          </TouchableOpacity>
+          {/* Recent Activity Section */}
+          <View style={styles.activitySection}>
+            <Text style={styles.activityTitle}>Recent Activity</Text>
+            <View style={styles.emptyStateContainer}>
+              {/* Colorful abstract icon */}
+              <View style={styles.emptyStateIcon}>
+                <View style={[styles.iconShape, styles.iconShape1]} />
+                <View style={[styles.iconShape, styles.iconShape2]} />
+                <View style={[styles.iconShape, styles.iconShape3]} />
+                <View style={[styles.iconShape, styles.iconShape4]} />
+                <View style={[styles.iconShape, styles.iconShape5]} />
+              </View>
+              <Text style={styles.emptyStateText}>
+                No activity to show yet.
+              </Text>
+            </View>
+          </View>
         </ScrollView>
       </SafeAreaView>
-    </LinearGradient>
+    </View>
   );
 }
 
@@ -237,6 +196,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: "100%",
     height: "100%",
+    backgroundColor: Colors.background,
   },
   safeArea: {
     flex: 1,
@@ -245,118 +205,179 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.xl,
     paddingBottom: Spacing.xxxl,
     flexGrow: 1,
   },
-
-  userInfoCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.lg,
-    marginBottom: Spacing.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.md,
   },
-  sectionTitle: {
+  backButton: {
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "flex-start",
+  },
+  headerUsername: {
     ...Typography.body,
     fontSize: normalizeFont(18),
-    fontWeight: "700",
+    fontWeight: "600",
     color: Colors.textPrimary,
-    marginBottom: Spacing.md,
+    flex: 1,
+    textAlign: "center",
   },
-  userInfoRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  headerSpacer: {
+    width: 40,
+  },
+  profileSection: {
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.lg,
+  },
+  profilePictureContainer: {
     alignItems: "flex-start",
-    paddingVertical: Spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    marginBottom: Spacing.lg,
   },
-  userInfoLabel: {
-    ...Typography.body,
-    fontSize: normalizeFont(14),
-    color: Colors.textSecondary,
-    fontWeight: "500",
-    flex: 1,
+  profilePicture: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: Colors.primary,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  userInfoValue: {
+  statsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginBottom: Spacing.lg,
+    paddingVertical: Spacing.md,
+  },
+  statItem: {
+    alignItems: "center",
+  },
+  statValue: {
     ...Typography.body,
-    fontSize: normalizeFont(14),
+    fontSize: normalizeFont(18),
+    fontWeight: "600",
     color: Colors.textPrimary,
-    fontWeight: "600",
-    flex: 2,
-    textAlign: "right",
+    marginBottom: Spacing.xs,
   },
-  loadingText: {
-    ...Typography.body,
+  statLabel: {
+    ...Typography.caption,
     fontSize: normalizeFont(14),
     color: Colors.textSecondary,
-    marginTop: Spacing.sm,
   },
-  errorCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    marginBottom: Spacing.lg,
-    borderWidth: 1,
-    borderColor: Colors.dangerMuted,
-    gap: Spacing.sm,
-  },
-  errorText: {
+  username: {
     ...Typography.body,
-    fontSize: normalizeFont(14),
-    color: Colors.danger,
+    fontSize: normalizeFont(18),
+    fontWeight: "600",
+    color: Colors.textPrimary,
+    marginBottom: Spacing.lg,
+  },
+  actionButtonsContainer: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    marginBottom: Spacing.xl,
+  },
+  editProfileButton: {
     flex: 1,
-  },
-
-  fundButton: {
-    flexDirection: "row",
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.md,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Colors.primaryMuted,
+  },
+  editProfileText: {
+    ...Typography.body,
+    fontSize: normalizeFont(16),
+    fontWeight: "600",
+    color: Colors.textPrimary,
+  },
+  shareProfileButton: {
+    flex: 1,
+    backgroundColor: Colors.surface,
     borderRadius: BorderRadius.md,
-    paddingVertical: Spacing.lg,
+    paddingVertical: Spacing.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  shareProfileText: {
+    ...Typography.body,
+    fontSize: normalizeFont(16),
+    fontWeight: "600",
+    color: Colors.textPrimary,
+  },
+  activitySection: {
     paddingHorizontal: Spacing.xl,
-    gap: Spacing.sm,
-    borderWidth: 1,
-    borderColor: Colors.primary,
+    paddingTop: Spacing.xl,
+  },
+  activityTitle: {
+    ...Typography.sectionTitle,
+    fontSize: normalizeFont(20),
+    fontWeight: "600",
+    color: Colors.textPrimary,
     marginBottom: Spacing.lg,
   },
-  fundButtonDisabled: {
-    backgroundColor: Colors.surface,
-    borderColor: Colors.border,
-    opacity: 0.5,
-  },
-  fundText: {
-    ...Typography.body,
-    fontSize: normalizeFont(16),
-    fontWeight: "600",
-    color: Colors.primary,
-  },
-  fundTextDisabled: {
-    color: Colors.textSecondary,
-  },
-
-  signOutButton: {
-    flexDirection: "row",
+  emptyStateContainer: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing.xl,
-    gap: Spacing.sm,
-    borderWidth: 1,
-    borderColor: Colors.dangerMuted,
+    paddingVertical: Spacing.xxl,
   },
-  signOutText: {
+  emptyStateIcon: {
+    width: 120,
+    height: 120,
+    marginBottom: Spacing.lg,
+    position: "relative",
+  },
+  iconShape: {
+    position: "absolute",
+  },
+  iconShape1: {
+    width: 40,
+    height: 40,
+    backgroundColor: Colors.primary,
+    top: 10,
+    left: 20,
+    transform: [{ rotate: "45deg" }],
+    borderRadius: 4,
+  },
+  iconShape2: {
+    width: 30,
+    height: 30,
+    backgroundColor: Colors.success,
+    top: 30,
+    right: 15,
+    transform: [{ rotate: "45deg" }],
+  },
+  iconShape3: {
+    width: 35,
+    height: 35,
+    backgroundColor: Colors.warning,
+    bottom: 30,
+    left: 15,
+    borderRadius: 18,
+  },
+  iconShape4: {
+    width: 25,
+    height: 25,
+    backgroundColor: Colors.accentTeal,
+    top: 50,
+    left: 50,
+    transform: [{ rotate: "45deg" }],
+  },
+  iconShape5: {
+    width: 30,
+    height: 30,
+    backgroundColor: Colors.primaryLight,
+    bottom: 20,
+    right: 25,
+    borderRadius: 15,
+  },
+  emptyStateText: {
     ...Typography.body,
     fontSize: normalizeFont(16),
-    fontWeight: "600",
-    color: Colors.danger,
+    color: Colors.textPrimary,
   },
 });

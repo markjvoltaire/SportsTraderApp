@@ -2,11 +2,9 @@ import React from "react";
 import { StatusBar } from "expo-status-bar";
 import {
   StyleSheet,
-  ActivityIndicator,
   View,
   TouchableOpacity,
 } from "react-native";
-import { useFonts } from "expo-font";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
@@ -19,20 +17,24 @@ import { AuthProvider, useAuth } from "./src/contexts/AuthContext";
 import { SupabaseProvider, useSupabase } from "./src/contexts/SupabaseContext";
 import WelcomeScreen from "./Screens/WelcomeScreen";
 import LoginScreen from "./Screens/LoginScreen";
+import LottieLoader from "./src/components/ui/LottieLoader";
 import ForgotPasswordScreen from "./Screens/ForgotPasswordScreen";
 import HomeScreen from "./Screens/HomeScreen";
-import MarketsScreen from "./Screens/MarketsScreen";
 import PortfolioScreen from "./Screens/PortfolioScreen";
 import ProfileScreen from "./Screens/ProfileScreen";
 import AddFundsScreen from "./Screens/AddFundsScreen";
+import DepositAmountScreen from "./Screens/DepositAmountScreen";
+import MoonPayScreen from "./Screens/MoonPayScreen";
 import MarketDetailScreen from "./Screens/MarketDetailScreen";
 import { Colors, Spacing, Typography } from "./src/constants/theme";
 import ChartScreen from "./Screens/ChartScreen";
 import ErrorBoundary from "./src/components/ErrorBoundary";
 
+// 1. Import Crossmint Provider
+import { CrossmintProvider } from "@crossmint/client-sdk-react-native-ui";
+
 const Tab = createBottomTabNavigator();
 const HomeStack = createNativeStackNavigator();
-const MarketsStack = createNativeStackNavigator();
 const ProfileStack = createNativeStackNavigator();
 const AuthStack = createNativeStackNavigator();
 
@@ -75,8 +77,18 @@ function ProfileStackScreen() {
         options={{ headerShown: false }}
       />
       <ProfileStack.Screen
+        name="DepositAmount"
+        component={DepositAmountScreen}
+        options={{ headerShown: false }}
+      />
+      <ProfileStack.Screen
         name="AddFunds"
         component={AddFundsScreen}
+        options={{ headerShown: false }}
+      />
+      <ProfileStack.Screen
+        name="MoonPay"
+        component={MoonPayScreen}
         options={{ headerShown: false }}
       />
     </ProfileStack.Navigator>
@@ -165,7 +177,7 @@ function SupabaseInitializedWrapper({ children }) {
   if (!isInitialized) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <LottieLoader size="large" />
       </View>
     );
   }
@@ -179,7 +191,7 @@ function RootNavigator() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <LottieLoader size="large" />
       </View>
     );
   }
@@ -189,26 +201,16 @@ function RootNavigator() {
 }
 
 export default function App() {
-  const [fontsLoaded] = useFonts({
-    "Poppins-Regular": require("./assets/fonts/Poppins-Regular.ttf"),
-    "Poppins-SemiBold": require("./assets/fonts/Poppins-SemiBold.ttf"),
-    "Poppins-Bold": require("./assets/fonts/Poppins-Bold.ttf"),
-  });
-
   // Get Privy App ID and Client ID from environment variables
   const PRIVY_APP_ID = process.env.EXPO_PUBLIC_PRIVY_APP_ID;
   const PRIVY_CLIENT_ID = process.env.EXPO_PUBLIC_PRIVY_CLIENT_ID;
+  const CROSSMINT_API_KEY =
+    process.env.EXPO_PUBLIC_CROSSMINT_CLIENT_SIDE_API_KEY || "";
 
-  if (!fontsLoaded) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-      </View>
-    );
-  }
 
   return (
-    <ErrorBoundary>
+    // <ErrorBoundary>
+    <CrossmintProvider apiKey={CROSSMINT_API_KEY}>
       <PrivyProvider
         appId={PRIVY_APP_ID || "placeholder-app-id"}
         clientId={PRIVY_CLIENT_ID || "placeholder-client-id"}
@@ -238,7 +240,8 @@ export default function App() {
           </SupabaseInitializedWrapper>
         </SupabaseProvider>
       </PrivyProvider>
-    </ErrorBoundary>
+    </CrossmintProvider>
+    // </ErrorBoundary>
   );
 }
 
@@ -256,7 +259,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     height: 72,
     borderRadius: 0,
-    backgroundColor: "#000000",
+    backgroundColor: Colors.background,
     opacity: 1,
     borderTopWidth: 1,
     borderTopColor: Colors.border,

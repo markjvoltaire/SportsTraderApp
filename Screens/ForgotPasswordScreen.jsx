@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -16,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../src/contexts/AuthContext";
 import { Colors, Spacing, Typography } from "../src/constants/theme";
 import { normalize, normalizeFont } from "../src/utils/dimensions";
+import LottieLoader from "../src/components/ui/LottieLoader";
 
 export default function ForgotPasswordScreen() {
   const navigation = useNavigation();
@@ -108,7 +108,7 @@ export default function ForgotPasswordScreen() {
               activeOpacity={0.8}
             >
               {loading ? (
-                <ActivityIndicator color="#FFFFFF" />
+                <LottieLoader size="small" />
               ) : (
                 <Text style={styles.submitButtonText}>Send Reset Link</Text>
               )}

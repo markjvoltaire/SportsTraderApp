@@ -235,5 +235,32 @@ export async function processFiatPayment(
   }
 }
 
+/**
+ * Deposit funds via card using Privy onramp API
+ * Initiates a card-based fiat onramp via Privy (Coinbase)
+ * Funds user's wallet with USDC on Base chain
+ */
+export async function depositCard(privyUserId, { amount, card }, authToken) {
+  try {
+    const data = await fetchJson(`/api/deposit-card`, {
+      method: "POST",
+      body: {
+        user_id: privyUserId,
+        amount: amount.toString(),
+        card: {
+          number: card.number,
+          exp_month: card.exp_month,
+          exp_year: card.exp_year,
+          cvc: card.cvc,
+        },
+      },
+      authToken,
+    });
+    return { data, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+}
+
 // Backward compatible export name (older code may import setupUser)
 export const setupUser = setupPrivyUser;

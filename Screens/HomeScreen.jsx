@@ -3,271 +3,483 @@ import {
   Text,
   View,
   ScrollView,
-  RefreshControl,
+  TouchableOpacity,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import React, { useEffect, useState, useRef } from "react";
-import { useNavigation, useScrollToTop } from "@react-navigation/native";
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  Easing,
-} from "react-native-reanimated";
+import { SafeAreaView } from "react-native-safe-area-context";
 import API_BASE_URL from "../src/config/api";
-import GameCardSkeleton from "../src/components/market/GameCardSkeleton";
-import FilterCarousel from "../src/components/ui/FilterCarousel";
-import { Colors, Spacing } from "../constants/theme";
+import { Colors, Spacing, Typography, BorderRadius } from "../constants/theme";
 import MarketCard from "../src/components/market/MarketCard";
-
-// Animated wrapper component for GameCard with fade-in
-function AnimatedGameCard({ market, onPress, index }) {
-  const opacity = useSharedValue(0);
-
-  useEffect(() => {
-    // Reset animation value
-    opacity.value = 0;
-
-    // Stagger the animation based on index
-    const delay = index * 50; // 50ms delay between each card
-
-    const timeoutId = setTimeout(() => {
-      opacity.value = withTiming(1, {
-        duration: 400,
-        easing: Easing.out(Easing.ease),
-      });
-    }, delay);
-
-    return () => clearTimeout(timeoutId);
-  }, [market.id || market.market_id || market.game_id]); // Re-animate when market changes
-
-  const animatedStyle = useAnimatedStyle(() => {
-    return {
-      opacity: opacity.value,
-    };
-  });
-
-  return (
-    <Animated.View style={animatedStyle}>
-      <MarketCard market={market} onPress={onPress} />
-    </Animated.View>
-  );
-}
-
-const FILTER_OPTIONS = [
-  {
-    key: "all",
-    label: "All",
-    icon: require("../assets/sportsIcons/ForYou.png"),
-  },
-  {
-    key: "nfl",
-    label: "NFL",
-    icon: require("../assets/sportsIcons/NFL.png"),
-  },
-  {
-    key: "nba",
-    label: "NBA",
-    icon: require("../assets/sportsIcons/NBA.png"),
-  },
-  {
-    key: "nhl",
-    label: "NHL",
-    icon: require("../assets/sportsIcons/NHL.png"),
-  },
-  {
-    key: "ufc",
-    label: "UFC",
-    icon: require("../assets/sportsIcons/UFC.png"),
-  },
-  {
-    key: "soccer",
-    label: "Soccer",
-    icon: require("../assets/sportsIcons/Soccer.png"),
-  },
-  {
-    key: "cfb",
-    label: "CFB",
-    icon: require("../assets/sportsIcons/CFB.png"),
-  },
-  {
-    key: "boxing",
-    label: "Boxing",
-    icon: require("../assets/sportsIcons/Boxing.png"),
-  },
-  {
-    key: "cbb",
-    label: "CBB",
-    icon: require("../assets/sportsIcons/CBB.png"),
-  },
-  {
-    key: "wbna",
-    label: "WNBA",
-    icon: require("../assets/sportsIcons/WNBA.png"),
-  },
-];
-
-// Cache for markets by category
-const marketsCache = {};
+import Ticker from "../src/components/ui/Ticker";
+import LottieLoader from "../src/components/ui/LottieLoader";
 
 export default function HomeScreen() {
-  const navigation = useNavigation();
-  const scrollViewRef = useRef(null);
-  useScrollToTop(scrollViewRef);
   const [markets, setMarkets] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [selectedFilter, setSelectedFilter] = useState("all");
+  const [selectedSport, setSelectedSport] = useState(null);
+  // Cache markets by sport ID to avoid refetching
+  const marketsCache = useRef({});
 
-  const fetchData = async (forceRefresh = false) => {
+  // Static sports metadata object
+  const sports = [
+    {
+      id: 10,
+      description: "NFL football",
+      sport: "nfl",
+      image: "https://polymarket-upload.s3.us-east-2.amazonaws.com/nfl.png",
+      resolution: "https://www.nfl.com/",
+      ordering: "away",
+      tags: "1,450,100639",
+      series: "10187",
+      createdAt: "2025-11-05T19:27:45.399303Z",
+    },
+    {
+      id: 9,
+      sport: "cfb",
+      image:
+        "https://polymarket-upload.s3.us-east-2.amazonaws.com/espn+college+football+logo.png",
+      resolution: "https://www.ncaa.com/",
+      ordering: "away",
+      tags: "1,100351,100639",
+      series: "10210",
+      createdAt: "2025-11-05T19:27:45.399303Z",
+    },
+    {
+      id: 1,
+      description: "march madness",
+      sport: "ncaab",
+      image:
+        "https://polymarket-upload.s3.us-east-2.amazonaws.com/marchmadness.jpeg",
+      resolution: "https://www.ncaa.com/march-madness-live/bracket",
+      ordering: "home",
+      tags: "1,100149,100639",
+      series: "39",
+      createdAt: "2025-11-05T19:27:45.399303Z",
+    },
+    {
+      id: 4,
+      description: "college basketball",
+      sport: "cbb",
+      image: "https://polymarket-upload.s3.us-east-2.amazonaws.com/ncaab1.png",
+      resolution: "https://www.ncaa.com/",
+      ordering: "away",
+      tags: "1,101178,100639,101954",
+      series: "10470",
+      createdAt: "2025-11-05T19:27:45.399303Z",
+    },
+    {
+      id: 34,
+      description: "NBA basketball",
+      sport: "nba",
+      image:
+        "https://polymarket-upload.s3.us-east-2.amazonaws.com/super+cool+basketball+in+red+and+blue+wow.png",
+      resolution: "https://www.nba.com/",
+      ordering: "away",
+      tags: "1,745,100639",
+      series: "10345",
+      createdAt: "2025-11-05T19:27:45.399303Z",
+    },
+    {
+      id: 47,
+      description: "College women basketball",
+      sport: "cwbb",
+      image:
+        "https://polymarket-upload.s3.us-east-2.amazonaws.com/ncaa-c14995df96.png",
+      resolution: "https://www.ncaa.com/sports/basketball-women/d1",
+      ordering: "home",
+      tags: "1,28,100639,102003",
+      series: "10471",
+      createdAt: "2025-11-07T21:09:54.771154Z",
+    },
+    {
+      id: 6,
+      description: "Women basketball",
+      sport: "wnba",
+      image:
+        "https://polymarket-upload.s3.us-east-2.amazonaws.com/wnba-logo-PAR4befDAubM.png",
+      resolution: "https://www.wnba.com/",
+      ordering: "away",
+      tags: "1,100639,100254",
+      series: "10105",
+      createdAt: "2025-11-05T19:27:45.399303Z",
+    },
+    {
+      id: 35,
+      description: "hockey",
+      sport: "nhl",
+      image: "https://polymarket-upload.s3.us-east-2.amazonaws.com/nhl.png",
+      resolution: "https://www.nhl.com/",
+      ordering: "away",
+      tags: "1,899,100639",
+      series: "10346",
+      createdAt: "2025-11-05T19:27:45.399303Z",
+    },
+    {
+      id: 48,
+      description: "UFC",
+      sport: "mma",
+      image: "https://polymarket-upload.s3.us-east-2.amazonaws.com/ufc.png",
+      resolution: "https://www.ufc.com/",
+      ordering: "home",
+      tags: "1,100639",
+      series: "10500",
+      createdAt: "2025-11-07T21:10:21.566359Z",
+    },
+    {
+      id: 2,
+      description: "English Premier League",
+      sport: "epl",
+      image:
+        "https://polymarket-upload.s3.us-east-2.amazonaws.com/Repetitive-markets/premier+league.jpg",
+      resolution: "https://www.premierleague.com/",
+      ordering: "home",
+      tags: "1,82,306,100639,100350",
+      series: "10188",
+      createdAt: "2025-11-05T19:27:45.399303Z",
+    },
+    {
+      id: 3,
+      description: "La liga",
+      sport: "lal",
+      image:
+        "https://polymarket-upload.s3.us-east-2.amazonaws.com/league-lal.png",
+      resolution: "https://www.laliga.com/en-GB",
+      ordering: "home",
+      tags: "1,780,100639,100350",
+      series: "10193",
+      createdAt: "2025-11-05T19:27:45.399303Z",
+    },
+    {
+      id: 13,
+      description: "Champions League",
+      sport: "ucl",
+      image:
+        "https://polymarket-upload.s3.us-east-2.amazonaws.com/champions-league-pic-QIUFsL8vaDdq.png",
+      resolution: "https://www.uefa.com/uefachampionsleague/",
+      ordering: "home",
+      tags: "1,100977,100639,1234,100350",
+      series: "10204",
+      createdAt: "2025-11-05T19:27:45.399303Z",
+    },
+    {
+      id: 33,
+      description: "Major Leauge Soccer",
+      sport: "mls",
+      image:
+        "https://polymarket-upload.s3.us-east-2.amazonaws.com/soccer-ball-d7941ac797.jpg",
+      resolution: "https://www.mls.com/",
+      ordering: "home",
+      tags: "1,100639,100350,100100",
+      series: "10189",
+      createdAt: "2025-11-05T19:27:45.399303Z",
+    },
+    {
+      id: 7,
+      description: "Bundesliga",
+      sport: "bun",
+      image:
+        "https://polymarket-upload.s3.us-east-2.amazonaws.com/league-bun.jpg",
+      resolution: "https://www.bundesliga.com/en/bundesliga",
+      ordering: "home",
+      tags: "1,1494,100639,100350",
+      series: "10194",
+      createdAt: "2025-11-05T19:27:45.399303Z",
+    },
+    {
+      id: 11,
+      description: "Ligue 1",
+      sport: "fl1",
+      image:
+        "https://polymarket-upload.s3.us-east-2.amazonaws.com/league-fl1.png",
+      resolution: "https://ligue1.com/en",
+      ordering: "home",
+      tags: "1,100639,102070,100350",
+      series: "10195",
+      createdAt: "2025-11-05T19:27:45.399303Z",
+    },
+    {
+      id: 12,
+      description: "Series A",
+      sport: "sea",
+      image:
+        "https://polymarket-upload.s3.us-east-2.amazonaws.com/Serie-A-Logo.png",
+      resolution: "https://www.legaseriea.it/en",
+      ordering: "home",
+      tags: "1,100639,101962,100350",
+      series: "10203",
+      createdAt: "2025-11-05T19:27:45.399303Z",
+    },
+    {
+      id: 36,
+      description: "Europa Leauge",
+      sport: "uel",
+      image: "https://polymarket-upload.s3.us-east-2.amazonaws.com/uel.png",
+      resolution: "https://www.uefa.com/uefaeuropaleague/",
+      ordering: "home",
+      tags: "1,100639,101787,100350",
+      series: "10209",
+      createdAt: "2025-11-07T21:03:43.835683Z",
+    },
+    {
+      id: 17,
+      description: "FIFA",
+      sport: "fif",
+      image: "https://polymarket-upload.s3.us-east-2.amazonaws.com/fif.png",
+      resolution: "https://www.fifa.com/en",
+      ordering: "home",
+      tags: "1,100639,100350,102539",
+      series: "10238",
+      createdAt: "2025-11-05T19:27:45.399303Z",
+    },
+  ];
+
+  useEffect(() => {
+    // Set first sport as selected by default
+    if (sports.length > 0 && !selectedSport) {
+      setSelectedSport(sports[0]);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Load markets when a sport is selected
+    if (selectedSport) {
+      loadMarketsForSport(selectedSport);
+    }
+  }, [selectedSport]);
+
+  useEffect(() => {
+    // Debug: Log when markets state changes
+    console.log("Markets state updated:", {
+      markets,
+      type: typeof markets,
+      isArray: Array.isArray(markets),
+      length: Array.isArray(markets) ? markets.length : "N/A",
+      isNull: markets === null,
+      isUndefined: markets === undefined,
+    });
+  }, [markets]);
+
+  const loadMarketsForSport = (sport) => {
+    const cacheKey = sport.id;
+
+    // Check cache first
+    if (marketsCache.current[cacheKey]) {
+      console.log(`Loading markets for ${sport.sport} from cache`);
+      setMarkets(marketsCache.current[cacheKey]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
+    // If not in cache, fetch from API
+    fetchMarketsForSport(sport);
+  };
+
+  const fetchMarketsForSport = async (sport) => {
+    const cacheKey = sport.id;
+
     try {
-      // Check cache first (unless forcing refresh)
-      const cacheKey = selectedFilter;
-      if (!forceRefresh && marketsCache[cacheKey]) {
-        setMarkets(marketsCache[cacheKey]);
-        setLoading(false);
-        setError(null);
-        return;
-      }
-
       setLoading(true);
       setError(null);
 
-      // Build URL based on selected filter
-      // Calculate end date (10 days from now)
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + 10);
-      const endDateMax = endDate.toISOString().split("T")[0]; // Format as YYYY-MM-DD
+      const series_id = sport.series;
+      // Get the first tag from the comma-separated tags string
+      const tag_id = sport.tags.split(",")[0].trim();
 
-      let url;
-      if (selectedFilter === "all") {
-        // For "all", use NBA as default
-        url = `${API_BASE_URL}/api/polymarketSports/nba/events?limit=5&closed=false&endDateMax=${endDateMax}`;
-      } else {
-        // Use the sport-specific endpoint
-        url = `${API_BASE_URL}/api/polymarketSports/${selectedFilter}/events?limit=20&closed=false&endDateMax=${endDateMax}`;
-      }
+      // Properly encode query parameters
+      const params = new URLSearchParams({
+        series_id,
+        tag_id,
+      });
+      const url = `${API_BASE_URL}/api/markets?${params.toString()}`;
+
+      console.log(
+        `Fetching markets for ${sport.sport} (${
+          sport.description || sport.sport
+        })...`
+      );
+      console.log(`URL: ${url}`);
 
       const response = await fetch(url);
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage =
+          errorData.message ||
+          errorData.error ||
+          `Request failed (${response.status})`;
+        console.error(`Error fetching markets for ${sport.sport}:`, {
+          status: response.status,
+          error: errorMessage,
+        });
+        throw new Error(errorMessage);
       }
 
-      const jsonData = await response.json();
+      const data = await response.json();
+      console.log(`Markets response for ${sport.sport}:`, data);
+      console.log(`Response type:`, typeof data);
+      console.log(`Is array:`, Array.isArray(data));
+      console.log(`Is null:`, data === null);
+      console.log(`Is undefined:`, data === undefined);
+      console.log(
+        `Data keys:`,
+        data && typeof data === "object" ? Object.keys(data) : "N/A"
+      );
 
-      // Validate response is an array
-      if (!Array.isArray(jsonData)) {
-        console.warn("Expected array but received:", typeof jsonData);
+      // Handle different response structures
+      let marketsData = data;
+
+      // If response is an object with a data/markets/events property, extract it
+      if (data && typeof data === "object" && !Array.isArray(data)) {
+        if (data.data) {
+          marketsData = data.data;
+          console.log(`Extracted data.data:`, marketsData);
+        } else if (data.markets) {
+          marketsData = data.markets;
+          console.log(`Extracted data.markets:`, marketsData);
+        } else if (data.events) {
+          marketsData = data.events;
+          console.log(`Extracted data.events:`, marketsData);
+        }
+      }
+
+      // Handle null/empty responses
+      if (marketsData === null || marketsData === undefined) {
+        console.warn(`Markets data is null/undefined for ${sport.sport}`);
+        // Cache null to avoid refetching
+        marketsCache.current[cacheKey] = null;
+        setMarkets(null);
+        setError(`No markets found for ${sport.description || sport.sport}`);
+      } else if (Array.isArray(marketsData) && marketsData.length === 0) {
+        console.warn(`Markets array is empty for ${sport.sport}`);
+        // Cache empty array to avoid refetching
+        marketsCache.current[cacheKey] = [];
         setMarkets([]);
-        setError("Invalid response format from server");
-        return;
+      } else {
+        console.log(`Setting markets data:`, {
+          type: typeof marketsData,
+          isArray: Array.isArray(marketsData),
+          length: Array.isArray(marketsData) ? marketsData.length : "N/A",
+          firstItem:
+            Array.isArray(marketsData) && marketsData.length > 0
+              ? marketsData[0]
+              : "N/A",
+        });
+
+        // Store in cache
+        marketsCache.current[cacheKey] = marketsData;
+        setMarkets(marketsData);
+        setError(null);
       }
-
-      // Store in cache
-      marketsCache[cacheKey] = jsonData;
-
-      // Set markets - now expects simplified format: [{id, slug, endDate, line?}, ...]
-      setMarkets(jsonData);
     } catch (err) {
+      console.error(`Error fetching markets for ${sport.sport}:`, err);
       setError(err.message);
-      console.error("Error fetching data:", err);
-      setMarkets([]); // Clear markets on error
     } finally {
       setLoading(false);
     }
   };
-  useEffect(() => {
-    fetchData();
-  }, [selectedFilter]);
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    // Force refresh - bypass cache
-    await fetchData(true);
-    setRefreshing(false);
-  };
-
-  const handleGamePress = (market) => {
-    navigation.navigate("MarketDetail", { game: market });
-  };
-
-  // Handle both single market object and array of markets
-  let marketsArray = [];
-  if (markets) {
-    if (Array.isArray(markets)) {
-      marketsArray = markets;
-    } else if (typeof markets === "object") {
-      // If it's an object, check if it has a markets/games/data property
-      if (markets.markets && Array.isArray(markets.markets)) {
-        marketsArray = markets.markets;
-      } else if (markets.games && Array.isArray(markets.games)) {
-        marketsArray = markets.games;
-      } else if (markets.data && Array.isArray(markets.data)) {
-        marketsArray = markets.data;
-      } else {
-        // Treat the object itself as a single market
-        marketsArray = [markets];
-      }
-    }
-  }
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Fixed Header with Sports Carousel */}
       <View style={styles.header}>
-        <FilterCarousel
-          options={FILTER_OPTIONS}
-          selectedKey={selectedFilter}
-          onSelect={setSelectedFilter}
-        />
+        <Text style={styles.title}>Scoretrade</Text>
+
+        {/* Ticker Carousel */}
+        <Ticker />
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.carousel}
+          contentContainerStyle={styles.carouselContent}
+        >
+          {sports.map((sport) => {
+            const isSelected = selectedSport?.id === sport.id;
+            return (
+              <TouchableOpacity
+                key={sport.id}
+                style={[
+                  styles.sportCard,
+                  isSelected && styles.sportCardSelected,
+                ]}
+                onPress={() => setSelectedSport(sport)}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.sportName,
+                    isSelected && styles.sportNameSelected,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {sport.description || sport.sport}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
-      {error && !loading && (
-        <View style={styles.centerContainer}>
-          <Text style={styles.errorText}>Error: {error}</Text>
-          <Text style={styles.errorDetails}>
-            Make sure the API server is running
-          </Text>
-        </View>
-      )}
-
-      {!error && (
-        <ScrollView
-          ref={scrollViewRef}
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              style={styles.refreshControl}
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-            />
-          }
-        >
-          {loading ? (
-            // Show skeleton loaders while loading
-            Array.from({ length: 4 }).map((_, index) => (
-              <GameCardSkeleton key={`skeleton-${index}`} />
-            ))
-          ) : marketsArray.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No market data available</Text>
-            </View>
-          ) : (
-            // Show actual game cards with fade-in animation
-            marketsArray.map((market, index) => (
-              <AnimatedGameCard
-                key={market.id || market.market_id || market.game_id || index}
-                market={market}
-                onPress={handleGamePress}
-                index={index}
-              />
-            ))
-          )}
-        </ScrollView>
-      )}
+      {/* Scrollable Content Area */}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {loading ? (
+          <View style={styles.centerContainer}>
+            <LottieLoader size="large" />
+          </View>
+        ) : error ? (
+          <View style={styles.centerContainer}>
+            <Text style={styles.errorText}>Error: {error}</Text>
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={() =>
+                selectedSport && fetchMarketsForSport(selectedSport)
+              }
+            >
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : markets !== null && markets !== undefined ? (
+          <View style={styles.content}>
+            {Array.isArray(markets) && markets.length === 0 ? (
+              <View style={styles.centerContainer}>
+                <Text style={styles.emptyText}>
+                  No markets available for{" "}
+                  {selectedSport?.description || selectedSport?.sport}
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.marketsList}>
+                {Array.isArray(markets) ? (
+                  markets.map((market, index) => (
+                    <MarketCard
+                      key={market.id || index}
+                      market={market}
+                      index={index}
+                    />
+                  ))
+                ) : (
+                  <MarketCard market={markets} index={0} />
+                )}
+              </View>
+            )}
+          </View>
+        ) : (
+          <View style={styles.centerContainer}>
+            <Text style={styles.emptyText}>
+              {selectedSport
+                ? `No markets found for ${
+                    selectedSport.description || selectedSport.sport
+                  }`
+                : "Select a sport to view markets"}
+            </Text>
+          </View>
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -275,48 +487,125 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background || "#FFFFFF",
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  header: {
-    paddingHorizontal: Spacing.md,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.sm,
-    backgroundColor: Colors.background || "#FFFFFF",
+    backgroundColor: Colors.background,
   },
   scrollView: {
     flex: 1,
-    marginBottom: 20,
   },
-
   scrollContent: {
-    paddingBottom: Spacing.xl,
+    paddingBottom: Spacing.xxl,
   },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
+  header: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.lg,
+    paddingBottom: Spacing.md,
+    backgroundColor: Colors.background,
+    zIndex: 10,
+  },
+  title: {
+    ...Typography.pageTitle,
+    marginBottom: Spacing.lg,
+  },
+  carousel: {
+    marginHorizontal: -Spacing.lg,
+  },
+  carouselContent: {
+    paddingHorizontal: Spacing.lg,
+    paddingRight: Spacing.xl,
+  },
+  sportCard: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    marginRight: Spacing.md,
     alignItems: "center",
-    paddingVertical: Spacing.xxl,
-    minHeight: 200,
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  sportCardSelected: {
+    borderColor: Colors.primary,
+    borderWidth: 2,
+    backgroundColor: "#FFFFFF",
+  },
+  sportName: {
+    ...Typography.caption,
+    textAlign: "center",
+    color: Colors.textSecondary,
+  },
+  sportNameSelected: {
+    color: "black",
+    fontWeight: "600",
+  },
+  centerContainer: {
+    paddingVertical: Spacing.xxxl,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  content: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.lg,
+  },
+  sectionTitle: {
+    ...Typography.sectionTitle,
+    marginBottom: Spacing.md,
+  },
+  dataContainer: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  marketsList: {},
+  jsonContainer: {
+    marginTop: Spacing.md,
+    maxHeight: 400,
+    backgroundColor: Colors.surfaceAlt,
+    borderRadius: BorderRadius.sm,
+  },
+  jsonContent: {
+    padding: Spacing.sm,
+  },
+  marketCount: {
+    ...Typography.body,
+    color: Colors.primary,
+    marginBottom: Spacing.md,
+    fontWeight: "600",
+  },
+  loadingText: {
+    ...Typography.body,
+    marginTop: Spacing.md,
+    color: Colors.textSecondary,
   },
   errorText: {
-    fontSize: 16,
-    color: "#EF4444",
-    fontWeight: "600",
-    marginBottom: Spacing.sm,
-  },
-  errorDetails: {
-    fontSize: 14,
-    color: Colors.textTertiary || "#6B7280",
+    ...Typography.body,
+    color: Colors.danger,
+    marginBottom: Spacing.md,
     textAlign: "center",
-    paddingHorizontal: Spacing.lg,
+  },
+  retryButton: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    marginTop: Spacing.md,
+  },
+  retryButtonText: {
+    ...Typography.body,
+    color: Colors.textPrimary,
+    fontWeight: "600",
   },
   emptyText: {
-    fontSize: 16,
-    color: Colors.textSecondary || "#374151",
+    ...Typography.body,
+    color: Colors.textTertiary,
+  },
+  dataText: {
+    fontSize: 12,
+    fontFamily: "monospace",
+    color: Colors.textPrimary,
+    lineHeight: 20,
+    flexShrink: 1,
   },
 });
