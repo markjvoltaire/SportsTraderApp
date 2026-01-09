@@ -163,7 +163,7 @@ export default function Ticker({ items = DEFAULT_HEADLINES }) {
 const styles = StyleSheet.create({
   tickerContainer: {
     height: 60,
-    backgroundColor: Colors.surface,
+    backgroundColor: "white",
     overflow: "hidden",
     justifyContent: "center",
   },
@@ -178,7 +178,7 @@ const styles = StyleSheet.create({
   },
   tickerText: {
     ...Typography.body,
-    color: Colors.textPrimary,
+    color: "black",
     fontSize: 14,
     fontWeight: "600",
   },

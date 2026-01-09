@@ -1,10 +1,6 @@
 import React from "react";
 import { StatusBar } from "expo-status-bar";
-import {
-  StyleSheet,
-  View,
-  TouchableOpacity,
-} from "react-native";
+import { StyleSheet, View, TouchableOpacity } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
@@ -118,10 +114,10 @@ function AppNavigator() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: styles.tabBar, // dark theme    backgroundColor: "black",
         tabBarItemStyle: styles.tabItem,
-        tabBarActiveTintColor: "#FFFFFF",
-        tabBarInactiveTintColor: Colors.textTertiary,
+        tabBarActiveTintColor: "black",
+        tabBarInactiveTintColor: "gray",
         tabBarLabelStyle: styles.tabLabel,
       }}
     >
@@ -138,19 +134,7 @@ function AppNavigator() {
           ),
         }}
       />
-      <Tab.Screen
-        name="Portfolio"
-        component={PortfolioScreen}
-        options={{
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? "briefcase" : "briefcase-outline"}
-              size={size}
-              color={color}
-            />
-          ),
-        }}
-      />
+
       {session && (
         <Tab.Screen
           name="Profile"
@@ -207,7 +191,6 @@ export default function App() {
   const CROSSMINT_API_KEY =
     process.env.EXPO_PUBLIC_CROSSMINT_CLIENT_SIDE_API_KEY || "";
 
-
   return (
     // <ErrorBoundary>
     <CrossmintProvider apiKey={CROSSMINT_API_KEY}>
@@ -259,7 +242,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     height: 72,
     borderRadius: 0,
-    backgroundColor: Colors.background,
+    backgroundColor: "white",
     opacity: 1,
     borderTopWidth: 1,
     borderTopColor: Colors.border,

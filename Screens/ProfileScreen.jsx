@@ -107,11 +107,7 @@ export default function ProfileScreen() {
               style={styles.backButton}
               onPress={() => navigation.goBack()}
             >
-              <Ionicons
-                name="chevron-back"
-                size={24}
-                color={Colors.textPrimary}
-              />
+              <Ionicons name="chevron-back" size={24} color="#000000" />
             </TouchableOpacity>
             <Text style={styles.headerUsername}>{displayUsername}</Text>
             <View style={styles.headerSpacer} />
@@ -122,11 +118,7 @@ export default function ProfileScreen() {
             {/* Profile Picture */}
             <View style={styles.profilePictureContainer}>
               <View style={styles.profilePicture}>
-                <Ionicons
-                  name="headset-outline"
-                  size={48}
-                  color={Colors.textPrimary}
-                />
+                <Ionicons name="headset-outline" size={48} color="#000000" />
               </View>
             </View>
 
@@ -166,6 +158,21 @@ export default function ProfileScreen() {
                 <Text style={styles.shareProfileText}>Deposit</Text>
               </TouchableOpacity>
             </View>
+
+            {/* Sign Out Button */}
+            <TouchableOpacity
+              style={styles.signOutButton}
+              onPress={handleLogout}
+              activeOpacity={0.85}
+            >
+              <Ionicons
+                name="log-out-outline"
+                size={16}
+                color={Colors.danger}
+                style={styles.signOutIcon}
+              />
+              <Text style={styles.signOutText}>Sign Out</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Recent Activity Section */}
@@ -196,7 +203,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: "100%",
     height: "100%",
-    backgroundColor: Colors.background,
+    backgroundColor: "#FFFFFF",
   },
   safeArea: {
     flex: 1,
@@ -225,7 +232,7 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: normalizeFont(18),
     fontWeight: "600",
-    color: Colors.textPrimary,
+    color: "#000000",
     flex: 1,
     textAlign: "center",
   },
@@ -244,7 +251,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: Colors.primary,
+    backgroundColor: "#E0E0E0",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -261,19 +268,19 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: normalizeFont(18),
     fontWeight: "600",
-    color: Colors.textPrimary,
+    color: "#000000",
     marginBottom: Spacing.xs,
   },
   statLabel: {
     ...Typography.caption,
     fontSize: normalizeFont(14),
-    color: Colors.textSecondary,
+    color: "#666666",
   },
   username: {
     ...Typography.body,
     fontSize: normalizeFont(18),
     fontWeight: "600",
-    color: Colors.textPrimary,
+    color: "#000000",
     marginBottom: Spacing.lg,
   },
   actionButtonsContainer: {
@@ -293,11 +300,11 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: normalizeFont(16),
     fontWeight: "600",
-    color: Colors.textPrimary,
+    color: "#000000",
   },
   shareProfileButton: {
     flex: 1,
-    backgroundColor: Colors.surface,
+    backgroundColor: "#F5F5F5",
     borderRadius: BorderRadius.md,
     paddingVertical: Spacing.md,
     alignItems: "center",
@@ -307,7 +314,28 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: normalizeFont(16),
     fontWeight: "600",
-    color: Colors.textPrimary,
+    color: "#000000",
+  },
+  signOutButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F5F5F5",
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    marginBottom: Spacing.xl,
+    borderWidth: 1,
+    borderColor: Colors.danger,
+  },
+  signOutIcon: {
+    marginRight: Spacing.sm,
+  },
+  signOutText: {
+    ...Typography.body,
+    fontSize: normalizeFont(16),
+    fontWeight: "600",
+    color: Colors.danger,
   },
   activitySection: {
     paddingHorizontal: Spacing.xl,
@@ -317,7 +345,7 @@ const styles = StyleSheet.create({
     ...Typography.sectionTitle,
     fontSize: normalizeFont(20),
     fontWeight: "600",
-    color: Colors.textPrimary,
+    color: "#000000",
     marginBottom: Spacing.lg,
   },
   emptyStateContainer: {
@@ -378,6 +406,6 @@ const styles = StyleSheet.create({
   emptyStateText: {
     ...Typography.body,
     fontSize: normalizeFont(16),
-    color: Colors.textPrimary,
+    color: "#000000",
   },
 });

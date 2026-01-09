@@ -1,484 +1,532 @@
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import {
   StyleSheet,
   Text,
   View,
   ScrollView,
   TouchableOpacity,
+  ActivityIndicator,
+  Dimensions,
+  Image,
+  Animated,
+  RefreshControl,
 } from "react-native";
-import React, { useEffect, useState, useRef } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
-import API_BASE_URL from "../src/config/api";
-import { Colors, Spacing, Typography, BorderRadius } from "../constants/theme";
-import MarketCard from "../src/components/market/MarketCard";
-import Ticker from "../src/components/ui/Ticker";
-import LottieLoader from "../src/components/ui/LottieLoader";
+
+// Custom Constants & Components
+
+import EventCard from "../src/components/market/EventCard";
+
+const { width } = Dimensions.get("window");
 
 export default function HomeScreen() {
-  const [markets, setMarkets] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [selectedSport, setSelectedSport] = useState(null);
-  // Cache markets by sport ID to avoid refetching
-  const marketsCache = useRef({});
+  const [sportsFilters, setSportsFilters] = useState(null);
+  const [selectedCompetition, setSelectedCompetition] = useState("Trending");
+  const [selectedScope, setSelectedScope] = useState("Games");
+  const [eventsData, setEventsData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Static sports metadata object
-  const sports = [
-    {
-      id: 10,
-      description: "NFL football",
-      sport: "nfl",
-      image: "https://polymarket-upload.s3.us-east-2.amazonaws.com/nfl.png",
-      resolution: "https://www.nfl.com/",
-      ordering: "away",
-      tags: "1,450,100639",
-      series: "10187",
-      createdAt: "2025-11-05T19:27:45.399303Z",
-    },
-    {
-      id: 9,
-      sport: "cfb",
-      image:
-        "https://polymarket-upload.s3.us-east-2.amazonaws.com/espn+college+football+logo.png",
-      resolution: "https://www.ncaa.com/",
-      ordering: "away",
-      tags: "1,100351,100639",
-      series: "10210",
-      createdAt: "2025-11-05T19:27:45.399303Z",
-    },
-    {
-      id: 1,
-      description: "march madness",
-      sport: "ncaab",
-      image:
-        "https://polymarket-upload.s3.us-east-2.amazonaws.com/marchmadness.jpeg",
-      resolution: "https://www.ncaa.com/march-madness-live/bracket",
-      ordering: "home",
-      tags: "1,100149,100639",
-      series: "39",
-      createdAt: "2025-11-05T19:27:45.399303Z",
-    },
-    {
-      id: 4,
-      description: "college basketball",
-      sport: "cbb",
-      image: "https://polymarket-upload.s3.us-east-2.amazonaws.com/ncaab1.png",
-      resolution: "https://www.ncaa.com/",
-      ordering: "away",
-      tags: "1,101178,100639,101954",
-      series: "10470",
-      createdAt: "2025-11-05T19:27:45.399303Z",
-    },
-    {
-      id: 34,
-      description: "NBA basketball",
-      sport: "nba",
-      image:
-        "https://polymarket-upload.s3.us-east-2.amazonaws.com/super+cool+basketball+in+red+and+blue+wow.png",
-      resolution: "https://www.nba.com/",
-      ordering: "away",
-      tags: "1,745,100639",
-      series: "10345",
-      createdAt: "2025-11-05T19:27:45.399303Z",
-    },
-    {
-      id: 47,
-      description: "College women basketball",
-      sport: "cwbb",
-      image:
-        "https://polymarket-upload.s3.us-east-2.amazonaws.com/ncaa-c14995df96.png",
-      resolution: "https://www.ncaa.com/sports/basketball-women/d1",
-      ordering: "home",
-      tags: "1,28,100639,102003",
-      series: "10471",
-      createdAt: "2025-11-07T21:09:54.771154Z",
-    },
-    {
-      id: 6,
-      description: "Women basketball",
-      sport: "wnba",
-      image:
-        "https://polymarket-upload.s3.us-east-2.amazonaws.com/wnba-logo-PAR4befDAubM.png",
-      resolution: "https://www.wnba.com/",
-      ordering: "away",
-      tags: "1,100639,100254",
-      series: "10105",
-      createdAt: "2025-11-05T19:27:45.399303Z",
-    },
-    {
-      id: 35,
-      description: "hockey",
-      sport: "nhl",
-      image: "https://polymarket-upload.s3.us-east-2.amazonaws.com/nhl.png",
-      resolution: "https://www.nhl.com/",
-      ordering: "away",
-      tags: "1,899,100639",
-      series: "10346",
-      createdAt: "2025-11-05T19:27:45.399303Z",
-    },
-    {
-      id: 48,
-      description: "UFC",
-      sport: "mma",
-      image: "https://polymarket-upload.s3.us-east-2.amazonaws.com/ufc.png",
-      resolution: "https://www.ufc.com/",
-      ordering: "home",
-      tags: "1,100639",
-      series: "10500",
-      createdAt: "2025-11-07T21:10:21.566359Z",
-    },
-    {
-      id: 2,
-      description: "English Premier League",
-      sport: "epl",
-      image:
-        "https://polymarket-upload.s3.us-east-2.amazonaws.com/Repetitive-markets/premier+league.jpg",
-      resolution: "https://www.premierleague.com/",
-      ordering: "home",
-      tags: "1,82,306,100639,100350",
-      series: "10188",
-      createdAt: "2025-11-05T19:27:45.399303Z",
-    },
-    {
-      id: 3,
-      description: "La liga",
-      sport: "lal",
-      image:
-        "https://polymarket-upload.s3.us-east-2.amazonaws.com/league-lal.png",
-      resolution: "https://www.laliga.com/en-GB",
-      ordering: "home",
-      tags: "1,780,100639,100350",
-      series: "10193",
-      createdAt: "2025-11-05T19:27:45.399303Z",
-    },
-    {
-      id: 13,
-      description: "Champions League",
-      sport: "ucl",
-      image:
-        "https://polymarket-upload.s3.us-east-2.amazonaws.com/champions-league-pic-QIUFsL8vaDdq.png",
-      resolution: "https://www.uefa.com/uefachampionsleague/",
-      ordering: "home",
-      tags: "1,100977,100639,1234,100350",
-      series: "10204",
-      createdAt: "2025-11-05T19:27:45.399303Z",
-    },
-    {
-      id: 33,
-      description: "Major Leauge Soccer",
-      sport: "mls",
-      image:
-        "https://polymarket-upload.s3.us-east-2.amazonaws.com/soccer-ball-d7941ac797.jpg",
-      resolution: "https://www.mls.com/",
-      ordering: "home",
-      tags: "1,100639,100350,100100",
-      series: "10189",
-      createdAt: "2025-11-05T19:27:45.399303Z",
-    },
-    {
-      id: 7,
-      description: "Bundesliga",
-      sport: "bun",
-      image:
-        "https://polymarket-upload.s3.us-east-2.amazonaws.com/league-bun.jpg",
-      resolution: "https://www.bundesliga.com/en/bundesliga",
-      ordering: "home",
-      tags: "1,1494,100639,100350",
-      series: "10194",
-      createdAt: "2025-11-05T19:27:45.399303Z",
-    },
-    {
-      id: 11,
-      description: "Ligue 1",
-      sport: "fl1",
-      image:
-        "https://polymarket-upload.s3.us-east-2.amazonaws.com/league-fl1.png",
-      resolution: "https://ligue1.com/en",
-      ordering: "home",
-      tags: "1,100639,102070,100350",
-      series: "10195",
-      createdAt: "2025-11-05T19:27:45.399303Z",
-    },
-    {
-      id: 12,
-      description: "Series A",
-      sport: "sea",
-      image:
-        "https://polymarket-upload.s3.us-east-2.amazonaws.com/Serie-A-Logo.png",
-      resolution: "https://www.legaseriea.it/en",
-      ordering: "home",
-      tags: "1,100639,101962,100350",
-      series: "10203",
-      createdAt: "2025-11-05T19:27:45.399303Z",
-    },
-    {
-      id: 36,
-      description: "Europa Leauge",
-      sport: "uel",
-      image: "https://polymarket-upload.s3.us-east-2.amazonaws.com/uel.png",
-      resolution: "https://www.uefa.com/uefaeuropaleague/",
-      ordering: "home",
-      tags: "1,100639,101787,100350",
-      series: "10209",
-      createdAt: "2025-11-07T21:03:43.835683Z",
-    },
-    {
-      id: 17,
-      description: "FIFA",
-      sport: "fif",
-      image: "https://polymarket-upload.s3.us-east-2.amazonaws.com/fif.png",
-      resolution: "https://www.fifa.com/en",
-      ordering: "home",
-      tags: "1,100639,100350,102539",
-      series: "10238",
-      createdAt: "2025-11-05T19:27:45.399303Z",
-    },
-  ];
+  // Cache for API responses
+  const eventsCache = useRef(new Map());
 
+  // Animation values
+  const eventsOpacity = useRef(new Animated.Value(0)).current;
+  const eventsTranslateY = useRef(new Animated.Value(20)).current;
+
+  // Create flattened competitions list - filtered to only include desired competitions
+  const flattenedCompetitions = useMemo(() => {
+    if (!sportsFilters) return [];
+
+    // Competition mapping: API name -> Display name
+    const competitionMapping = {
+      Trending: "Trending",
+      "Pro Football": "NFL",
+      "Pro Baseball": "MLB",
+      "Pro Basketball (M)": "NBA",
+      "College Football": "COLLEGE FB",
+      "College Football Playoffs": "CFP",
+      "College Basketball (M)": "COLLEGE BB (M)",
+      "College Basketball (W)": "COLLEGE BB (W)",
+      EPL: "EPL",
+      "La Liga": "LA LIGA",
+      "Ligue 1": "LIGUE 1",
+      Bundesliga: "BUNDESLIGA",
+      UFC: "UFC",
+      "FIFA World Cup": "WORLD CUP",
+      "Serie A": "SERIE A",
+      UCL: "UCL",
+    };
+
+    const allowedCompetitions = Object.keys(competitionMapping);
+
+    const competitions = [];
+
+    // Add "Trending" as a special case (not from API)
+    competitions.push({
+      name: "Trending",
+      displayName: "Trending",
+      sport: "Special",
+      scopes: ["Games", "Futures", "Events"],
+    });
+
+    // Add competitions from the API response
+    Object.entries(sportsFilters.filtersBySports).forEach(
+      ([sportName, sportData]) => {
+        if (sportName === "All sports") return;
+
+        Object.keys(sportData.competitions || {}).forEach((competitionName) => {
+          // Only include competitions that are in our allowed list (excluding Trending which we added above)
+          if (
+            allowedCompetitions.includes(competitionName) &&
+            competitionName !== "Trending"
+          ) {
+            // Override scopes for specific competitions
+            let competitionScopes =
+              sportData.competitions[competitionName].scopes || [];
+            if (competitionName === "UFC") {
+              competitionScopes = ["Fights"]; // Override UFC to use "Fights" instead of "Games"
+            } else if (competitionName === "Pro Football") {
+              // Filter out Receiving yards and Rushing yards from NFL scopes
+              const hiddenNFLScopes = new Set([
+                "receiving yards",
+                "rushing yards",
+              ]);
+              competitionScopes = competitionScopes.filter((scope) => {
+                const normalized = String(scope || "")
+                  .trim()
+                  .toLowerCase();
+                return !hiddenNFLScopes.has(normalized);
+              });
+            }
+
+            competitions.push({
+              name: competitionName,
+              displayName: competitionMapping[competitionName],
+              sport: sportName,
+              scopes: competitionScopes,
+            });
+          }
+        });
+      }
+    );
+
+    // Define custom order priority (lower number = higher priority)
+    const competitionOrder = {
+      Trending: 1,
+      NFL: 2,
+      NBA: 3,
+      MLB: 4,
+      EPL: 5,
+      "LA LIGA": 6,
+      CFP: 8,
+      "COLLEGE FB": 7,
+      "COLLEGE BB (M)": 9,
+      "COLLEGE BB (W)": 10,
+      "LIGUE 1": 11,
+      BUNDESLIGA: 12,
+      UFC: 13,
+      "WORLD CUP": 14,
+      "SERIE A": 15,
+      UCL: 16,
+    };
+
+    // Sort competitions by custom order, then alphabetically as fallback
+    competitions.sort((a, b) => {
+      const orderA = competitionOrder[a.displayName] || 999;
+      const orderB = competitionOrder[b.displayName] || 999;
+
+      if (orderA !== orderB) {
+        return orderA - orderB; // Lower number = higher priority
+      }
+
+      // If same priority, sort alphabetically
+      return a.displayName.localeCompare(b.displayName);
+    });
+
+    return competitions;
+  }, [sportsFilters]);
+
+  // 1. Fetch Sports Filters on Mount
   useEffect(() => {
-    // Set first sport as selected by default
-    if (sports.length > 0 && !selectedSport) {
-      setSelectedSport(sports[0]);
-    }
+    const fetchSportsFilters = async () => {
+      try {
+        const response = await fetch(
+          "http://localhost:3000/api/sports-filters"
+        );
+        const data = await response.json();
+        setSportsFilters(data);
+      } catch (error) {
+        console.error("Error fetching sports filters:", error);
+      }
+    };
+    fetchSportsFilters();
   }, []);
 
+  // 2. Fetch Events when sport changes (for Games, Fights, Futures, Awards, Draft, and Events scopes)
   useEffect(() => {
-    // Load markets when a sport is selected
-    if (selectedSport) {
-      loadMarketsForSport(selectedSport);
-    }
-  }, [selectedSport]);
-
-  useEffect(() => {
-    // Debug: Log when markets state changes
-    console.log("Markets state updated:", {
-      markets,
-      type: typeof markets,
-      isArray: Array.isArray(markets),
-      length: Array.isArray(markets) ? markets.length : "N/A",
-      isNull: markets === null,
-      isUndefined: markets === undefined,
-    });
-  }, [markets]);
-
-  const loadMarketsForSport = (sport) => {
-    const cacheKey = sport.id;
-
-    // Check cache first
-    if (marketsCache.current[cacheKey]) {
-      console.log(`Loading markets for ${sport.sport} from cache`);
-      setMarkets(marketsCache.current[cacheKey]);
-      setError(null);
+    // Only fetch data for Games, Fights, Futures, Awards, Draft, and Events scopes
+    if (
+      selectedScope !== "Games" &&
+      selectedScope !== "Fights" &&
+      selectedScope !== "Futures" &&
+      selectedScope !== "Awards" &&
+      selectedScope !== "Draft" &&
+      selectedScope !== "Events"
+    ) {
       setLoading(false);
       return;
     }
 
-    // If not in cache, fetch from API
-    fetchMarketsForSport(sport);
-  };
-
-  const fetchMarketsForSport = async (sport) => {
-    const cacheKey = sport.id;
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      const series_id = sport.series;
-      // Get the first tag from the comma-separated tags string
-      const tag_id = sport.tags.split(",")[0].trim();
-
-      // Properly encode query parameters
-      const params = new URLSearchParams({
-        series_id,
-        tag_id,
-      });
-      const url = `${API_BASE_URL}/api/markets?${params.toString()}`;
-
-      console.log(
-        `Fetching markets for ${sport.sport} (${
-          sport.description || sport.sport
-        })...`
-      );
-      console.log(`URL: ${url}`);
-
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage =
-          errorData.message ||
-          errorData.error ||
-          `Request failed (${response.status})`;
-        console.error(`Error fetching markets for ${sport.sport}:`, {
-          status: response.status,
-          error: errorMessage,
-        });
-        throw new Error(errorMessage);
-      }
-
-      const data = await response.json();
-      console.log(`Markets response for ${sport.sport}:`, data);
-      console.log(`Response type:`, typeof data);
-      console.log(`Is array:`, Array.isArray(data));
-      console.log(`Is null:`, data === null);
-      console.log(`Is undefined:`, data === undefined);
-      console.log(
-        `Data keys:`,
-        data && typeof data === "object" ? Object.keys(data) : "N/A"
-      );
-
-      // Handle different response structures
-      let marketsData = data;
-
-      // If response is an object with a data/markets/events property, extract it
-      if (data && typeof data === "object" && !Array.isArray(data)) {
-        if (data.data) {
-          marketsData = data.data;
-          console.log(`Extracted data.data:`, marketsData);
-        } else if (data.markets) {
-          marketsData = data.markets;
-          console.log(`Extracted data.markets:`, marketsData);
-        } else if (data.events) {
-          marketsData = data.events;
-          console.log(`Extracted data.events:`, marketsData);
-        }
-      }
-
-      // Handle null/empty responses
-      if (marketsData === null || marketsData === undefined) {
-        console.warn(`Markets data is null/undefined for ${sport.sport}`);
-        // Cache null to avoid refetching
-        marketsCache.current[cacheKey] = null;
-        setMarkets(null);
-        setError(`No markets found for ${sport.description || sport.sport}`);
-      } else if (Array.isArray(marketsData) && marketsData.length === 0) {
-        console.warn(`Markets array is empty for ${sport.sport}`);
-        // Cache empty array to avoid refetching
-        marketsCache.current[cacheKey] = [];
-        setMarkets([]);
+    const fetchEventsData = async (forceRefresh = false) => {
+      if (!forceRefresh) {
+        setLoading(true);
       } else {
-        console.log(`Setting markets data:`, {
-          type: typeof marketsData,
-          isArray: Array.isArray(marketsData),
-          length: Array.isArray(marketsData) ? marketsData.length : "N/A",
-          firstItem:
-            Array.isArray(marketsData) && marketsData.length > 0
-              ? marketsData[0]
-              : "N/A",
-        });
-
-        // Store in cache
-        marketsCache.current[cacheKey] = marketsData;
-        setMarkets(marketsData);
-        setError(null);
+        setRefreshing(true);
       }
-    } catch (err) {
-      console.error(`Error fetching markets for ${sport.sport}:`, err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+
+      try {
+        // Create cache key
+        const cacheKey = `${selectedCompetition}-${selectedScope}`;
+
+        // Check cache first (unless forcing refresh)
+        if (!forceRefresh && eventsCache.current.has(cacheKey)) {
+          console.log(`Using cached data for: ${cacheKey}`);
+          setEventsData(eventsCache.current.get(cacheKey));
+          return;
+        }
+
+        // Dynamic route selection for games, fights, and futures
+        let url = "http://localhost:3000/api/events"; // Default fallback
+
+        // Hit specific routes when scope is "Games", "Fights", "Futures", "Awards", "Draft", or "Events"
+        if (
+          selectedScope === "Games" ||
+          selectedScope === "Fights" ||
+          selectedScope === "Futures" ||
+          selectedScope === "Awards" ||
+          selectedScope === "Draft" ||
+          selectedScope === "Events"
+        ) {
+          const routeMap = {
+            // American Sports
+            "Pro Football": "/api/current-events/nfl",
+            "Pro Baseball": "/api/games/mlb",
+            "Pro Basketball (M)": "/api/games/nba",
+
+            // College Sports
+            "College Football": "/api/games/ncaaf",
+            "College Football Playoffs": "/api/games/ncaaf",
+            "College Basketball (M)": "/api/games/ncaamb",
+            "College Basketball (W)": "/api/games/ncaawb",
+
+            // Soccer Leagues (from your backend)
+            EPL: "/api/games/epl",
+            "La Liga": "/api/games/laliga",
+            "Serie A": "/api/games/seriea",
+            UCL: "/api/games/ucl",
+            Bundesliga: "/api/games/bundesliga",
+            "Ligue 1": "/api/games/ligue1",
+            Eredivisie: "/api/games/eredivisie",
+            AFCON: "/api/games/afcon",
+            "EFL Championship": "/api/games/efl-championship",
+            "Scottish Premiership": "/api/games/scottish-prem",
+            "Saudi Pro League": "/api/games/saudi-pl",
+            "Liga Portugal": "/api/games/liga-portugal",
+            "FA Cup": "/api/games/fa-cup",
+            "Liga MX": "/api/games/liga-mx",
+            "Brasileiro Serie A": "/api/games/brasileiro",
+            "Australian A League": "/api/games/a-league",
+            "Taca de Portugal": "/api/games/taca-portugal",
+
+            // UFC uses MMA fights route
+            UFC: "/api/games/MMA",
+
+            // The following competitions don't have specific game routes in your backend
+            // They will fall back to the general /api/events endpoint
+            // "Ligue 1": no specific route
+            // "UFC": no specific route
+            // "FIFA World Cup": no specific route
+            // "Trending": handled separately above
+          };
+
+          // Handle Futures and Awards scopes specifically
+          if (selectedScope === "Futures") {
+            // Specific futures routes
+            const futuresRouteMap = {
+              "Pro Football": "/api/futures/nfl", // NFL Futures
+            };
+
+            const futuresRoute = futuresRouteMap[selectedCompetition];
+            if (futuresRoute) {
+              url = `http://localhost:3000${futuresRoute}`;
+            }
+          } else if (selectedScope === "Awards") {
+            // Specific awards routes
+            const awardsRouteMap = {
+              "Pro Football": "/api/awards/nfl", // NFL Awards
+            };
+
+            const awardsRoute = awardsRouteMap[selectedCompetition];
+            if (awardsRoute) {
+              url = `http://localhost:3000${awardsRoute}`;
+            }
+          } else if (selectedScope === "Draft") {
+            // Specific draft routes
+            const draftRouteMap = {
+              "Pro Football": "/api/draft/nfl", // NFL Draft
+            };
+
+            const draftRoute = draftRouteMap[selectedCompetition];
+            if (draftRoute) {
+              url = `http://localhost:3000${draftRoute}`;
+            }
+          } else {
+            // Handle Games and Fights scopes
+            // Find the matching route for the current competition
+            const route = routeMap[selectedCompetition];
+            if (route) {
+              url = `http://localhost:3000${route}`;
+            }
+          }
+        }
+
+        console.log(
+          `${
+            forceRefresh ? "Refreshing" : "Fetching"
+          } from: ${url} (Competition: ${selectedCompetition}, Scope: ${selectedScope})`
+        );
+
+        const response = await fetch(url);
+        const data = await response.json();
+
+        // Cache the response
+        eventsCache.current.set(cacheKey, data);
+        setEventsData(data);
+      } catch (error) {
+        console.error("Error fetching events data:", error);
+        // Fallback to general events if specific route fails
+        try {
+          const fallbackResponse = await fetch(
+            "http://localhost:3000/api/events"
+          );
+          const fallbackData = await fallbackResponse.json();
+
+          // Cache fallback data too
+          const cacheKey = `${selectedCompetition}-${selectedScope}`;
+          eventsCache.current.set(cacheKey, fallbackData);
+          setEventsData(fallbackData);
+        } catch (fallbackError) {
+          console.error("Fallback also failed:", fallbackError);
+        }
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    };
+
+    fetchEventsData();
+  }, [selectedCompetition, selectedScope]);
+
+  // Handle pull-to-refresh
+  const handleRefresh = () => {
+    console.log("Refreshing markets...");
   };
+
+  // Animate events list when data loads
+  useEffect(() => {
+    if (!loading && eventsData) {
+      // Reset animation values
+      eventsOpacity.setValue(0);
+      eventsTranslateY.setValue(20);
+
+      // Start animation
+      Animated.parallel([
+        Animated.timing(eventsOpacity, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(eventsTranslateY, {
+          toValue: 0,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [eventsData, loading, eventsOpacity, eventsTranslateY]);
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Fixed Header with Sports Carousel */}
+    <SafeAreaView style={styles.container} edges={["top"]}>
+      {/* HEADER SECTION (Static) */}
       <View style={styles.header}>
-        <Text style={styles.title}>Scoretrade</Text>
-
-        {/* Ticker Carousel */}
-        <Ticker />
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.carousel}
-          contentContainerStyle={styles.carouselContent}
-        >
-          {sports.map((sport) => {
-            const isSelected = selectedSport?.id === sport.id;
-            return (
-              <TouchableOpacity
-                key={sport.id}
-                style={[
-                  styles.sportCard,
-                  isSelected && styles.sportCardSelected,
-                ]}
-                onPress={() => setSelectedSport(sport)}
-                activeOpacity={0.7}
-              >
-                <Text
-                  style={[
-                    styles.sportName,
-                    isSelected && styles.sportNameSelected,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {sport.description || sport.sport}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        <Image
+          source={require("../assets/images/ScoretradeWhite.png")}
+          style={styles.titleImage}
+          resizeMode="contain"
+        />
+        {/* <View style={styles.tickerWrapper}>
+          <Ticker />
+        </View> */}
       </View>
 
-      {/* Scrollable Content Area */}
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {loading ? (
-          <View style={styles.centerContainer}>
-            <LottieLoader size="large" />
-          </View>
-        ) : error ? (
-          <View style={styles.centerContainer}>
-            <Text style={styles.errorText}>Error: {error}</Text>
-            <TouchableOpacity
-              style={styles.retryButton}
-              onPress={() =>
-                selectedSport && fetchMarketsForSport(selectedSport)
-              }
-            >
-              <Text style={styles.retryButtonText}>Retry</Text>
-            </TouchableOpacity>
-          </View>
-        ) : markets !== null && markets !== undefined ? (
-          <View style={styles.content}>
-            {Array.isArray(markets) && markets.length === 0 ? (
-              <View style={styles.centerContainer}>
-                <Text style={styles.emptyText}>
-                  No markets available for{" "}
-                  {selectedSport?.description || selectedSport?.sport}
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.marketsList}>
-                {Array.isArray(markets) ? (
-                  markets.map((market, index) => (
-                    <MarketCard
-                      key={market.id || index}
-                      market={market}
-                      index={index}
-                    />
-                  ))
-                ) : (
-                  <MarketCard market={markets} index={0} />
-                )}
-              </View>
-            )}
-          </View>
-        ) : (
-          <View style={styles.centerContainer}>
-            <Text style={styles.emptyText}>
-              {selectedSport
-                ? `No markets found for ${
-                    selectedSport.description || selectedSport.sport
-                  }`
-                : "Select a sport to view markets"}
-            </Text>
+      {/* STICKY FILTERS SECTION (Fixed position) */}
+      <View style={styles.filterSection}>
+        {/* Competitions Horizontal List */}
+        {flattenedCompetitions.length > 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.sportsCarouselContent}
+          >
+            {flattenedCompetitions.map((competition) => {
+              const isSelected = selectedCompetition === competition.name;
+              return (
+                <TouchableOpacity
+                  key={competition.name}
+                  style={[
+                    styles.sportCard,
+                    isSelected && styles.sportCardSelected,
+                  ]}
+                  onPress={() => {
+                    setSelectedCompetition(competition.name);
+                    // Auto-select the first available scope for this competition
+                    const firstScope = competition.scopes?.[0] || null;
+                    setSelectedScope(firstScope);
+                    console.log("Selected Competition:", competition.name);
+                    console.log("Selected Scope:", firstScope);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.sportName,
+                      isSelected && styles.sportNameSelected,
+                    ]}
+                  >
+                    {competition.displayName}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
+
+        {/* Scopes Chips (Sub-filters) */}
+        {selectedCompetition && (
+          <View style={styles.scopesWrapper}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {flattenedCompetitions
+                .find((comp) => comp.name === selectedCompetition)
+                ?.scopes?.filter((scope) => {
+                  const normalized = String(scope || "")
+                    .trim()
+                    .toLowerCase();
+                  return (
+                    normalized !== "receiving yards" &&
+                    normalized !== "rushing yards"
+                  );
+                })
+                .map((scope) => {
+                  const isSelected = selectedScope === scope;
+                  return (
+                    <TouchableOpacity
+                      key={scope}
+                      style={[
+                        styles.scopeChip,
+                        isSelected && styles.scopeChipSelected,
+                      ]}
+                      onPress={() => {
+                        setSelectedScope(isSelected ? null : scope);
+                        console.log(
+                          "Selected Competition:",
+                          selectedCompetition
+                        );
+                        console.log(
+                          "Selected Scope:",
+                          isSelected ? null : scope
+                        );
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.scopeText,
+                          isSelected && styles.scopeTextSelected,
+                        ]}
+                      >
+                        {scope}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+            </ScrollView>
           </View>
         )}
+      </View>
+
+      {/* EVENTS LIST SECTION (Scrollable with Refresh) */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.eventsScrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={["#000"]}
+            tintColor="#000"
+            title="Refreshing markets..."
+            titleColor="#666"
+          />
+        }
+      >
+        <Animated.View
+          style={[
+            styles.eventsContainer,
+            {
+              opacity: eventsOpacity,
+              transform: [{ translateY: eventsTranslateY }],
+            },
+          ]}
+        >
+          {selectedScope === "Games" ||
+          selectedScope === "Fights" ||
+          selectedScope === "Futures" ||
+          selectedScope === "Awards" ||
+          selectedScope === "Draft" ||
+          selectedScope === "Events" ? (
+            loading ? (
+              <View style={styles.loaderContainer}>
+                <ActivityIndicator size="large" color="#000" />
+                <Text style={styles.loadingText}>Loading Markets...</Text>
+              </View>
+            ) : (
+              eventsData?.events?.map((event, index) => (
+                <EventCard key={event.ticker || index} event={event} />
+              ))
+            )
+          ) : (
+            <View style={styles.comingSoonContainer}>
+              <Text style={styles.comingSoonText}>Markets coming soon</Text>
+              <Text style={styles.comingSoonSubtext}>
+                We're working on bringing you {selectedScope.toLowerCase()}{" "}
+                markets for {selectedCompetition}.
+              </Text>
+            </View>
+          )}
+
+          {/* Empty State - show for Games, Fights, Futures, Awards, Draft, and Events scopes */}
+          {(selectedScope === "Games" ||
+            selectedScope === "Fights" ||
+            selectedScope === "Futures" ||
+            selectedScope === "Awards" ||
+            selectedScope === "Draft" ||
+            selectedScope === "Events") &&
+            !loading &&
+            (!eventsData?.events || eventsData.events.length === 0) && (
+              <Text style={styles.emptyText}>
+                No active markets for this selection.
+              </Text>
+            )}
+        </Animated.View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -487,125 +535,122 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: Spacing.xxl,
-  },
-  header: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.lg,
-    paddingBottom: Spacing.md,
-    backgroundColor: Colors.background,
-    zIndex: 10,
-  },
-  title: {
-    ...Typography.pageTitle,
-    marginBottom: Spacing.lg,
-  },
-  carousel: {
-    marginHorizontal: -Spacing.lg,
-  },
-  carouselContent: {
-    paddingHorizontal: Spacing.lg,
-    paddingRight: Spacing.xl,
-  },
-  sportCard: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    marginRight: Spacing.md,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  sportCardSelected: {
-    borderColor: Colors.primary,
-    borderWidth: 2,
     backgroundColor: "#FFFFFF",
   },
+  header: {
+    paddingHorizontal: 15,
+
+    backgroundColor: "#FFFFFF",
+  },
+  titleImage: {
+    width: 120,
+    height: 40,
+    marginBottom: 1,
+    right: 30,
+  },
+  tickerWrapper: {
+    marginTop: 15,
+    marginBottom: 5,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
+  eventsScrollContent: {
+    flexGrow: 1,
+    paddingBottom: 100,
+  },
+  filterSection: {
+    backgroundColor: "#FFFFFF",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  sportsCarouselContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 5,
+  },
+  sportCard: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    backgroundColor: "#F5F5F5",
+    borderRadius: 25,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+  },
+  sportCardSelected: {
+    backgroundColor: "#000000",
+    borderColor: "#000000",
+  },
   sportName: {
-    ...Typography.caption,
-    textAlign: "center",
-    color: Colors.textSecondary,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
   },
   sportNameSelected: {
-    color: "black",
-    fontWeight: "600",
+    color: "#FFFFFF",
   },
-  centerContainer: {
-    paddingVertical: Spacing.xxxl,
-    alignItems: "center",
-    justifyContent: "center",
+  scopesWrapper: {
+    marginTop: 12,
+    paddingHorizontal: 20,
   },
-  content: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.lg,
-  },
-  sectionTitle: {
-    ...Typography.sectionTitle,
-    marginBottom: Spacing.md,
-  },
-  dataContainer: {
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.lg,
+  scopeChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#F8F8F8",
+    marginRight: 8,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: "#EEE",
   },
-  marketsList: {},
-  jsonContainer: {
-    marginTop: Spacing.md,
-    maxHeight: 400,
-    backgroundColor: Colors.surfaceAlt,
-    borderRadius: BorderRadius.sm,
+  scopeChipSelected: {
+    borderColor: "#666",
   },
-  jsonContent: {
-    padding: Spacing.sm,
+  scopeText: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#444",
   },
-  marketCount: {
-    ...Typography.body,
-    color: Colors.primary,
-    marginBottom: Spacing.md,
-    fontWeight: "600",
+  scopeTextSelected: {
+    color: "#000",
+    fontWeight: "700",
+  },
+  eventsContainer: {
+    padding: 20,
+    flex: 1,
+  },
+  loaderContainer: {
+    marginTop: 60,
+    alignItems: "center",
   },
   loadingText: {
-    ...Typography.body,
-    marginTop: Spacing.md,
-    color: Colors.textSecondary,
-  },
-  errorText: {
-    ...Typography.body,
-    color: Colors.danger,
-    marginBottom: Spacing.md,
-    textAlign: "center",
-  },
-  retryButton: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.md,
-    marginTop: Spacing.md,
-  },
-  retryButtonText: {
-    ...Typography.body,
-    color: Colors.textPrimary,
-    fontWeight: "600",
+    marginTop: 10,
+    color: "#666",
+    fontSize: 14,
   },
   emptyText: {
-    ...Typography.body,
-    color: Colors.textTertiary,
+    textAlign: "center",
+    marginTop: 40,
+    color: "#999",
+    fontSize: 16,
   },
-  dataText: {
-    fontSize: 12,
-    fontFamily: "monospace",
-    color: Colors.textPrimary,
-    lineHeight: 20,
-    flexShrink: 1,
+  comingSoonContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+    paddingHorizontal: 20,
+  },
+  comingSoonText: {
+    fontSize: 24,
+    fontWeight: "600",
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  comingSoonSubtext: {
+    fontSize: 16,
+    color: "#999",
+    textAlign: "center",
+    lineHeight: 22,
   },
 });

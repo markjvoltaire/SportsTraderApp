@@ -128,8 +128,6 @@ export default function ChartScreen() {
 
   const market = route.params?.game || route.params?.market || null;
 
-  console.log("market", market);
-
   // Animation values for team blocks sliding in
   const awayTeamTranslateX = useSharedValue(-200);
   const homeTeamTranslateX = useSharedValue(200);
