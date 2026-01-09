@@ -27,6 +27,37 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  const isDataBackedScope = useMemo(
+    () =>
+      ["Games", "Fights", "Futures", "Awards", "Draft", "Events"].includes(
+        selectedScope
+      ),
+    [selectedScope]
+  );
+
+  const eventsList = useMemo(() => {
+    if (!eventsData) return [];
+    if (Array.isArray(eventsData)) return eventsData;
+    if (Array.isArray(eventsData.events)) return eventsData.events;
+    if (Array.isArray(eventsData.data)) return eventsData.data;
+    if (Array.isArray(eventsData.currentEvents))
+      return eventsData.currentEvents;
+    return [];
+  }, [eventsData]);
+
+  const shouldHideScopeForCompetition = (competitionName, scope) => {
+    // Only hide these scopes on NFL ("Pro Football")
+    if (competitionName !== "Pro Football") return false;
+    const normalized = String(scope || "")
+      .trim()
+      .toLowerCase();
+    return (
+      normalized === "receiving yards" ||
+      normalized === "rushing yards" ||
+      normalized === "rushing"
+    );
+  };
+
   // Cache for API responses
   const eventsCache = useRef(new Map());
 
@@ -87,17 +118,11 @@ export default function HomeScreen() {
             if (competitionName === "UFC") {
               competitionScopes = ["Fights"]; // Override UFC to use "Fights" instead of "Games"
             } else if (competitionName === "Pro Football") {
-              // Filter out Receiving yards and Rushing yards from NFL scopes
-              const hiddenNFLScopes = new Set([
-                "receiving yards",
-                "rushing yards",
-              ]);
-              competitionScopes = competitionScopes.filter((scope) => {
-                const normalized = String(scope || "")
-                  .trim()
-                  .toLowerCase();
-                return !hiddenNFLScopes.has(normalized);
-              });
+              // Hide Receiving Yards / Rushing scopes on NFL
+              competitionScopes = competitionScopes.filter(
+                (scope) =>
+                  !shouldHideScopeForCompetition(competitionName, scope)
+              );
             }
 
             competitions.push({
@@ -163,9 +188,9 @@ export default function HomeScreen() {
     fetchSportsFilters();
   }, []);
 
-  // 2. Fetch Events when sport changes (for Games, Fights, Futures, Awards, Draft, and Events scopes)
+  // 2. Fetch Events when sport/scope changes
   useEffect(() => {
-    // Only fetch data for Games, Fights, Futures, Awards, Draft, and Events scopes
+    // Only fetch data for known scopes that have routes
     if (
       selectedScope !== "Games" &&
       selectedScope !== "Fights" &&
@@ -199,7 +224,7 @@ export default function HomeScreen() {
         // Dynamic route selection for games, fights, and futures
         let url = "http://localhost:3000/api/events"; // Default fallback
 
-        // Hit specific routes when scope is "Games", "Fights", "Futures", "Awards", "Draft", or "Events"
+        // Hit specific routes when scope is one we support
         if (
           selectedScope === "Games" ||
           selectedScope === "Fights" ||
@@ -210,7 +235,7 @@ export default function HomeScreen() {
         ) {
           const routeMap = {
             // American Sports
-            "Pro Football": "/api/current-events/nfl",
+            "Pro Football": "/api/games/nfl",
             "Pro Baseball": "/api/games/mlb",
             "Pro Basketball (M)": "/api/games/nba",
 
@@ -280,6 +305,17 @@ export default function HomeScreen() {
             const draftRoute = draftRouteMap[selectedCompetition];
             if (draftRoute) {
               url = `http://localhost:3000${draftRoute}`;
+            }
+          } else if (selectedScope === "Events") {
+            // Current events routes
+            const currentEventsRouteMap = {
+              "Pro Football": "/api/current-events/nfl",
+            };
+
+            const currentEventsRoute =
+              currentEventsRouteMap[selectedCompetition];
+            if (currentEventsRoute) {
+              url = `http://localhost:3000${currentEventsRoute}`;
             }
           } else {
             // Handle Games and Fights scopes
@@ -417,15 +453,10 @@ export default function HomeScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               {flattenedCompetitions
                 .find((comp) => comp.name === selectedCompetition)
-                ?.scopes?.filter((scope) => {
-                  const normalized = String(scope || "")
-                    .trim()
-                    .toLowerCase();
-                  return (
-                    normalized !== "receiving yards" &&
-                    normalized !== "rushing yards"
-                  );
-                })
+                ?.scopes?.filter(
+                  (scope) =>
+                    !shouldHideScopeForCompetition(selectedCompetition, scope)
+                )
                 .map((scope) => {
                   const isSelected = selectedScope === scope;
                   return (
@@ -487,19 +518,14 @@ export default function HomeScreen() {
             },
           ]}
         >
-          {selectedScope === "Games" ||
-          selectedScope === "Fights" ||
-          selectedScope === "Futures" ||
-          selectedScope === "Awards" ||
-          selectedScope === "Draft" ||
-          selectedScope === "Events" ? (
+          {isDataBackedScope ? (
             loading ? (
               <View style={styles.loaderContainer}>
                 <ActivityIndicator size="large" color="#000" />
                 <Text style={styles.loadingText}>Loading Markets...</Text>
               </View>
             ) : (
-              eventsData?.events?.map((event, index) => (
+              eventsList.map((event, index) => (
                 <EventCard key={event.ticker || index} event={event} />
               ))
             )
@@ -513,19 +539,12 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* Empty State - show for Games, Fights, Futures, Awards, Draft, and Events scopes */}
-          {(selectedScope === "Games" ||
-            selectedScope === "Fights" ||
-            selectedScope === "Futures" ||
-            selectedScope === "Awards" ||
-            selectedScope === "Draft" ||
-            selectedScope === "Events") &&
-            !loading &&
-            (!eventsData?.events || eventsData.events.length === 0) && (
-              <Text style={styles.emptyText}>
-                No active markets for this selection.
-              </Text>
-            )}
+          {/* Empty State - show for data-backed scopes */}
+          {isDataBackedScope && !loading && eventsList.length === 0 && (
+            <Text style={styles.emptyText}>
+              No active markets for this selection.
+            </Text>
+          )}
         </Animated.View>
       </ScrollView>
     </SafeAreaView>
