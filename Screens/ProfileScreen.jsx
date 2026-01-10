@@ -12,6 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 
 import { useAuth } from "../src/contexts/AuthContext";
+import LottieLoader from "../src/components/ui/LottieLoader";
 
 import {
   Colors,
@@ -22,7 +23,7 @@ import {
 import { normalizeFont } from "../src/utils/dimensions";
 
 export default function ProfileScreen() {
-  const { signOut, user } = useAuth();
+  const { signOut, user, loading } = useAuth();
   const navigation = useNavigation();
 
   // Get username from user object
@@ -93,6 +94,20 @@ export default function ProfileScreen() {
     ]);
   };
 
+  // Show loading state while auth is loading or user data is being fetched
+  if (loading || !user) {
+    return (
+      <View style={styles.container}>
+        <SafeAreaView style={styles.safeArea} edges={["top"]}>
+          <View style={styles.loadingContainer}>
+            <LottieLoader size="large" />
+            <Text style={styles.loadingText}>Loading profile...</Text>
+          </View>
+        </SafeAreaView>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={["top"]}>
@@ -101,25 +116,18 @@ export default function ProfileScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Header with back button and username */}
+          {/* Header with username */}
           <View style={styles.header}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => navigation.goBack()}
-            >
-              <Ionicons name="chevron-back" size={24} color="#000000" />
-            </TouchableOpacity>
             <Text style={styles.headerUsername}>{displayUsername}</Text>
-            <View style={styles.headerSpacer} />
           </View>
 
           {/* Profile Section */}
           <View style={styles.profileSection}>
             {/* Profile Picture */}
             <View style={styles.profilePictureContainer}>
-              <View style={styles.profilePicture}>
-                <Ionicons name="headset-outline" size={48} color="#000000" />
-              </View>
+            <View style={styles.profilePicture}>
+              <Ionicons name="headset-outline" size={48} color={Colors.textPrimary} />
+            </View>
             </View>
 
             {/* Statistics */}
@@ -203,7 +211,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: "100%",
     height: "100%",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: Colors.background,
   },
   safeArea: {
     flex: 1,
@@ -218,26 +226,17 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: Spacing.md,
     paddingTop: Spacing.sm,
     paddingBottom: Spacing.md,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "flex-start",
   },
   headerUsername: {
     ...Typography.body,
     fontSize: normalizeFont(18),
     fontWeight: "600",
-    color: "#000000",
-    flex: 1,
+    color: Colors.textPrimary,
     textAlign: "center",
-  },
-  headerSpacer: {
-    width: 40,
   },
   profileSection: {
     paddingHorizontal: Spacing.xl,
@@ -251,9 +250,11 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: "#E0E0E0",
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
     justifyContent: "center",
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   statsContainer: {
     flexDirection: "row",
@@ -268,19 +269,19 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: normalizeFont(18),
     fontWeight: "600",
-    color: "#000000",
+    color: Colors.textPrimary,
     marginBottom: Spacing.xs,
   },
   statLabel: {
     ...Typography.caption,
     fontSize: normalizeFont(14),
-    color: "#666666",
+    color: Colors.textTertiary,
   },
   username: {
     ...Typography.body,
     fontSize: normalizeFont(18),
     fontWeight: "600",
-    color: "#000000",
+    color: Colors.textPrimary,
     marginBottom: Spacing.lg,
   },
   actionButtonsContainer: {
@@ -300,27 +301,29 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: normalizeFont(16),
     fontWeight: "600",
-    color: "#000000",
+    color: Colors.background,
   },
   shareProfileButton: {
     flex: 1,
-    backgroundColor: "#F5F5F5",
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
     borderRadius: BorderRadius.md,
     paddingVertical: Spacing.md,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   shareProfileText: {
     ...Typography.body,
     fontSize: normalizeFont(16),
     fontWeight: "600",
-    color: "#000000",
+    color: Colors.textPrimary,
   },
   signOutButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F5F5F5",
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
     borderRadius: BorderRadius.md,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.lg,
@@ -345,7 +348,7 @@ const styles = StyleSheet.create({
     ...Typography.sectionTitle,
     fontSize: normalizeFont(20),
     fontWeight: "600",
-    color: "#000000",
+    color: Colors.textPrimary,
     marginBottom: Spacing.lg,
   },
   emptyStateContainer: {
@@ -406,6 +409,18 @@ const styles = StyleSheet.create({
   emptyStateText: {
     ...Typography.body,
     fontSize: normalizeFont(16),
-    color: "#000000",
+    color: Colors.textTertiary,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: Spacing.xxxl,
+  },
+  loadingText: {
+    ...Typography.body,
+    fontSize: normalizeFont(16),
+    color: Colors.textSecondary,
+    marginTop: Spacing.lg,
   },
 });

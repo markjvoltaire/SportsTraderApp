@@ -26,8 +26,6 @@ import Animated, {
 } from "react-native-reanimated";
 import { useRoute } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
-import API_BASE_URL from "../../config/api";
-import { formatSharePrice } from "../../utils/formatters";
 import ChartSkeleton from "./ChartSkeleton";
 import { normalize, widthPercentage } from "../../utils/dimensions";
 import {
@@ -36,9 +34,41 @@ import {
   BorderRadius,
   Typography,
 } from "../../constants/theme";
+import LottieView from "lottie-react-native";
+
+// Lighten a hex color by mixing with white (amount 0-1)
+const lightenColor = (hex, amount = 0.2) => {
+  if (typeof hex !== "string") return hex;
+  const normalized = hex.replace("#", "");
+  if (![3, 6].includes(normalized.length)) return hex;
+
+  const full =
+    normalized.length === 3
+      ? normalized
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : normalized;
+
+  const num = parseInt(full, 16);
+  if (Number.isNaN(num)) return hex;
+
+  const r = (num >> 16) & 0xff;
+  const g = (num >> 8) & 0xff;
+  const b = num & 0xff;
+
+  const mix = (channel) =>
+    Math.min(255, Math.round(channel + (255 - channel) * amount));
+
+  const toHex = (channel) => channel.toString(16).padStart(2, "0");
+
+  return `#${toHex(mix(r))}${toHex(mix(g))}${toHex(mix(b))}`;
+};
 
 export default function MyChart({
   market: marketProp,
+  event,
+  candlestickData,
   onTimestampChange,
   onPriceStatsChange,
   onPriceChange,
@@ -46,11 +76,88 @@ export default function MyChart({
   timeFrame = "24H",
   awayColor,
   homeColor,
+  colorBoost = 0.22,
 }) {
   const route = useRoute();
   // Prefer explicitly passed market; fall back to navigation params
   const market = marketProp || route.params?.game || route.params?.market;
   const { width, height } = Dimensions.get("window");
+
+  // State for price history - now process candlestickData directly
+  const [awayHistory, setAwayHistory] = useState(null);
+  const [homeHistory, setHomeHistory] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  // Process candlestickData when it changes
+  useEffect(() => {
+    if (!candlestickData?.market_candlesticks) {
+      setLoading(true);
+      return;
+    }
+
+    const extractTeamData = (teamData, teamIndex) => {
+      const processedData = [];
+
+      teamData.forEach((point, pointIndex) => {
+        let price =
+          parseFloat(point.price?.close) ||
+          parseFloat(point.price?.close_dollars) ||
+          0;
+
+        if (price > 1) price = price / 100;
+
+        if (price > 0) {
+          processedData.push({
+            x: pointIndex,
+            y: price,
+            timestamp: point.end_period_ts || point.timestamp || point.time,
+          });
+        }
+      });
+
+      return processedData;
+    };
+
+    // Extract data for both teams
+    const team1Data = candlestickData.market_candlesticks[0]
+      ? extractTeamData(candlestickData.market_candlesticks[0], 0)
+      : [];
+    const team2Data = candlestickData.market_candlesticks[1]
+      ? extractTeamData(candlestickData.market_candlesticks[1], 1)
+      : [];
+
+    // Ensure both teams have the same number of data points
+    const maxLength = Math.max(team1Data.length, team2Data.length);
+
+    // Pad shorter arrays with last known values
+    while (team1Data.length < maxLength) {
+      const lastPrice =
+        team1Data.length > 0 ? team1Data[team1Data.length - 1].y : 0.5;
+      const lastTimestamp =
+        team1Data.length > 0 ? team1Data[team1Data.length - 1].timestamp : null;
+      team1Data.push({
+        x: team1Data.length,
+        y: lastPrice,
+        timestamp: lastTimestamp,
+      });
+    }
+
+    while (team2Data.length < maxLength) {
+      const lastPrice =
+        team2Data.length > 0 ? team2Data[team2Data.length - 1].y : 0.5;
+      const lastTimestamp =
+        team2Data.length > 0 ? team2Data[team2Data.length - 1].timestamp : null;
+      team2Data.push({
+        x: team2Data.length,
+        y: lastPrice,
+        timestamp: lastTimestamp,
+      });
+    }
+
+    setAwayHistory(team1Data);
+    setHomeHistory(team2Data);
+    setLoading(false);
+  }, [candlestickData]);
 
   const chartPadding = {
     top: Spacing.md,
@@ -102,6 +209,26 @@ export default function MyChart({
     let awayAbbreviation = "Away";
     let homeAbbreviation = "Home";
 
+    // Try to derive names from event when provided
+    if (event?.markets && event.markets.length >= 2) {
+      const firstMarket = event.markets[0];
+      const secondMarket = event.markets[1];
+      if (firstMarket.yesSubTitle && secondMarket.yesSubTitle) {
+        homeName = firstMarket.yesSubTitle;
+        awayName = secondMarket.yesSubTitle;
+      }
+    } else if (event?.title) {
+      const atMatch = event.title.match(/(.+?)\s+at\s+(.+)/i);
+      const vsMatch = event.title.match(/(.+?)\s+vs\.?\s+(.+)/i);
+      if (atMatch) {
+        awayName = atMatch[1].trim();
+        homeName = atMatch[2].trim();
+      } else if (vsMatch) {
+        awayName = vsMatch[1].trim();
+        homeName = vsMatch[2].trim();
+      }
+    }
+
     if (
       market.teamTokenIds &&
       Array.isArray(market.teamTokenIds) &&
@@ -112,7 +239,7 @@ export default function MyChart({
       homeTokenId = market.teamTokenIds[1]?.toString() || null;
 
       // Extract team names from title (e.g., "Suns vs. Thunder")
-      if (market.title) {
+      if (market.title && awayName === "Away" && homeName === "Home") {
         const titleMatch = market.title.match(/(.+?)\s+vs\.?\s+(.+)/i);
         if (titleMatch) {
           awayName = titleMatch[1].trim();
@@ -121,17 +248,59 @@ export default function MyChart({
           homeAbbreviation = homeName.substring(0, 3).toUpperCase();
         }
       }
-    } else {
-      // Old format: use awayTeam/homeTeam objects
-      awayAbbreviation = market.awayTeam?.abbreviation || "Away";
-      homeAbbreviation = market.homeTeam?.abbreviation || "Home";
-      awayName = market.awayTeam?.name || awayAbbreviation;
-      homeName = market.homeTeam?.name || homeAbbreviation;
+    } else if (
+      market?.teams &&
+      Array.isArray(market.teams) &&
+      market.teams.length >= 2
+    ) {
+      awayTeamData = market.teams[0];
+      homeTeamData = market.teams[1];
+      awayName = awayTeamData.alias || awayTeamData.name || awayName;
+      homeName = homeTeamData.alias || homeTeamData.name || homeName;
+      awayAbbreviation =
+        awayTeamData.abbreviation?.toUpperCase() || awayAbbreviation;
+      homeAbbreviation =
+        homeTeamData.abbreviation?.toUpperCase() || homeAbbreviation;
+      awayColor = awayTeamData.color || awayColor;
+      homeColor = homeTeamData.color || homeColor;
+    } else if (market?.awayTeam || market?.homeTeam) {
+      awayTeamData = market.awayTeam;
+      homeTeamData = market.homeTeam;
+
+      const candidateAwayName =
+        market.awayTeam?.name || market.awayTeam?.abbreviation;
+      const candidateHomeName =
+        market.homeTeam?.name || market.homeTeam?.abbreviation;
+      awayName = candidateAwayName || awayName;
+      homeName = candidateHomeName || homeName;
+      awayAbbreviation =
+        market.awayTeam?.abbreviation?.toUpperCase() || awayAbbreviation;
+      homeAbbreviation =
+        market.homeTeam?.abbreviation?.toUpperCase() || homeAbbreviation;
+      awayColor = market.awayTeam?.color || awayColor;
+      homeColor = market.homeTeam?.color || homeColor;
       awayTokenId =
-        market.awayTeam?.tokenId || market.awayTeam?.token_id || null;
+        market.awayTeam?.tokenId || market.awayTeam?.token_id || awayTokenId;
       homeTokenId =
-        market.homeTeam?.tokenId || market.homeTeam?.token_id || null;
+        market.homeTeam?.tokenId || market.homeTeam?.token_id || homeTokenId;
     }
+
+    // Refresh abbreviations from names if they weren't set from market
+    if (!awayAbbreviation && awayName) {
+      awayAbbreviation = awayName.substring(0, 3).toUpperCase();
+    }
+    if (!homeAbbreviation && homeName) {
+      homeAbbreviation = homeName.substring(0, 3).toUpperCase();
+    }
+
+    const displayAwayColor = lightenColor(
+      awayColor || Colors.primary,
+      colorBoost
+    );
+    const displayHomeColor = lightenColor(
+      homeColor || Colors.accentTeal,
+      colorBoost
+    );
 
     return {
       awayTeam: {
@@ -139,24 +308,18 @@ export default function MyChart({
         tokenId: awayTokenId,
         abbreviation: awayAbbreviation,
         name: awayName,
-        color: awayColor || Colors.primary,
+        color: displayAwayColor,
       },
       homeTeam: {
         price: parseFloat(market.homeTeam?.price) || 0.5,
         tokenId: homeTokenId,
         abbreviation: homeAbbreviation,
         name: homeName,
-        color: homeColor || Colors.accentTeal,
+        color: displayHomeColor,
       },
       conditionId: conditionId,
     };
-  }, [market, awayColor, homeColor]);
-
-  // State for price history
-  const [awayHistory, setAwayHistory] = useState(null);
-  const [homeHistory, setHomeHistory] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  }, [market, awayColor, homeColor, event, colorBoost]);
 
   // Gesture handling for cursor
   const cursorX = useSharedValue(-1); // -1 means hidden
@@ -175,264 +338,6 @@ export default function MyChart({
     awayTeamName: "",
     homeTeamName: "",
   });
-
-  // Fetch price history using candlesticks endpoint
-  useEffect(() => {
-    console.log(
-      "MyChart: useEffect triggered, conditionId:",
-      marketData.conditionId
-    );
-    if (!marketData.conditionId) {
-      console.warn(
-        "MyChart: No conditionId found in market, cannot fetch candlesticks"
-      );
-      console.warn(
-        "MyChart: Market object keys:",
-        market ? Object.keys(market) : "No market"
-      );
-      setLoading(false);
-      if (onLoadingChange) onLoadingChange(false);
-      return;
-    }
-
-    const fetchPriceHistory = async () => {
-      try {
-        setLoading(true);
-        if (onLoadingChange) onLoadingChange(true);
-        setError(null);
-
-        // Calculate time range based on selected time frame
-        const now = Math.floor(Date.now() / 1000);
-        let startTs;
-
-        switch (timeFrame) {
-          case "1H":
-            startTs = now - 60 * 60; // 1 hour ago
-            break;
-          case "24H":
-            startTs = now - 24 * 60 * 60; // 24 hours ago
-            break;
-          case "7D":
-            startTs = now - 7 * 24 * 60 * 60; // 7 days ago
-            break;
-          case "30D":
-            startTs = now - 30 * 24 * 60 * 60; // 30 days ago
-            break;
-          case "ALL":
-          default:
-            startTs = null; // Fetch all available data
-            break;
-        }
-
-        const endTs = now;
-
-        // Determine interval based on time frame for optimal data density
-        let interval = 1; // Default to 1 minute
-        switch (timeFrame) {
-          case "1H":
-            interval = 1; // 1 minute intervals
-            break;
-          case "24H":
-            interval = 1; // 1 minute intervals
-            break;
-          case "7D":
-            interval = 60; // 1 hour intervals
-            break;
-          case "30D":
-            interval = 1440; // 1 day intervals
-            break;
-          case "ALL":
-            interval = 1440; // 1 day intervals for all time
-            break;
-        }
-
-        // Fetch candlesticks using conditionId
-        let url;
-        if (startTs !== null) {
-          url = `${API_BASE_URL}/api/candlesticks/${marketData.conditionId}?interval=${interval}&startTs=${startTs}&endTs=${endTs}`;
-        } else {
-          // For "ALL", fetch without time range
-          url = `${API_BASE_URL}/api/candlesticks/${marketData.conditionId}?interval=${interval}`;
-        }
-
-        let response = await fetch(url);
-
-        if (!response.ok && response.status === 400) {
-          url = `${API_BASE_URL}/api/candlesticks/${marketData.conditionId}`;
-          response = await fetch(url);
-        }
-
-        if (!response.ok) {
-          throw new Error(
-            `Candlesticks HTTP error! status: ${response.status}`
-          );
-        }
-
-        const data = await response.json();
-
-        let candlesticks = [];
-
-        if (Array.isArray(data)) {
-          candlesticks = data;
-        } else if (data?.candlesticks && Array.isArray(data.candlesticks)) {
-          candlesticks = data.candlesticks;
-        } else if (data?.data && Array.isArray(data.data)) {
-          candlesticks = data.data;
-        }
-
-        console.log(
-          "MyChart: Total candlesticks to process:",
-          candlesticks.length
-        );
-
-        const extractTokenData = (tokenId) => {
-          const tokenCandlesticks = [];
-
-          candlesticks.forEach((item) => {
-            let candlestickArray = null;
-            let itemTokenId = null;
-
-            if (Array.isArray(item) && item.length >= 2) {
-              candlestickArray = item[0];
-              const metadata = item[1];
-              itemTokenId = metadata?.token_id || metadata?.tokenId || null;
-            } else if (typeof item === "object" && item !== null) {
-              itemTokenId = item.token_id || item.tokenId || null;
-              candlestickArray = Array.isArray(item.candlesticks)
-                ? item.candlesticks
-                : [item];
-            }
-
-            // Compare tokenIds as strings for exact match
-            const tokenIdStr = tokenId?.toString();
-            const itemTokenIdStr = itemTokenId?.toString();
-
-            if (
-              itemTokenIdStr &&
-              tokenIdStr &&
-              itemTokenIdStr === tokenIdStr &&
-              Array.isArray(candlestickArray)
-            ) {
-              console.log(
-                "MyChart: Found matching tokenId:",
-                itemTokenIdStr,
-                "with",
-                candlestickArray.length,
-                "candles"
-              );
-              candlestickArray.forEach((candle) => {
-                let price =
-                  parseFloat(candle?.close) ||
-                  parseFloat(candle?.close_dollars) ||
-                  parseFloat(candle?.price?.close) ||
-                  0;
-
-                if (price > 1) price = price / 100;
-
-                if (price > 0) {
-                  tokenCandlesticks.push({
-                    x: tokenCandlesticks.length,
-                    y: price,
-                    timestamp:
-                      candle?.timestamp ||
-                      candle?.time ||
-                      candle?.end_period_ts ||
-                      candle?.ts,
-                  });
-                }
-              });
-            }
-          });
-
-          tokenCandlesticks.sort((a, b) => a.timestamp - b.timestamp);
-          console.log(
-            "MyChart: Extracted",
-            tokenCandlesticks.length,
-            "data points for tokenId:",
-            tokenId
-          );
-          return tokenCandlesticks.map((point, index) => ({
-            x: index,
-            y: point.y,
-            timestamp: point.timestamp,
-          }));
-        };
-
-        console.log(
-          "MyChart: Fetching history for awayTokenId:",
-          marketData.awayTeam.tokenId,
-          "homeTokenId:",
-          marketData.homeTeam.tokenId
-        );
-        const awayHistoryData = marketData.awayTeam.tokenId
-          ? extractTokenData(marketData.awayTeam.tokenId)
-          : [];
-        const homeHistoryData = marketData.homeTeam.tokenId
-          ? extractTokenData(marketData.homeTeam.tokenId)
-          : [];
-
-        console.log(
-          "MyChart: Away history length:",
-          awayHistoryData.length,
-          "Home history length:",
-          homeHistoryData.length
-        );
-
-        const maxLength = Math.max(
-          awayHistoryData.length,
-          homeHistoryData.length
-        );
-
-        while (awayHistoryData.length < maxLength) {
-          const lastPrice =
-            awayHistoryData.length > 0
-              ? awayHistoryData[awayHistoryData.length - 1].y
-              : marketData.awayTeam.price;
-          const lastTimestamp =
-            awayHistoryData.length > 0
-              ? awayHistoryData[awayHistoryData.length - 1].timestamp
-              : null;
-          awayHistoryData.push({
-            x: awayHistoryData.length,
-            y: lastPrice,
-            timestamp: lastTimestamp,
-          });
-        }
-
-        while (homeHistoryData.length < maxLength) {
-          const lastPrice =
-            homeHistoryData.length > 0
-              ? homeHistoryData[homeHistoryData.length - 1].y
-              : marketData.homeTeam.price;
-          const lastTimestamp =
-            homeHistoryData.length > 0
-              ? homeHistoryData[homeHistoryData.length - 1].timestamp
-              : null;
-          homeHistoryData.push({
-            x: homeHistoryData.length,
-            y: lastPrice,
-            timestamp: lastTimestamp,
-          });
-        }
-
-        setAwayHistory(awayHistoryData);
-        setHomeHistory(homeHistoryData);
-      } catch (err) {
-        console.error("Error fetching price history:", err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
-        if (onLoadingChange) onLoadingChange(false);
-      }
-    };
-
-    fetchPriceHistory();
-  }, [
-    marketData.conditionId,
-    marketData.awayTeam.tokenId,
-    marketData.homeTeam.tokenId,
-    timeFrame,
-  ]);
 
   // Process chart data from price history
   const chartData = useMemo(() => {
@@ -687,8 +592,8 @@ export default function MyChart({
         awayPrice: data.awayPrice,
         homePrice: data.homePrice,
         timestamp: data.timestamp,
-        awayTeamName: marketData.awayTeam.abbreviation || "Away",
-        homeTeamName: marketData.homeTeam.abbreviation || "Home",
+        awayTeamName: marketData.awayTeam.name || "Away",
+        homeTeamName: marketData.homeTeam.name || "Home",
       });
       cursorYHigh.value = data.yHigh;
       cursorYLow.value = data.yLow;
@@ -866,11 +771,21 @@ export default function MyChart({
     return `${month} ${day}, ${time}`;
   };
 
+  const formatCurrency = (value) => {
+    if (value >= 1000000) return `$${(value / 1000000).toFixed(2)}M`;
+    return `$${value.toLocaleString()}`;
+  };
+
   return (
     <View style={styles.chartContainer}>
       {loading && (
         <View style={styles.skeletonContainer}>
-          <ChartSkeleton />
+          <LottieView
+            source={require("../../../assets/lottie/Loading.json")}
+            autoPlay
+            loop
+            style={{ height: 200, width: 200 }}
+          />
         </View>
       )}
       <Animated.View
@@ -927,7 +842,7 @@ export default function MyChart({
                     style={{
                       data: {
                         stroke: marketData.awayTeam.color,
-                        strokeWidth: 3,
+                        strokeWidth: 2,
                         strokeLinecap: "round",
                         strokeLinejoin: "round",
                         strokeDasharray: "0",
@@ -952,7 +867,7 @@ export default function MyChart({
                     style={{
                       data: {
                         stroke: marketData.homeTeam.color,
-                        strokeWidth: 3,
+                        strokeWidth: 2,
                         strokeLinecap: "round",
                         strokeLinejoin: "round",
                         strokeDasharray: "0",
@@ -1138,6 +1053,7 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     color: Colors.textSecondary,
     fontWeight: "600",
+    bottom: 15,
   },
   tooltipPrice: {
     ...Typography.bodyLarge,
@@ -1153,9 +1069,9 @@ const styles = StyleSheet.create({
   tooltipLabel: {
     ...Typography.label,
     fontSize: 10,
-    opacity: 0.9,
-    color: "white",
+    color: "#FFFFFF",
     textAlign: "center",
+    fontWeight: "900",
   },
   // Keep these for potential reuse or if referenced elsewhere
   tooltipHigh: {},

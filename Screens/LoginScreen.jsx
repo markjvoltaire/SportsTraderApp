@@ -7,13 +7,20 @@ import {
   Linking,
   Platform,
 } from "react-native";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLoginWithSMS, useLinkSMS, usePrivy } from "@privy-io/expo";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { normalize, normalizeFont } from "../src/utils/dimensions";
+import { useAuth } from "../src/contexts/AuthContext";
+import {
+  Colors,
+  Spacing,
+  Typography,
+  BorderRadius,
+} from "../src/constants/theme";
 
 // Format phone number with dashes (XXX-XXX-XXXX)
 const formatPhoneNumber = (text) => {
@@ -45,6 +52,7 @@ export default function LoginScreen() {
   const [codeSent, setCodeSent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [phoneDigits, setPhoneDigits] = useState("");
+  const { session, loading: authLoading } = useAuth();
 
   // Check if user is already authenticated with Privy
   const privyContext = usePrivy();
@@ -56,6 +64,29 @@ export default function LoginScreen() {
 
   const { sendCode, loginWithCode } = loginHook;
   const { sendCode: linkSendCode, linkWithCode } = linkHook;
+
+  // Navigate to Home when user becomes authenticated after login
+  // This is a fallback in case NavigationHandler doesn't catch it
+  useEffect(() => {
+    if (!authLoading && session && !isLoading) {
+      // Get root navigator by traversing parent navigators
+      let rootNavigator = navigation;
+      while (rootNavigator.getParent()) {
+        rootNavigator = rootNavigator.getParent();
+      }
+      
+      // Small delay to ensure navigation state is ready and avoid conflicts with NavigationHandler
+      const timer = setTimeout(() => {
+        if (rootNavigator?.reset) {
+          rootNavigator.reset({
+            index: 0,
+            routes: [{ name: "Home" }],
+          });
+        }
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [session, authLoading, navigation, isLoading]);
 
   const handlePhoneChange = (text) => {
     const formatted = formatPhoneNumber(text);
@@ -125,7 +156,7 @@ export default function LoginScreen() {
           style={styles.backButton}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={normalize(24)} color="#1a1a1a" />
+          <Ionicons name="arrow-back" size={normalize(24)} color={Colors.textPrimary} />
         </TouchableOpacity>
         {!codeSent && (
           <TouchableOpacity onPress={handleSendCode} activeOpacity={0.7}>
@@ -169,7 +200,7 @@ export default function LoginScreen() {
               ]}
             >
               <LinearGradient
-                colors={["#000000", "#000000"]}
+                colors={[Colors.primary, Colors.primary]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.gradientButton}
@@ -230,7 +261,7 @@ export default function LoginScreen() {
               ]}
             >
               <LinearGradient
-                colors={["#000000", "#000000"]}
+                colors={[Colors.primary, Colors.primary]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.gradientButton}
@@ -260,15 +291,15 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: Colors.background,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: normalize(20),
-    paddingTop: normalize(12),
-    paddingBottom: normalize(16),
+    paddingHorizontal: Spacing.md + Spacing.sm,
+    paddingTop: Spacing.sm + Spacing.xs,
+    paddingBottom: Spacing.lg,
   },
   backButton: {
     width: normalize(40),
@@ -277,96 +308,76 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
   tryNowText: {
+    ...Typography.body,
     fontSize: normalizeFont(16),
     fontWeight: "500",
-    color: "#007AFF",
-    fontFamily: Platform.select({
-      ios: "SF Pro Display",
-      android: "sans-serif",
-      default: "System",
-    }),
+    color: Colors.textPrimary,
   },
   content: {
     flex: 1,
-    paddingHorizontal: normalize(24),
-    paddingTop: normalize(40),
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.xxxl + Spacing.md,
   },
   heading: {
+    ...Typography.pageTitle,
     fontSize: normalizeFont(32),
     fontWeight: "700",
-    color: "#000000",
-    marginBottom: normalize(12),
-    fontFamily: Platform.select({
-      ios: "SF Pro Display",
-      android: "sans-serif",
-      default: "System",
-    }),
+    color: Colors.textPrimary,
+    marginBottom: Spacing.sm + Spacing.xs,
     lineHeight: normalizeFont(38),
   },
   description: {
+    ...Typography.body,
     fontSize: normalizeFont(14),
     fontWeight: "400",
-    color: "#666666",
-    marginBottom: normalize(32),
-    fontFamily: Platform.select({
-      ios: "SF Pro Display",
-      android: "sans-serif",
-      default: "System",
-    }),
+    color: Colors.textSecondary,
+    marginBottom: Spacing.xxl,
     lineHeight: normalizeFont(20),
   },
   inputContainer: {
-    marginBottom: normalize(24),
+    marginBottom: Spacing.xl,
+    paddingTop: Spacing.sm,
   },
   phoneInput: {
+    ...Typography.body,
     fontSize: normalizeFont(24),
     fontWeight: "500",
-    color: "#000000",
-    paddingVertical: normalize(16),
-    paddingHorizontal: normalize(4),
+    color: Colors.textPrimary,
+    paddingTop: Spacing.xl,
+    paddingBottom: Spacing.lg,
+    paddingHorizontal: Spacing.xs,
     borderBottomWidth: 2,
-    borderBottomColor: "#E5E5E5",
-    fontFamily: Platform.select({
-      ios: "SF Pro Display",
-      android: "sans-serif",
-      default: "System",
-    }),
+    borderBottomColor: Colors.border,
+    lineHeight: normalizeFont(32),
+    minHeight: normalizeFont(56),
   },
   continueButton: {
-    marginBottom: normalize(32),
-    borderRadius: normalize(12),
+    marginBottom: Spacing.xxl,
+    borderRadius: BorderRadius.md,
     overflow: "hidden",
   },
   gradientButton: {
-    paddingVertical: normalize(16),
+    paddingVertical: Spacing.lg,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: normalize(12),
+    borderRadius: BorderRadius.md,
   },
   continueButtonText: {
+    ...Typography.body,
     fontSize: normalizeFont(18),
     fontWeight: "600",
-    color: "#FFFFFF",
-    fontFamily: Platform.select({
-      ios: "SF Pro Display",
-      android: "sans-serif",
-      default: "System",
-    }),
+    color: Colors.background,
   },
   legalText: {
+    ...Typography.caption,
     fontSize: normalizeFont(12),
     fontWeight: "400",
-    color: "#666666",
+    color: Colors.textTertiary,
     textAlign: "center",
     lineHeight: normalizeFont(18),
-    fontFamily: Platform.select({
-      ios: "SF Pro Display",
-      android: "sans-serif",
-      default: "System",
-    }),
   },
   linkText: {
-    color: "#007AFF",
+    color: Colors.primary,
     textDecorationLine: "underline",
   },
   continueButtonDisabled: {
@@ -374,16 +385,12 @@ const styles = StyleSheet.create({
   },
   resendContainer: {
     alignItems: "center",
-    marginTop: normalize(16),
+    marginTop: Spacing.lg,
   },
   resendText: {
+    ...Typography.body,
     fontSize: normalizeFont(14),
     fontWeight: "400",
-    color: "#007AFF",
-    fontFamily: Platform.select({
-      ios: "SF Pro Display",
-      android: "sans-serif",
-      default: "System",
-    }),
+    color: Colors.primary,
   },
 });

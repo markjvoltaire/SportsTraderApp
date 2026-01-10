@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useState, useRef } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+  useRef,
+  useCallback,
+} from "react";
 import {
   StyleSheet,
   Text,
@@ -15,7 +21,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 // Custom Constants & Components
 
+import GameCard from "../src/components/market/GameCard";
 import EventCard from "../src/components/market/EventCard";
+import LottieView from "lottie-react-native";
 
 const { width } = Dimensions.get("window");
 
@@ -29,9 +37,17 @@ export default function HomeScreen() {
 
   const isDataBackedScope = useMemo(
     () =>
-      ["Games", "Fights", "Futures", "Awards", "Draft", "Events"].includes(
-        selectedScope
-      ),
+      [
+        "Games",
+        "Fights",
+        "Futures",
+        "Awards",
+        "Draft",
+        "Events",
+        "Win totals",
+        "Divisions",
+        "League Leader",
+      ].includes(selectedScope),
     [selectedScope]
   );
 
@@ -177,7 +193,7 @@ export default function HomeScreen() {
     const fetchSportsFilters = async () => {
       try {
         const response = await fetch(
-          "http://localhost:3000/api/sports-filters"
+          "https://scoretradebackend.onrender.com/api/sports-filters"
         );
         const data = await response.json();
         setSportsFilters(data);
@@ -188,22 +204,165 @@ export default function HomeScreen() {
     fetchSportsFilters();
   }, []);
 
-  // 2. Fetch Events when sport/scope changes
-  useEffect(() => {
-    // Only fetch data for known scopes that have routes
+  // Helper function to build the correct URL based on competition and scope
+  const buildApiUrl = useCallback((competition, scope) => {
+    // Dynamic route selection for games, fights, and futures
+    let url = "https://scoretradebackend.onrender.com/api/events"; // Default fallback
+
+    // Hit specific routes when scope is one we support
     if (
-      selectedScope !== "Games" &&
-      selectedScope !== "Fights" &&
-      selectedScope !== "Futures" &&
-      selectedScope !== "Awards" &&
-      selectedScope !== "Draft" &&
-      selectedScope !== "Events"
+      scope === "Games" ||
+      scope === "Fights" ||
+      scope === "Futures" ||
+      scope === "Awards" ||
+      scope === "Draft" ||
+      scope === "Events" ||
+      scope === "Win totals" ||
+      scope === "Divisions" ||
+      scope === "League Leader"
     ) {
-      setLoading(false);
-      return;
+      const routeMap = {
+        // American Sports
+        "Pro Football": "/api/games/nfl",
+        "Pro Baseball": "/api/games/mlb",
+        "Pro Basketball (M)": "/api/games/nba",
+
+        // College Sports
+        "College Football": "/api/games/ncaaf",
+        "College Football Playoffs": "/api/games/ncaaf",
+        "College Basketball (M)": "/api/games/ncaamb",
+        "College Basketball (W)": "/api/games/ncaawb",
+
+        // Soccer Leagues (from your backend)
+        EPL: "/api/games/epl",
+        "La Liga": "/api/games/laliga",
+        "Serie A": "/api/games/seriea",
+        UCL: "/api/games/ucl",
+        Bundesliga: "/api/games/bundesliga",
+        "Ligue 1": "/api/games/ligue1",
+        Eredivisie: "/api/games/eredivisie",
+        AFCON: "/api/games/afcon",
+        "EFL Championship": "/api/games/efl-championship",
+        "Scottish Premiership": "/api/games/scottish-prem",
+        "Saudi Pro League": "/api/games/saudi-pl",
+        "Liga Portugal": "/api/games/liga-portugal",
+        "FA Cup": "/api/games/fa-cup",
+        "Liga MX": "/api/games/liga-mx",
+        "Brasileiro Serie A": "/api/games/brasileiro",
+        "Australian A League": "/api/games/a-league",
+        "Taca de Portugal": "/api/games/taca-portugal",
+
+        // UFC uses MMA fights route
+        UFC: "/api/games/MMA",
+      };
+
+      // Handle Futures and Awards scopes specifically
+      if (scope === "Futures") {
+        // Specific futures routes
+        const futuresRouteMap = {
+          "Pro Football": "/api/futures/nfl", // NFL Futures
+          "Pro Basketball (M)": "/api/futures/nba", // NBA Futures
+        };
+
+        const futuresRoute = futuresRouteMap[competition];
+        if (futuresRoute) {
+          url = `https://scoretradebackend.onrender.com${futuresRoute}`;
+        }
+      } else if (scope === "Awards") {
+        // Specific awards routes
+        const awardsRouteMap = {
+          "Pro Football": "/api/awards/nfl", // NFL Awards
+          "Pro Basketball (M)": "/api/nba-awards/nba", // NBA Awards
+        };
+
+        const awardsRoute = awardsRouteMap[competition];
+        if (awardsRoute) {
+          url = `https://scoretradebackend.onrender.com${awardsRoute}`;
+        }
+      } else if (scope === "Draft") {
+        // Specific draft routes
+        const draftRouteMap = {
+          "Pro Football": "/api/draft/nfl", // NFL Draft
+          "Pro Basketball (M)": "/api/drafts/nba", // NBA Draft
+        };
+
+        const draftRoute = draftRouteMap[competition];
+        if (draftRoute) {
+          url = `https://scoretradebackend.onrender.com${draftRoute}`;
+        }
+      } else if (scope === "Events") {
+        // Current events routes
+        const currentEventsRouteMap = {
+          "Pro Football": "/api/current-events/nfl",
+          "Pro Basketball (M)": "/api/events/nba",
+        };
+
+        const currentEventsRoute = currentEventsRouteMap[competition];
+        if (currentEventsRoute) {
+          url = `https://scoretradebackend.onrender.com${currentEventsRoute}`;
+        }
+      } else if (scope === "Win totals") {
+        // Specific win totals routes
+        const winTotalsRouteMap = {
+          "Pro Basketball (M)": "/api/winTotals/nba", // NBA Win Totals
+        };
+
+        const winTotalsRoute = winTotalsRouteMap[competition];
+        if (winTotalsRoute) {
+          url = `https://scoretradebackend.onrender.com${winTotalsRoute}`;
+        }
+      } else if (scope === "Divisions") {
+        // Specific divisions routes
+        const divisionsRouteMap = {
+          "Pro Basketball (M)": "/api/divisions/nba", // NBA Divisions
+        };
+
+        const divisionsRoute = divisionsRouteMap[competition];
+        if (divisionsRoute) {
+          url = `https://scoretradebackend.onrender.com${divisionsRoute}`;
+        }
+      } else if (scope === "League Leader") {
+        // Specific league leaders routes
+        const leagueLeadersRouteMap = {
+          "Pro Basketball (M)": "/api/leagueLeaders/nba", // NBA League Leaders
+        };
+
+        const leagueLeadersRoute = leagueLeadersRouteMap[competition];
+        if (leagueLeadersRoute) {
+          url = `https://scoretradebackend.onrender.com${leagueLeadersRoute}`;
+        }
+      } else {
+        // Handle Games and Fights scopes
+        // Find the matching route for the current competition
+        const route = routeMap[competition];
+        if (route) {
+          url = `https://scoretradebackend.onrender.com${route}`;
+        }
+      }
     }
 
-    const fetchEventsData = async (forceRefresh = false) => {
+    return url;
+  }, []);
+
+  // Fetch Events function - can be called from anywhere
+  const fetchEventsData = useCallback(
+    async (forceRefresh = false) => {
+      // Only fetch data for known scopes that have routes
+      if (
+        selectedScope !== "Games" &&
+        selectedScope !== "Fights" &&
+        selectedScope !== "Futures" &&
+        selectedScope !== "Awards" &&
+        selectedScope !== "Draft" &&
+        selectedScope !== "Events" &&
+        selectedScope !== "Win totals" &&
+        selectedScope !== "Divisions" &&
+        selectedScope !== "League Leader"
+      ) {
+        setLoading(false);
+        return;
+      }
+
       if (!forceRefresh) {
         setLoading(true);
       } else {
@@ -218,114 +377,12 @@ export default function HomeScreen() {
         if (!forceRefresh && eventsCache.current.has(cacheKey)) {
           console.log(`Using cached data for: ${cacheKey}`);
           setEventsData(eventsCache.current.get(cacheKey));
+          setLoading(false);
           return;
         }
 
-        // Dynamic route selection for games, fights, and futures
-        let url = "http://localhost:3000/api/events"; // Default fallback
-
-        // Hit specific routes when scope is one we support
-        if (
-          selectedScope === "Games" ||
-          selectedScope === "Fights" ||
-          selectedScope === "Futures" ||
-          selectedScope === "Awards" ||
-          selectedScope === "Draft" ||
-          selectedScope === "Events"
-        ) {
-          const routeMap = {
-            // American Sports
-            "Pro Football": "/api/games/nfl",
-            "Pro Baseball": "/api/games/mlb",
-            "Pro Basketball (M)": "/api/games/nba",
-
-            // College Sports
-            "College Football": "/api/games/ncaaf",
-            "College Football Playoffs": "/api/games/ncaaf",
-            "College Basketball (M)": "/api/games/ncaamb",
-            "College Basketball (W)": "/api/games/ncaawb",
-
-            // Soccer Leagues (from your backend)
-            EPL: "/api/games/epl",
-            "La Liga": "/api/games/laliga",
-            "Serie A": "/api/games/seriea",
-            UCL: "/api/games/ucl",
-            Bundesliga: "/api/games/bundesliga",
-            "Ligue 1": "/api/games/ligue1",
-            Eredivisie: "/api/games/eredivisie",
-            AFCON: "/api/games/afcon",
-            "EFL Championship": "/api/games/efl-championship",
-            "Scottish Premiership": "/api/games/scottish-prem",
-            "Saudi Pro League": "/api/games/saudi-pl",
-            "Liga Portugal": "/api/games/liga-portugal",
-            "FA Cup": "/api/games/fa-cup",
-            "Liga MX": "/api/games/liga-mx",
-            "Brasileiro Serie A": "/api/games/brasileiro",
-            "Australian A League": "/api/games/a-league",
-            "Taca de Portugal": "/api/games/taca-portugal",
-
-            // UFC uses MMA fights route
-            UFC: "/api/games/MMA",
-
-            // The following competitions don't have specific game routes in your backend
-            // They will fall back to the general /api/events endpoint
-            // "Ligue 1": no specific route
-            // "UFC": no specific route
-            // "FIFA World Cup": no specific route
-            // "Trending": handled separately above
-          };
-
-          // Handle Futures and Awards scopes specifically
-          if (selectedScope === "Futures") {
-            // Specific futures routes
-            const futuresRouteMap = {
-              "Pro Football": "/api/futures/nfl", // NFL Futures
-            };
-
-            const futuresRoute = futuresRouteMap[selectedCompetition];
-            if (futuresRoute) {
-              url = `http://localhost:3000${futuresRoute}`;
-            }
-          } else if (selectedScope === "Awards") {
-            // Specific awards routes
-            const awardsRouteMap = {
-              "Pro Football": "/api/awards/nfl", // NFL Awards
-            };
-
-            const awardsRoute = awardsRouteMap[selectedCompetition];
-            if (awardsRoute) {
-              url = `http://localhost:3000${awardsRoute}`;
-            }
-          } else if (selectedScope === "Draft") {
-            // Specific draft routes
-            const draftRouteMap = {
-              "Pro Football": "/api/draft/nfl", // NFL Draft
-            };
-
-            const draftRoute = draftRouteMap[selectedCompetition];
-            if (draftRoute) {
-              url = `http://localhost:3000${draftRoute}`;
-            }
-          } else if (selectedScope === "Events") {
-            // Current events routes
-            const currentEventsRouteMap = {
-              "Pro Football": "/api/current-events/nfl",
-            };
-
-            const currentEventsRoute =
-              currentEventsRouteMap[selectedCompetition];
-            if (currentEventsRoute) {
-              url = `http://localhost:3000${currentEventsRoute}`;
-            }
-          } else {
-            // Handle Games and Fights scopes
-            // Find the matching route for the current competition
-            const route = routeMap[selectedCompetition];
-            if (route) {
-              url = `http://localhost:3000${route}`;
-            }
-          }
-        }
+        // Build URL based on current competition and scope
+        const url = buildApiUrl(selectedCompetition, selectedScope);
 
         console.log(
           `${
@@ -344,7 +401,7 @@ export default function HomeScreen() {
         // Fallback to general events if specific route fails
         try {
           const fallbackResponse = await fetch(
-            "http://localhost:3000/api/events"
+            "https://scoretradebackend.onrender.com/api/events"
           );
           const fallbackData = await fallbackResponse.json();
 
@@ -359,15 +416,23 @@ export default function HomeScreen() {
         setLoading(false);
         setRefreshing(false);
       }
-    };
+    },
+    [selectedCompetition, selectedScope, buildApiUrl]
+  );
 
+  // 2. Fetch Events when sport/scope changes
+  useEffect(() => {
     fetchEventsData();
-  }, [selectedCompetition, selectedScope]);
+  }, [fetchEventsData]);
 
   // Handle pull-to-refresh
-  const handleRefresh = () => {
-    console.log("Refreshing markets...");
-  };
+  const handleRefresh = useCallback(() => {
+    console.log(
+      `Refreshing markets for ${selectedCompetition} - ${selectedScope}...`
+    );
+    // Force refresh by bypassing cache and fetching fresh data
+    fetchEventsData(true);
+  }, [selectedCompetition, selectedScope, fetchEventsData]);
 
   // Animate events list when data loads
   useEffect(() => {
@@ -395,16 +460,6 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       {/* HEADER SECTION (Static) */}
-      <View style={styles.header}>
-        <Image
-          source={require("../assets/images/ScoretradeWhite.png")}
-          style={styles.titleImage}
-          resizeMode="contain"
-        />
-        {/* <View style={styles.tickerWrapper}>
-          <Ticker />
-        </View> */}
-      </View>
 
       {/* STICKY FILTERS SECTION (Fixed position) */}
       <View style={styles.filterSection}>
@@ -467,15 +522,12 @@ export default function HomeScreen() {
                         isSelected && styles.scopeChipSelected,
                       ]}
                       onPress={() => {
-                        setSelectedScope(isSelected ? null : scope);
+                        setSelectedScope(scope);
                         console.log(
                           "Selected Competition:",
                           selectedCompetition
                         );
-                        console.log(
-                          "Selected Scope:",
-                          isSelected ? null : scope
-                        );
+                        console.log("Selected Scope:", scope);
                       }}
                     >
                       <Text
@@ -502,10 +554,10 @@ export default function HomeScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={["#000"]}
-            tintColor="#000"
+            colors={["#BB86FC"]}
+            tintColor="#BB86FC"
             title="Refreshing markets..."
-            titleColor="#666"
+            titleColor="#CCCCCC"
           />
         }
       >
@@ -521,13 +573,27 @@ export default function HomeScreen() {
           {isDataBackedScope ? (
             loading ? (
               <View style={styles.loaderContainer}>
-                <ActivityIndicator size="large" color="#000" />
-                <Text style={styles.loadingText}>Loading Markets...</Text>
+                <LottieView
+                  source={require("../assets/lottie/Loading.json")}
+                  autoPlay
+                  loop
+                  style={{ height: 200, width: 200 }}
+                />
               </View>
             ) : (
-              eventsList.map((event, index) => (
-                <EventCard key={event.ticker || index} event={event} />
-              ))
+              eventsList.map((event, index) =>
+                selectedScope === "Games" ? (
+                  <GameCard
+                    key={event.ticker || event.id || index}
+                    event={event}
+                  />
+                ) : (
+                  <EventCard
+                    key={event.ticker || event.id || index}
+                    event={event}
+                  />
+                )
+              )
             )
           ) : (
             <View style={styles.comingSoonContainer}>
@@ -554,12 +620,12 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "black",
   },
   header: {
     paddingHorizontal: 15,
 
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#121212",
   },
   titleImage: {
     width: 120,
@@ -579,35 +645,35 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
   filterSection: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "black",
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#F0F0F0",
+    borderBottomColor: "#333333",
   },
   sportsCarouselContent: {
     paddingHorizontal: 20,
-    paddingBottom: 5,
+    paddingBottom: 1,
   },
   sportCard: {
     paddingHorizontal: 18,
     paddingVertical: 10,
-    backgroundColor: "#F5F5F5",
+
     borderRadius: 25,
     marginRight: 10,
     borderWidth: 1,
-    borderColor: "#E0E0E0",
+    borderColor: "#404040",
   },
   sportCardSelected: {
-    backgroundColor: "#000000",
-    borderColor: "#000000",
+    backgroundColor: "white",
+    borderColor: "white",
   },
   sportName: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#666",
+    color: "#CCCCCC",
   },
   sportNameSelected: {
-    color: "#FFFFFF",
+    color: "black",
   },
   scopesWrapper: {
     marginTop: 12,
@@ -617,25 +683,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: "#F8F8F8",
+
     marginRight: 8,
     borderWidth: 1,
-    borderColor: "#EEE",
+    borderColor: "#555555",
   },
   scopeChipSelected: {
-    borderColor: "#666",
+    borderColor: "black",
+    backgroundColor: "white",
   },
   scopeText: {
     fontSize: 12,
     fontWeight: "500",
-    color: "#444",
+    color: "#CCCCCC",
   },
   scopeTextSelected: {
-    color: "#000",
+    color: "black",
     fontWeight: "700",
   },
   eventsContainer: {
-    padding: 20,
+    padding: 0,
     flex: 1,
   },
   loaderContainer: {
@@ -644,13 +711,13 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 10,
-    color: "#666",
+    color: "#CCCCCC",
     fontSize: 14,
   },
   emptyText: {
     textAlign: "center",
     marginTop: 40,
-    color: "#999",
+    color: "#AAAAAA",
     fontSize: 16,
   },
   comingSoonContainer: {
@@ -662,13 +729,13 @@ const styles = StyleSheet.create({
   comingSoonText: {
     fontSize: 24,
     fontWeight: "600",
-    color: "#666",
+    color: "#CCCCCC",
     textAlign: "center",
     marginBottom: 12,
   },
   comingSoonSubtext: {
     fontSize: 16,
-    color: "#999",
+    color: "#AAAAAA",
     textAlign: "center",
     lineHeight: 22,
   },

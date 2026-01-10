@@ -10,6 +10,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -29,6 +30,9 @@ import {
   Typography,
   BorderRadius,
 } from "../src/constants/theme";
+import { getNFLTeamColor, getNBATeamColor } from "../src/constants/teamColors";
+import { formatCurrency, formatPrice } from "../src/utils/formatters";
+import Orders from "../src/components/market/Orders";
 
 const DUMMY_MATCH = {
   league: "NBA",
@@ -120,13 +124,58 @@ export default function ChartScreen() {
   const [chatVisible, setChatVisible] = useState(false);
   const [chatInput, setChatInput] = useState("");
 
-  // MyChart state (same pattern as MarketDetailScreen)
+  // Chart state
+  const [candlestickData, setCandlestickData] = useState(null);
   const [currentTimestamp, setCurrentTimestamp] = useState(null);
   const [priceStats, setPriceStats] = useState(null);
   const [currentPrices, setCurrentPrices] = useState(null);
   const [chartLoading, setChartLoading] = useState(true);
 
-  const market = route.params?.game || route.params?.market || null;
+  const event = route.params?.event || null;
+  const market =
+    event?.markets?.[0] || route.params?.game || route.params?.market || null;
+
+  const leagueHints = useMemo(
+    () =>
+      [
+        market?.league,
+        market?.sport,
+        event?.competition,
+        event?.league,
+        event?.sport,
+        market?.seriesTicker,
+        event?.seriesTicker,
+        market?.ticker,
+        event?.ticker,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    [market, event]
+  );
+
+  const isProFootball = /pro football|nfl/i.test(leagueHints);
+  const isProBasketball = /pro basketball|nba/i.test(leagueHints);
+
+  // Fetch candlestick data when event changes
+  useEffect(() => {
+    const fetchCandlesticks = async () => {
+      if (!event?.ticker) return;
+      try {
+        setChartLoading(true);
+        const response = await fetch(
+          `https://scoretradebackend.onrender.com/api/game/candlestick/${event.ticker}`
+        );
+        const data = await response.json();
+
+        setCandlestickData(data);
+      } catch (error) {
+        console.error("Error fetching candlesticks:", error);
+      } finally {
+        setChartLoading(false);
+      }
+    };
+    fetchCandlesticks();
+  }, [event?.ticker]);
 
   // Animation values for team blocks sliding in
   const awayTeamTranslateX = useSharedValue(-200);
@@ -159,6 +208,65 @@ export default function ChartScreen() {
       return DUMMY_MATCH;
     }
 
+    // Helper function to extract team names from event
+    const getTeamNames = () => {
+      if (!event?.markets || event.markets.length === 0)
+        return { yesTeam: "Team 1", noTeam: "Team 2" };
+
+      const market = event.markets[0];
+
+      // For NFL/NBA style markets: check if event has multiple markets with yesSubTitle
+      if (event.markets && event.markets.length >= 2) {
+        const firstMarket = event.markets[0];
+        const secondMarket = event.markets[1];
+
+        // If both markets have yesSubTitle, these are the team names
+        if (firstMarket.yesSubTitle && secondMarket.yesSubTitle) {
+          return {
+            yesTeam: firstMarket.yesSubTitle,
+            noTeam: secondMarket.yesSubTitle,
+          };
+        }
+      }
+
+      // Try to get team names from structured data first
+      if (market.awayTeam && market.homeTeam) {
+        return {
+          yesTeam:
+            market.homeTeam.name || market.homeTeam.abbreviation || "Home",
+          noTeam:
+            market.awayTeam.name || market.awayTeam.abbreviation || "Away",
+        };
+      }
+
+      // Parse from title patterns
+      if (event.title) {
+        // Pattern: "Team A at Team B" (NFL/NBA format)
+        const atMatch = event.title.match(/(.+?)\s+at\s+(.+)/i);
+        if (atMatch) {
+          return {
+            yesTeam: atMatch[2].trim(), // Home team (after "at")
+            noTeam: atMatch[1].trim(), // Away team (before "at")
+          };
+        }
+
+        // Pattern: "Team A vs Team B"
+        const titleMatch = event.title.match(/(.+?)\s+vs\.?\s+(.+)/i);
+        if (titleMatch) {
+          return {
+            yesTeam: titleMatch[2].trim(), // Home team (usually after "vs")
+            noTeam: titleMatch[1].trim(), // Away team (usually before "vs")
+          };
+        }
+      }
+
+      // Ultimate fallback
+      return {
+        yesTeam: "YES",
+        noTeam: "NO",
+      };
+    };
+
     // Derive team data similar to MarketDetailScreen
     let awayTeamData = null;
     let homeTeamData = null;
@@ -168,6 +276,17 @@ export default function ChartScreen() {
     let homeAbbreviation = null;
     let awayColor = null;
     let homeColor = null;
+
+    // Extract team names from event if available
+    if (event) {
+      const teamData = getTeamNames();
+      awayName = teamData.noTeam;
+      homeName = teamData.yesTeam;
+      awayAbbreviation = awayName.substring(0, 3).toUpperCase();
+      homeAbbreviation = homeName.substring(0, 3).toUpperCase();
+      awayColor = "#EF4444"; // Red for away team
+      homeColor = "#3B82F6"; // Blue for home team
+    }
 
     if (
       market?.teams &&
@@ -225,6 +344,33 @@ export default function ChartScreen() {
           : homeName.substring(0, 3).toUpperCase();
     }
 
+    if (isProFootball) {
+      const mappedAwayColor =
+        getNFLTeamColor(awayName) || getNFLTeamColor(awayAbbreviation);
+      const mappedHomeColor =
+        getNFLTeamColor(homeName) || getNFLTeamColor(homeAbbreviation);
+
+      if (mappedAwayColor) {
+        awayColor = mappedAwayColor;
+      }
+      if (mappedHomeColor) {
+        homeColor = mappedHomeColor;
+      }
+    }
+    if (isProBasketball) {
+      const mappedAwayColor =
+        getNBATeamColor(awayName) || getNBATeamColor(awayAbbreviation);
+      const mappedHomeColor =
+        getNBATeamColor(homeName) || getNBATeamColor(homeAbbreviation);
+
+      if (mappedAwayColor) {
+        awayColor = mappedAwayColor;
+      }
+      if (mappedHomeColor) {
+        homeColor = mappedHomeColor;
+      }
+    }
+
     const finalAwayColor = awayColor || Colors.primary;
     const finalHomeColor = homeColor || Colors.accentTeal;
 
@@ -269,22 +415,40 @@ export default function ChartScreen() {
       homePrice = parseFloat(market.homeTeam?.price) || null;
     }
 
-    // Calculate percentages from prices (prices are typically 0-1 decimals)
+    // Calculate percentages from event bid data
     let pctAway, pctHome;
-    if (
-      awayPrice == null ||
-      homePrice == null ||
-      !Number.isFinite(awayPrice) ||
-      !Number.isFinite(homePrice)
-    ) {
-      // Fallback to dummy if prices not available
-      pctAway = DUMMY_MATCH.pctAway;
-      pctHome = DUMMY_MATCH.pctHome;
+    if (event?.markets && event.markets.length >= 2) {
+      // Use actual bid prices from the event
+      const awayMarket = event.markets[1]; // Second market is for away team (Buffalo)
+      const homeMarket = event.markets[0]; // First market is for home team (Jacksonville)
+
+      const awayBid = parseFloat(awayMarket.yesBid) || 0;
+      const homeBid = parseFloat(homeMarket.yesBid) || 0;
+
+      if (awayBid > 0 && homeBid > 0) {
+        // Convert bids to percentages (bids are already in decimal format like 0.5000)
+        pctAway = Math.round(awayBid * 100);
+        pctHome = Math.round(homeBid * 100);
+      } else {
+        // Fallback to dummy if bid data not available
+        pctAway = DUMMY_MATCH.pctAway;
+        pctHome = DUMMY_MATCH.pctHome;
+      }
     } else {
-      // Prices are decimals (0-1), convert to percentages and normalize to sum to 100%
-      const sum = awayPrice + homePrice || 1;
-      pctAway = Math.round((awayPrice / sum) * 100);
-      pctHome = 100 - pctAway;
+      // Fallback to calculated prices if event structure is different
+      if (
+        awayPrice == null ||
+        homePrice == null ||
+        !Number.isFinite(awayPrice) ||
+        !Number.isFinite(homePrice)
+      ) {
+        pctAway = DUMMY_MATCH.pctAway;
+        pctHome = DUMMY_MATCH.pctHome;
+      } else {
+        const sum = awayPrice + homePrice || 1;
+        pctAway = Math.round((awayPrice / sum) * 100);
+        pctHome = 100 - pctAway;
+      }
     }
 
     const volumeUsd =
@@ -331,7 +495,7 @@ export default function ChartScreen() {
       chattingCount: DUMMY_MATCH.chattingCount,
       about,
     };
-  }, [market]);
+  }, [market, event]);
 
   // Map UI timeframes to MyChart expected values
   const chartTimeFrame = useMemo(() => {
@@ -352,25 +516,28 @@ export default function ChartScreen() {
     }
   }, [timeframe]);
 
-  const formattedVolume = useMemo(() => {
-    const n = match.volumeUsd;
-    return `$${Math.round(n).toLocaleString("en-US")} Vol.`;
-  }, [match.volumeUsd]);
+  const competitionLabel =
+    event?.competition || event?.league || market?.league || match.league;
 
-  // Animated styles for team blocks
-  const awayTeamAnimatedStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ translateX: awayTeamTranslateX.value }],
-      opacity: awayTeamOpacity.value,
-    };
-  });
+  const displayPctAway = useMemo(() => {
+    if (
+      currentPrices?.awayPrice !== undefined &&
+      currentPrices?.homePrice !== undefined
+    ) {
+      return Math.round(Number(currentPrices.awayPrice) * 100);
+    }
+    return match.pctAway;
+  }, [currentPrices, match.pctAway]);
 
-  const homeTeamAnimatedStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ translateX: homeTeamTranslateX.value }],
-      opacity: homeTeamOpacity.value,
-    };
-  });
+  const displayPctHome = useMemo(() => {
+    if (
+      currentPrices?.awayPrice !== undefined &&
+      currentPrices?.homePrice !== undefined
+    ) {
+      return Math.round(Number(currentPrices.homePrice) * 100);
+    }
+    return match.pctHome;
+  }, [currentPrices, match.pctHome]);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -392,9 +559,12 @@ export default function ChartScreen() {
             />
           </TouchableOpacity>
 
-          <View style={styles.livePill}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveText}>LIVE</Text>
+          <View style={styles.headerCenter}>
+            <Image
+              source={require("../assets/images/ScoretradeBlack.png")}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
 
           <TouchableOpacity style={styles.topBarIcon}>
@@ -406,60 +576,42 @@ export default function ChartScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Match header */}
-        <View style={styles.matchHeader}>
-          <Animated.View style={[styles.teamBlockLeft, awayTeamAnimatedStyle]}>
-            <Text style={[styles.teamCode, { color: match.away.color }]}>
-              {match.away.code}
-            </Text>
-            <Text style={styles.teamName}>{match.away.name}</Text>
-            <Text style={styles.teamRecord}>{match.away.record}</Text>
-          </Animated.View>
-
-          <View style={styles.scoreBlock}>
-            <Text style={styles.scoreText}>
-              {match.score.away} <Text style={styles.scoreDash}>-</Text>{" "}
-              {match.score.home}
-            </Text>
-
-            <View style={styles.volumeRow}>
-              <View style={styles.pctBar}>
-                <View
-                  style={[
-                    styles.pctBarLeft,
-                    {
-                      width: `${match.pctAway}%`,
-                      backgroundColor: match.away.color,
-                    },
-                  ]}
-                />
-                <View
-                  style={[
-                    styles.pctBarRight,
-                    {
-                      width: `${match.pctHome}%`,
-                      backgroundColor: match.home.color,
-                    },
-                  ]}
-                />
-              </View>
-              <Text style={styles.volumeText}>{formattedVolume}</Text>
-            </View>
+        {!!competitionLabel && (
+          <View style={styles.competitionRow}>
+            <Text style={styles.competitionText}>{competitionLabel}</Text>
           </View>
+        )}
 
-          <Animated.View style={[styles.teamBlockRight, homeTeamAnimatedStyle]}>
-            <Text style={[styles.teamCode, { color: match.home.color }]}>
-              {match.home.code}
-            </Text>
-            <Text style={styles.teamName}>{match.home.name}</Text>
-            <Text style={styles.teamRecord}>{match.home.record}</Text>
-          </Animated.View>
-        </View>
+        <Text
+          style={{
+            color: "#FFFFFF",
+            fontWeight: "700",
+            fontSize: 30,
+            marginBottom: 15,
+          }}
+        >
+          {event.title}
+        </Text>
+
+        {event.volume && (
+          <Text
+            style={{
+              color: Colors.textTertiary,
+              fontSize: 16,
+              fontWeight: "500",
+              marginBottom: 20,
+            }}
+          >
+            Volume: {formatCurrency(event.volume)}
+          </Text>
+        )}
 
         {/* Chart */}
         <View style={{ right: 15 }}>
           <MyChart
             market={market}
+            event={event}
+            candlestickData={candlestickData}
             onTimestampChange={setCurrentTimestamp}
             onPriceStatsChange={setPriceStats}
             onPriceChange={setCurrentPrices}
@@ -467,6 +619,7 @@ export default function ChartScreen() {
             timeFrame={chartTimeFrame}
             awayColor={match.away.color}
             homeColor={match.home.color}
+            colorBoost={isProFootball ? 0.3 : 0.22}
           />
         </View>
 
@@ -481,8 +634,8 @@ export default function ChartScreen() {
             ]}
             onPress={() => setSelectedSide("away")}
           >
-            <Text style={styles.pickButtonText}>
-              {match.away.code} {match.pctAway}%
+            <Text style={[styles.pickButtonText, styles.pickButtonTextWhite]}>
+              {match.away.code} {displayPctAway}%
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -493,14 +646,14 @@ export default function ChartScreen() {
             ]}
             onPress={() => setSelectedSide("home")}
           >
-            <Text style={[styles.pickButtonText]}>
-              {match.home.code} {match.pctHome}%
+            <Text style={[styles.pickButtonText, styles.pickButtonTextWhite]}>
+              {match.home.code} {displayPctHome}%
             </Text>
           </TouchableOpacity>
         </View>
 
         {/* Chat row */}
-        <View style={styles.chatRowOuter}>
+        {/* <View style={styles.chatRowOuter}>
           <BlurView intensity={18} tint="dark" style={styles.chatRow}>
             <View style={styles.chatLeft}>
               <View style={styles.chatAvatars}>
@@ -535,8 +688,9 @@ export default function ChartScreen() {
               <Text style={styles.joinChatText}>Join Chat</Text>
             </TouchableOpacity>
           </BlurView>
-        </View>
+        </View> */}
 
+        <Orders />
         {/* About */}
         <View style={styles.about}>
           <Text style={styles.aboutTitle}>About</Text>
@@ -605,32 +759,6 @@ export default function ChartScreen() {
 
             {/* Bottom section: prediction buttons + input */}
             <View style={styles.modalBottomSection}>
-              {/* Prediction chips */}
-              <View style={styles.modalBottomBar}>
-                <TouchableOpacity
-                  style={[
-                    styles.modalPickButton,
-                    styles.modalPickLeft,
-                    { backgroundColor: match.away.color },
-                  ]}
-                >
-                  <Text style={styles.modalPickText}>{match.away.code}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.modalPickButton,
-                    styles.modalPickRight,
-                    { backgroundColor: match.home.color },
-                  ]}
-                >
-                  <Text
-                    style={[styles.modalPickText, styles.modalPickTextDark]}
-                  >
-                    {match.home.code}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
               {/* Chat input */}
               <View style={styles.modalInputRow}>
                 <TextInput
@@ -674,11 +802,11 @@ export default function ChartScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: "black",
   },
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: "black",
   },
   content: {
     paddingHorizontal: Spacing.lg,
@@ -691,6 +819,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingTop: Spacing.md,
     paddingBottom: Spacing.lg,
+    marginBottom: Spacing.lg,
   },
   topBarIcon: {
     width: 38,
@@ -701,6 +830,44 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.06)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
+  },
+  headerCenter: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: Spacing.sm,
+  },
+  logoImage: {
+    width: 54,
+    height: 54,
+  },
+  headerTitle: {
+    ...Typography.body,
+    fontSize: 16,
+    fontWeight: "600",
+    color: Colors.textPrimary,
+  },
+  competitionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: Spacing.sm,
+  },
+  competitionPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.round,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+  },
+  competitionText: {
+    color: Colors.textSecondary,
+    fontWeight: "500",
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
   },
   livePill: {
     flexDirection: "row",
@@ -778,7 +945,7 @@ const styles = StyleSheet.create({
   pctBarRight: { height: "100%" },
   volumeText: {
     ...Typography.caption,
-    color: "white",
+    color: "#FFFFFF",
     marginTop: 8,
   },
 
@@ -801,17 +968,72 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   pickButtonSelected: {
-    borderWidth: 2,
-    borderColor: Colors.textPrimary,
+    borderWidth: 3,
+    borderColor: "#FFFFFF",
   },
   pickButtonText: {
     fontSize: 14,
     fontWeight: "800",
-    color: "#FFFFFF",
+    color: "black",
     letterSpacing: 0.2,
+  },
+  pickButtonTextWhite: {
+    color: "#FFFFFF",
   },
   pickButtonTextDark: {
     color: "#111111",
+  },
+
+  highLowContainer: {
+    marginTop: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  highLowRow: {
+    flexDirection: "row",
+    gap: Spacing.md,
+  },
+  highLowCard: {
+    flex: 1,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+
+    borderWidth: 1,
+  },
+  highLowLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    marginBottom: Spacing.sm,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  highLowValues: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  highLowItem: {
+    flex: 1,
+    alignItems: "center",
+  },
+  highLowTitle: {
+    ...Typography.caption,
+    color: Colors.textMuted,
+    fontSize: 11,
+    marginBottom: 4,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  highLowPrice: {
+    ...Typography.body,
+    color: Colors.textPrimary,
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  highLowDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    marginHorizontal: Spacing.sm,
   },
 
   chatRowOuter: {
@@ -962,7 +1184,7 @@ const styles = StyleSheet.create({
   },
   messageBadgeText: {
     ...Typography.caption,
-    color: "#000000",
+    color: "#FFFFFF",
     fontWeight: "700",
   },
   modalBottomBar: {
@@ -994,9 +1216,7 @@ const styles = StyleSheet.create({
   modalPickTextDark: {
     color: "#111111",
   },
-  modalBottomSection: {
-    marginTop: Spacing.sm,
-  },
+  modalBottomSection: {},
   modalInputRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1010,6 +1230,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.06)",
     color: Colors.textPrimary,
     fontSize: 14,
+    bottom: 20,
   },
   modalSendButton: {
     marginLeft: Spacing.sm,
@@ -1019,5 +1240,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.06)",
+    bottom: 20,
   },
 });

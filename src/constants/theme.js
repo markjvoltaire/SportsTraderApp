@@ -44,7 +44,7 @@ export const Typography = {
   heroPrice: {
     fontSize: 56,
     fontWeight: "700",
-    color: Colors.textPrimary,
+    color: "white",
     letterSpacing: 0.4,
   },
   pageTitle: {

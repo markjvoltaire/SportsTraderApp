@@ -1,7 +1,10 @@
 import React from "react";
 import { StatusBar } from "expo-status-bar";
 import { StyleSheet, View, TouchableOpacity } from "react-native";
-import { NavigationContainer } from "@react-navigation/native";
+import {
+  NavigationContainer,
+  useNavigationContainerRef,
+} from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
@@ -22,9 +25,12 @@ import AddFundsScreen from "./Screens/AddFundsScreen";
 import DepositAmountScreen from "./Screens/DepositAmountScreen";
 import MoonPayScreen from "./Screens/MoonPayScreen";
 import MarketDetailScreen from "./Screens/MarketDetailScreen";
+import GameDetail from "./Screens/GameDetail";
+import EventDetail from "./Screens/EventDetail";
 import { Colors, Spacing, Typography } from "./src/constants/theme";
 import ChartScreen from "./Screens/ChartScreen";
 import ErrorBoundary from "./src/components/ErrorBoundary";
+import SplashScreen from "./Screens/SplashScreen";
 
 // 1. Import Crossmint Provider
 import { CrossmintProvider } from "@crossmint/client-sdk-react-native-ui";
@@ -33,6 +39,7 @@ const Tab = createBottomTabNavigator();
 const HomeStack = createNativeStackNavigator();
 const ProfileStack = createNativeStackNavigator();
 const AuthStack = createNativeStackNavigator();
+const RootStack = createNativeStackNavigator();
 
 function HomeStackScreen() {
   return (
@@ -56,6 +63,20 @@ function HomeStackScreen() {
       <HomeStack.Screen
         name="MarketDetail"
         component={MarketDetailScreen}
+        options={{
+          headerShown: false,
+        }}
+      />
+      <HomeStack.Screen
+        name="GameDetail"
+        component={GameDetail}
+        options={{
+          headerShown: false,
+        }}
+      />
+      <HomeStack.Screen
+        name="EventDetail"
+        component={EventDetail}
         options={{
           headerShown: false,
         }}
@@ -114,10 +135,10 @@ function AppNavigator() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: styles.tabBar, // dark theme    backgroundColor: "black",
+        tabBarStyle: styles.tabBar,
         tabBarItemStyle: styles.tabItem,
-        tabBarActiveTintColor: "black",
-        tabBarInactiveTintColor: "gray",
+        tabBarActiveTintColor: "white",
+        tabBarInactiveTintColor: "#999999",
         tabBarLabelStyle: styles.tabLabel,
       }}
     >
@@ -170,18 +191,94 @@ function SupabaseInitializedWrapper({ children }) {
 }
 
 function RootNavigator() {
+  return (
+    <RootStack.Navigator
+      screenOptions={{ headerShown: false }}
+      initialRouteName="Splash"
+    >
+      <RootStack.Screen name="Splash" component={SplashScreen} />
+      <RootStack.Screen name="Auth" component={AuthNavigator} />
+      <RootStack.Screen name="Home" component={AppNavigator} />
+    </RootStack.Navigator>
+  );
+}
+
+// Component to handle navigation based on auth state changes
+function NavigationHandler({ navigationRef }) {
   const { session, loading } = useAuth();
+  const lastSessionRef = React.useRef(null);
+  const isInitialMount = React.useRef(true);
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <LottieLoader size="large" />
-      </View>
-    );
-  }
+  React.useEffect(() => {
+    if (loading) return; // Wait for auth to finish loading
+    if (!navigationRef?.isReady()) return; // Wait for navigation to be ready
 
-  // Show auth stack (Welcome/Login) if not signed in, otherwise show main app
-  return session ? <AppNavigator /> : <AuthNavigator />;
+    // Get the root navigation state to check which stack we're on
+    const state = navigationRef.getState();
+    const rootRouteName = state?.routes[state?.index]?.name;
+
+    // Skip if we're on Splash - let SplashScreen handle initial navigation
+    if (rootRouteName === "Splash") {
+      lastSessionRef.current = session;
+      isInitialMount.current = false;
+      return;
+    }
+
+    // On initial mount, just track the session and return
+    if (isInitialMount.current) {
+      lastSessionRef.current = session;
+      isInitialMount.current = false;
+      return;
+    }
+
+    // Detect when user signs in or signs out
+    const previousSession = lastSessionRef.current;
+    const sessionChanged = previousSession !== session;
+    const signedIn = session && !previousSession; // Session goes from null to truthy
+    const signedOut = !session && previousSession; // Session goes from truthy to null
+
+    // Check if we're on Auth stack (when on nested routes like "Login", root is still "Auth")
+    const isOnAuthRoute = rootRouteName === "Auth";
+
+    // If user signs in (session becomes truthy) and we're on Auth stack, navigate to Home
+    if (signedIn && sessionChanged && isOnAuthRoute) {
+      navigationRef.reset({
+        index: 0,
+        routes: [{ name: "Home" }],
+      });
+      lastSessionRef.current = session;
+      return; // Early return after navigation
+    }
+
+    // If user signs out (session becomes null) and we're on authenticated stack (Home), navigate to Auth
+    // Check if we're on any authenticated route (Home or its nested routes)
+    const isOnAuthenticatedRoute = rootRouteName === "Home";
+    if (signedOut && sessionChanged && isOnAuthenticatedRoute) {
+      navigationRef.reset({
+        index: 0,
+        routes: [{ name: "Auth" }],
+      });
+      lastSessionRef.current = session;
+      return; // Early return after navigation
+    }
+
+    // Update the ref to track session changes
+    lastSessionRef.current = session;
+  }, [session, loading, navigationRef]);
+
+  return null;
+}
+
+// Wrapper component that has access to both NavigationContainer ref and Auth context
+function AppContent() {
+  const navigationRef = useNavigationContainerRef();
+
+  return (
+    <>
+      <NavigationHandler navigationRef={navigationRef} />
+      <RootNavigator />
+    </>
+  );
 }
 
 export default function App() {
@@ -190,6 +287,8 @@ export default function App() {
   const PRIVY_CLIENT_ID = process.env.EXPO_PUBLIC_PRIVY_CLIENT_ID;
   const CROSSMINT_API_KEY =
     process.env.EXPO_PUBLIC_CROSSMINT_CLIENT_SIDE_API_KEY || "";
+
+  const navigationRef = useNavigationContainerRef();
 
   return (
     // <ErrorBoundary>
@@ -213,7 +312,8 @@ export default function App() {
           <SupabaseInitializedWrapper>
             <AuthProvider>
               <SafeAreaProvider>
-                <NavigationContainer>
+                <NavigationContainer ref={navigationRef}>
+                  <NavigationHandler navigationRef={navigationRef} />
                   <StatusBar style="light" />
                   <RootNavigator />
                   <PrivyElements />
@@ -242,10 +342,10 @@ const styles = StyleSheet.create({
     bottom: 0,
     height: 72,
     borderRadius: 0,
-    backgroundColor: "white",
+    backgroundColor: "black",
     opacity: 1,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    borderTopColor: "rgba(255, 255, 255, 0.1)",
     borderWidth: 0,
     paddingHorizontal: Spacing.md,
     paddingBottom: Spacing.sm,
@@ -262,5 +362,6 @@ const styles = StyleSheet.create({
   tabLabel: {
     ...Typography.caption,
     fontWeight: "600",
+    color: "white",
   },
 });
