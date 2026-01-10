@@ -198,7 +198,7 @@ function RootNavigator() {
     >
       <RootStack.Screen name="Splash" component={SplashScreen} />
       <RootStack.Screen name="Auth" component={AuthNavigator} />
-      <RootStack.Screen name="Home" component={AppNavigator} />
+      <RootStack.Screen name="Main" component={AppNavigator} />
     </RootStack.Navigator>
   );
 }
@@ -240,19 +240,19 @@ function NavigationHandler({ navigationRef }) {
     // Check if we're on Auth stack (when on nested routes like "Login", root is still "Auth")
     const isOnAuthRoute = rootRouteName === "Auth";
 
-    // If user signs in (session becomes truthy) and we're on Auth stack, navigate to Home
+    // If user signs in (session becomes truthy) and we're on Auth stack, navigate to Main
     if (signedIn && sessionChanged && isOnAuthRoute) {
       navigationRef.reset({
         index: 0,
-        routes: [{ name: "Home" }],
+        routes: [{ name: "Main" }],
       });
       lastSessionRef.current = session;
       return; // Early return after navigation
     }
 
-    // If user signs out (session becomes null) and we're on authenticated stack (Home), navigate to Auth
-    // Check if we're on any authenticated route (Home or its nested routes)
-    const isOnAuthenticatedRoute = rootRouteName === "Home";
+    // If user signs out (session becomes null) and we're on authenticated stack (Main), navigate to Auth
+    // Check if we're on any authenticated route (Main or its nested routes)
+    const isOnAuthenticatedRoute = rootRouteName === "Main";
     if (signedOut && sessionChanged && isOnAuthenticatedRoute) {
       navigationRef.reset({
         index: 0,

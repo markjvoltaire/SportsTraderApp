@@ -80,7 +80,7 @@ export default function LoginScreen() {
         if (rootNavigator?.reset) {
           rootNavigator.reset({
             index: 0,
-            routes: [{ name: "Home" }],
+            routes: [{ name: "Main" }],
           });
         }
       }, 200);

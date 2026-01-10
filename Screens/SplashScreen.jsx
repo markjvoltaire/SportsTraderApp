@@ -27,7 +27,7 @@ export default function SplashScreen() {
       }).start(() => {
         // Navigate to appropriate screen based on auth status
         if (session) {
-          navigation.replace("Home");
+          navigation.replace("Main");
         } else {
           navigation.replace("Auth");
         }
