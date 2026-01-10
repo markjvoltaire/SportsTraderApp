@@ -14,7 +14,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.markjvoltaire.SportsTraderApp"
+      "bundleIdentifier": "com.markjvoltaire.SportsTraderApp",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "scheme": "scoretrade",
     "android": {
@@ -23,10 +26,16 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.markjvoltaire.SportsTraderApp"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "4de92cdc-fc2c-487a-b498-641a954e7834"
+      }
     }
   }
 }
