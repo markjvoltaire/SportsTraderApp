@@ -1,6 +1,6 @@
 import React from "react";
 import { StatusBar } from "expo-status-bar";
-import { StyleSheet, View, TouchableOpacity } from "react-native";
+import { StyleSheet, View, TouchableOpacity, Text } from "react-native";
 import {
   NavigationContainer,
   useNavigationContainerRef,
@@ -288,43 +288,80 @@ export default function App() {
   const CROSSMINT_API_KEY =
     process.env.EXPO_PUBLIC_CROSSMINT_CLIENT_SIDE_API_KEY || "";
 
+  // Validate critical environment variables in production builds
+  // This helps catch configuration issues early
+  if (!__DEV__) {
+    if (!PRIVY_APP_ID || PRIVY_APP_ID === "placeholder-app-id") {
+      console.error(
+        "⚠️ EXPO_PUBLIC_PRIVY_APP_ID is missing or invalid in production build!"
+      );
+    }
+    if (!PRIVY_CLIENT_ID || PRIVY_CLIENT_ID === "placeholder-client-id") {
+      console.error(
+        "⚠️ EXPO_PUBLIC_PRIVY_CLIENT_ID is missing or invalid in production build!"
+      );
+    }
+  }
+
   const navigationRef = useNavigationContainerRef();
 
+  // Only proceed if we have valid Privy credentials
+  // In production, missing credentials will show an error screen instead of crashing
+  const hasValidPrivyConfig =
+    PRIVY_APP_ID &&
+    PRIVY_APP_ID !== "placeholder-app-id" &&
+    PRIVY_CLIENT_ID &&
+    PRIVY_CLIENT_ID !== "placeholder-client-id";
+
+  if (!hasValidPrivyConfig && !__DEV__) {
+    // In production, show error screen instead of crashing
+    return (
+      <ErrorBoundary>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.errorTitle}>Configuration Error</Text>
+          <Text style={styles.errorMessage}>
+            The app is missing required configuration. Please contact support.
+          </Text>
+        </View>
+      </ErrorBoundary>
+    );
+  }
+
   return (
-    // <ErrorBoundary>
-    <CrossmintProvider apiKey={CROSSMINT_API_KEY}>
-      <PrivyProvider
-        appId={PRIVY_APP_ID || "placeholder-app-id"}
-        clientId={PRIVY_CLIENT_ID || "placeholder-client-id"}
-        config={{
-          embeddedWallets: {
-            ethereum: {
-              createOnLogin: "users-without-wallets",
+    <ErrorBoundary>
+      <CrossmintProvider apiKey={CROSSMINT_API_KEY}>
+        <PrivyProvider
+          appId={PRIVY_APP_ID || "placeholder-app-id"}
+          clientId={PRIVY_CLIENT_ID || "placeholder-client-id"}
+          config={{
+            embeddedWallets: {
+              ethereum: {
+                createOnLogin: "users-without-wallets",
+              },
             },
-          },
-          appearance: {
-            theme: "dark",
-            accentColor: "#6366F1",
-          },
-        }}
-      >
-        <SupabaseProvider>
-          <SupabaseInitializedWrapper>
-            <AuthProvider>
-              <SafeAreaProvider>
-                <NavigationContainer ref={navigationRef}>
-                  <NavigationHandler navigationRef={navigationRef} />
-                  <StatusBar style="light" />
-                  <RootNavigator />
-                  <PrivyElements />
-                </NavigationContainer>
-              </SafeAreaProvider>
-            </AuthProvider>
-          </SupabaseInitializedWrapper>
-        </SupabaseProvider>
-      </PrivyProvider>
-    </CrossmintProvider>
-    // </ErrorBoundary>
+            appearance: {
+              theme: "dark",
+              accentColor: "#6366F1",
+            },
+          }}
+        >
+          <SupabaseProvider>
+            <SupabaseInitializedWrapper>
+              <AuthProvider>
+                <SafeAreaProvider>
+                  <NavigationContainer ref={navigationRef}>
+                    <NavigationHandler navigationRef={navigationRef} />
+                    <StatusBar style="light" />
+                    <RootNavigator />
+                    <PrivyElements />
+                  </NavigationContainer>
+                </SafeAreaProvider>
+              </AuthProvider>
+            </SupabaseInitializedWrapper>
+          </SupabaseProvider>
+        </PrivyProvider>
+      </CrossmintProvider>
+    </ErrorBoundary>
   );
 }
 
@@ -334,6 +371,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: Colors.background,
+    padding: Spacing.xl,
+  },
+  errorTitle: {
+    ...Typography.sectionTitle,
+    color: Colors.danger,
+    marginBottom: Spacing.md,
+    textAlign: "center",
+  },
+  errorMessage: {
+    ...Typography.body,
+    color: Colors.textSecondary,
+    textAlign: "center",
+    marginTop: Spacing.md,
   },
   tabBar: {
     position: "absolute",
