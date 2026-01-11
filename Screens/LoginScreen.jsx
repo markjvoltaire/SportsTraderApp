@@ -6,6 +6,7 @@ import {
   TextInput,
   Linking,
   Platform,
+  Alert,
 } from "react-native";
 import React, { useState, useEffect } from "react";
 import { useNavigation } from "@react-navigation/native";
@@ -52,6 +53,7 @@ export default function LoginScreen() {
   const [codeSent, setCodeSent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [phoneDigits, setPhoneDigits] = useState("");
+  const [error, setError] = useState(null);
   const { session, loading: authLoading } = useAuth();
 
   // Check if user is already authenticated with Privy
@@ -74,7 +76,7 @@ export default function LoginScreen() {
       while (rootNavigator.getParent()) {
         rootNavigator = rootNavigator.getParent();
       }
-      
+
       // Small delay to ensure navigation state is ready and avoid conflicts with NavigationHandler
       const timer = setTimeout(() => {
         if (rootNavigator?.reset) {
@@ -97,11 +99,15 @@ export default function LoginScreen() {
   const handleSendCode = async () => {
     const digits = getPhoneDigits(phone);
     if (digits.length !== 10) {
-      // Show error or validation
+      Alert.alert(
+        "Invalid Phone Number",
+        "Please enter a valid 10-digit phone number"
+      );
       return;
     }
 
     setIsLoading(true);
+    setError(null);
     try {
       const phoneNumber = `+1${digits}`;
       if (isAuthenticated) {
@@ -111,9 +117,29 @@ export default function LoginScreen() {
       }
       setPhoneDigits(digits);
       setCodeSent(true);
-      console.log("Code sent successfully");
+      console.log("Code sent successfully to", phoneNumber);
     } catch (error) {
-      console.error("Error sending code:", error);
+      console.error("Error sending SMS code:", error);
+      console.error("Error details:", {
+        message: error?.message,
+        code: error?.code,
+        error: error?.error,
+        fullError: JSON.stringify(error, null, 2),
+      });
+
+      // Extract user-friendly error message
+      let errorMessage = "Failed to send verification code. Please try again.";
+      if (error?.message) {
+        errorMessage = error.message;
+      } else if (error?.error) {
+        errorMessage =
+          typeof error.error === "string"
+            ? error.error
+            : error.error?.message || errorMessage;
+      }
+
+      setError(errorMessage);
+      Alert.alert("Unable to Send Code", errorMessage, [{ text: "OK" }]);
     } finally {
       setIsLoading(false);
     }
@@ -121,10 +147,15 @@ export default function LoginScreen() {
 
   const handleVerifyCode = async () => {
     if (!verificationCode || verificationCode.length !== 6) {
+      Alert.alert(
+        "Invalid Code",
+        "Please enter a valid 6-digit verification code"
+      );
       return;
     }
 
     setIsLoading(true);
+    setError(null);
     try {
       const phoneNumber = `+1${phoneDigits}`;
       if (isAuthenticated) {
@@ -135,6 +166,26 @@ export default function LoginScreen() {
       console.log("Verification successful");
     } catch (error) {
       console.error("Verification error:", error);
+      console.error("Error details:", {
+        message: error?.message,
+        code: error?.code,
+        error: error?.error,
+        fullError: JSON.stringify(error, null, 2),
+      });
+
+      // Extract user-friendly error message
+      let errorMessage = "Invalid verification code. Please try again.";
+      if (error?.message) {
+        errorMessage = error.message;
+      } else if (error?.error) {
+        errorMessage =
+          typeof error.error === "string"
+            ? error.error
+            : error.error?.message || errorMessage;
+      }
+
+      setError(errorMessage);
+      Alert.alert("Verification Failed", errorMessage, [{ text: "OK" }]);
     } finally {
       setIsLoading(false);
     }
@@ -156,7 +207,11 @@ export default function LoginScreen() {
           style={styles.backButton}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={normalize(24)} color={Colors.textPrimary} />
+          <Ionicons
+            name="arrow-back"
+            size={normalize(24)}
+            color={Colors.textPrimary}
+          />
         </TouchableOpacity>
         {!codeSent && (
           <TouchableOpacity onPress={handleSendCode} activeOpacity={0.7}>
@@ -276,11 +331,18 @@ export default function LoginScreen() {
               onPress={() => {
                 setCodeSent(false);
                 setVerificationCode("");
+                setError(null);
               }}
               style={styles.resendContainer}
             >
               <Text style={styles.resendText}>Didn't receive code? Resend</Text>
             </TouchableOpacity>
+
+            {error && (
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            )}
           </>
         )}
       </View>
@@ -392,5 +454,20 @@ const styles = StyleSheet.create({
     fontSize: normalizeFont(14),
     fontWeight: "400",
     color: Colors.primary,
+  },
+  errorContainer: {
+    marginTop: Spacing.lg,
+    padding: Spacing.md,
+    backgroundColor: Colors.dangerMuted,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.danger,
+  },
+  errorText: {
+    ...Typography.body,
+    fontSize: normalizeFont(14),
+    fontWeight: "400",
+    color: Colors.danger,
+    textAlign: "center",
   },
 });

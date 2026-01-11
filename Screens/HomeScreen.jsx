@@ -196,6 +196,7 @@ export default function HomeScreen() {
           "https://scoretradebackend.onrender.com/api/sports-filters"
         );
         const data = await response.json();
+        console.log("Sports Filters:", data);
         setSportsFilters(data);
       } catch (error) {
         console.error("Error fetching sports filters:", error);
