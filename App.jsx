@@ -1,6 +1,10 @@
-import React from "react";
+import React, { useEffect, useCallback } from "react";
 import { StatusBar } from "expo-status-bar";
 import { StyleSheet, View, TouchableOpacity, Text } from "react-native";
+import * as ExpoSplashScreen from "expo-splash-screen";
+
+// Keep the splash screen visible while we fetch resources
+ExpoSplashScreen.preventAutoHideAsync();
 import {
   NavigationContainer,
   useNavigationContainerRef,

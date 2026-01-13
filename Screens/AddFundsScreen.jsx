@@ -46,7 +46,7 @@ export default function AddFundsScreen() {
     const createOrder = async () => {
       try {
         const response = await fetch(
-          "http://localhost:4000/api/crossmint/create-order",
+          "https://scoretradebackend.onrender.com/api/crossmint/create-order",
           {
             method: "POST",
             headers: {

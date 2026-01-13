@@ -3,6 +3,7 @@ import { View, Image, StyleSheet, Animated, Dimensions } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../src/contexts/AuthContext";
 import { Colors } from "../src/constants/theme";
+import * as NativeSplashScreen from "expo-splash-screen";
 
 const { width, height } = Dimensions.get("window");
 
@@ -10,6 +11,18 @@ export default function SplashScreen() {
   const navigation = useNavigation();
   const { session, loading } = useAuth();
   const fadeAnim = useRef(new Animated.Value(1)).current;
+
+  // Hide the native splash screen when this component mounts
+  useEffect(() => {
+    const hideSplash = async () => {
+      try {
+        await NativeSplashScreen.hideAsync();
+      } catch (error) {
+        console.warn("Error hiding splash screen:", error);
+      }
+    };
+    hideSplash();
+  }, []);
 
   useEffect(() => {
     // Only proceed with fade and navigation once auth has finished loading

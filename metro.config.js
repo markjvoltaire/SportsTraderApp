@@ -4,6 +4,15 @@ const config = getDefaultConfig(__dirname);
 
 // Enable package exports for select libraries
 const resolveRequestWithPackageExports = (context, moduleName, platform) => {
+  // Package exports in `rpc-websockets` are incompatible with React Native
+  if (moduleName === "rpc-websockets") {
+    const ctx = {
+      ...context,
+      unstable_enablePackageExports: false,
+    };
+    return ctx.resolveRequest(ctx, moduleName, platform);
+  }
+
   // Package exports in `isows` (a `viem` dependency) are incompatible
   if (moduleName === "isows") {
     const ctx = {

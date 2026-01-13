@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import {
   StyleSheet,
   Text,
@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  Animated as RNAnimated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -34,87 +35,6 @@ import { getNFLTeamColor, getNBATeamColor } from "../src/constants/teamColors";
 import { formatCurrency, formatPrice } from "../src/utils/formatters";
 import Orders from "../src/components/market/Orders";
 
-const DUMMY_MATCH = {
-  league: "NBA",
-  isLive: true,
-  away: {
-    code: "PHI",
-    name: "Philadelphia",
-    record: "13-10",
-    color: "#3B82F6",
-  },
-  home: {
-    code: "LAL",
-    name: "Los Angeles L",
-    record: "17-8",
-    color: "#FBBF24",
-  },
-  score: { away: 17, home: 9 },
-  volumeUsd: 7021038,
-  pctAway: 61,
-  pctHome: 39,
-  chattingCount: 132,
-  about:
-    "Predict the outcome of “Philadelphia vs. Los Angeles L”. Earn $1 per contract when you’re right, or close your position before the event.",
-};
-
-const DUMMY_MESSAGES = [
-  {
-    id: "1",
-    handle: "@ballislife21",
-    badge: null,
-    text: "I can already tell this is gonna be a close one",
-  },
-  {
-    id: "2",
-    handle: "@phillyfan764",
-    badge: "PHI 61%",
-    text: "Maxey with the THREE POINTER 🔥",
-  },
-  {
-    id: "3",
-    handle: "@ghost",
-    badge: null,
-    text: "go 76ers go!",
-  },
-  {
-    id: "4",
-    handle: "@whaletrader",
-    badge: "LAL 39%",
-    text: "Got a good feeling with Doncic being back 😏",
-  },
-  {
-    id: "5",
-    handle: "@CatSpring",
-    badge: "PHI 61%",
-    text: "sold",
-  },
-  {
-    id: "6",
-    handle: "@WhaleSong",
-    badge: "LAL 39%",
-    text: "LEBRON LEBRON LEBRON LEBRON LEBRON LEBRON LEBRON",
-  },
-  {
-    id: "7",
-    handle: "@iiiiiwwwww",
-    badge: null,
-    text: "I'm still leaning towards Philly...",
-  },
-  {
-    id: "8",
-    handle: "@Lakers23",
-    badge: "LAL 39%",
-    text: "Lakers defense looking STRONG",
-  },
-  {
-    id: "9",
-    handle: "@ballislife21",
-    badge: "PHI 61%",
-    text: "If LA keeps this tempo, Philly's in trouble",
-  },
-];
-
 export default function ChartScreen() {
   const navigation = useNavigation();
   const route = useRoute();
@@ -131,9 +51,25 @@ export default function ChartScreen() {
   const [currentPrices, setCurrentPrices] = useState(null);
   const [chartLoading, setChartLoading] = useState(true);
 
+  // Trades WebSocket state
+  const tradesWsRef = useRef(null);
+  const [trades, setTrades] = useState([]);
+
+  // Volume state - initialized with event.volume, incremented with each trade
+  const [volume, setVolume] = useState(() => event?.volume || 0);
+
+  const WEBSOCKET_URL = "wss://dev-prediction-markets-api.dflow.net/api/v1/ws";
+
   const event = route.params?.event || null;
   const market =
     event?.markets?.[0] || route.params?.game || route.params?.market || null;
+
+  // Get the game winner market ticker for each side
+  const marketTicker1 = event?.markets?.[0]?.ticker || null;
+  const marketTicker2 = event?.markets?.[1]?.ticker || null;
+
+  // Put tickers in an array for WebSocket subscription
+  const marketTickers = [marketTicker1, marketTicker2].filter(Boolean);
 
   const leagueHints = useMemo(
     () =>
@@ -156,6 +92,11 @@ export default function ChartScreen() {
   const isProFootball = /pro football|nfl/i.test(leagueHints);
   const isProBasketball = /pro basketball|nba/i.test(leagueHints);
 
+  // Reset volume when event changes
+  useEffect(() => {
+    setVolume(event?.volume || 0);
+  }, [event?.volume]);
+
   // Fetch candlestick data when event changes
   useEffect(() => {
     const fetchCandlesticks = async () => {
@@ -176,6 +117,82 @@ export default function ChartScreen() {
     };
     fetchCandlesticks();
   }, [event?.ticker]);
+
+  // WebSocket connection for trades
+  useEffect(() => {
+    if (marketTickers.length === 0) return;
+
+    const ws = new WebSocket(WEBSOCKET_URL);
+
+    ws.onopen = () => {
+      // Subscribe to all trade updates
+      ws.send(
+        JSON.stringify({
+          type: "subscribe",
+          channel: "trades",
+          tickers: marketTickers,
+        })
+      );
+    };
+
+    ws.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+
+      if (message.channel === "trades") {
+        const tradeData = {
+          ticker: message.market_ticker,
+          tradeId: message.trade_id,
+          side: message.taker_side,
+          count: message.count,
+          yesPrice: message.yes_price_dollars,
+          noPrice: message.no_price_dollars,
+          time: new Date(message.created_time).toISOString(),
+        };
+
+        // Calculate amount spent in dollars (price per share × number of shares)
+        const pricePerShare = parseFloat(
+          tradeData.side === "yes" ? tradeData.yesPrice : tradeData.noPrice
+        );
+        const amountSpent = pricePerShare * parseInt(tradeData.count);
+
+        // Increment volume with amount spent
+        setVolume((prevVolume) => prevVolume + amountSpent);
+
+        // Add trade to state (prepend to show newest first)
+        setTrades((prevTrades) => {
+          return [tradeData, ...prevTrades].slice(0, 50);
+        });
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error("Trades WebSocket error:", {
+        readyState: ws.readyState,
+        url: ws.url,
+        errorType: error?.type,
+        message: error?.message || "Connection failed",
+      });
+    };
+
+    ws.onclose = (event) => {
+      console.log("Trades WebSocket connection closed:", {
+        code: event.code,
+        reason: event.reason,
+        wasClean: event.wasClean,
+        readyState: ws.readyState,
+      });
+    };
+
+    tradesWsRef.current = ws;
+
+    // Cleanup function
+    return () => {
+      if (tradesWsRef.current) {
+        tradesWsRef.current.close();
+        tradesWsRef.current = null;
+      }
+    };
+  }, [marketTickers.join(",")]);
 
   // Animation values for team blocks sliding in
   const awayTeamTranslateX = useSharedValue(-200);
@@ -205,7 +222,7 @@ export default function ChartScreen() {
 
   const match = useMemo(() => {
     if (!market) {
-      return DUMMY_MATCH;
+      return null;
     }
 
     // Helper function to extract team names from event
@@ -430,9 +447,9 @@ export default function ChartScreen() {
         pctAway = Math.round(awayBid * 100);
         pctHome = Math.round(homeBid * 100);
       } else {
-        // Fallback to dummy if bid data not available
-        pctAway = DUMMY_MATCH.pctAway;
-        pctHome = DUMMY_MATCH.pctHome;
+        // Fallback to default if bid data not available
+        pctAway = 50;
+        pctHome = 50;
       }
     } else {
       // Fallback to calculated prices if event structure is different
@@ -442,8 +459,8 @@ export default function ChartScreen() {
         !Number.isFinite(awayPrice) ||
         !Number.isFinite(homePrice)
       ) {
-        pctAway = DUMMY_MATCH.pctAway;
-        pctHome = DUMMY_MATCH.pctHome;
+        pctAway = 50;
+        pctHome = 50;
       } else {
         const sum = awayPrice + homePrice || 1;
         pctAway = Math.round((awayPrice / sum) * 100);
@@ -459,40 +476,64 @@ export default function ChartScreen() {
       0;
 
     const scoreAway =
-      market.awayScore ??
-      market.away_score ??
-      market.scoreAway ??
-      DUMMY_MATCH.score.away;
+      market.awayScore ?? market.away_score ?? market.scoreAway ?? 0;
     const scoreHome =
-      market.homeScore ??
-      market.home_score ??
-      market.scoreHome ??
-      DUMMY_MATCH.score.home;
+      market.homeScore ?? market.home_score ?? market.scoreHome ?? 0;
 
-    const about =
+    // Build about section from event data
+    let about =
       market.description ||
       `Predict the outcome of “${awayName} vs. ${homeName}”.`;
 
+    // Use rules from event markets if available
+    if (event?.markets && event.markets.length > 0) {
+      const firstMarket = event.markets[0];
+      const aboutParts = [];
+
+      // Only include rulesSecondary (the paragraph starting with "The following")
+      if (firstMarket.rulesSecondary) {
+        aboutParts.push(firstMarket.rulesSecondary);
+      }
+
+      if (event.settlementSources && event.settlementSources.length > 0) {
+        const sources = event.settlementSources
+          .map((source) => {
+            if (source.url) {
+              return `${source.name} (${source.url})`;
+            }
+            return source.name;
+          })
+          .join(", ");
+        if (sources) {
+          aboutParts.push(`Settlement source: ${sources}`);
+        }
+      }
+
+      if (aboutParts.length > 0) {
+        about = aboutParts.join("\n\n");
+      }
+    }
+
     return {
-      league: market.league || market.sport || DUMMY_MATCH.league,
+      league: market.league || market.sport || null,
       isLive: true,
       away: {
         code: awayAbbreviation,
         name: awayName,
-        record: awayTeamData?.record || DUMMY_MATCH.away.record,
+        record: awayTeamData?.record || null,
         color: finalAwayColor,
       },
       home: {
         code: homeAbbreviation,
         name: homeName,
-        record: homeTeamData?.record || DUMMY_MATCH.home.record,
+        record: homeTeamData?.record || null,
         color: finalHomeColor,
       },
       score: { away: scoreAway, home: scoreHome },
       volumeUsd,
       pctAway,
       pctHome,
-      chattingCount: DUMMY_MATCH.chattingCount,
+      chattingCount: 0,
       about,
     };
   }, [market, event]);
@@ -539,43 +580,55 @@ export default function ChartScreen() {
     return match.pctHome;
   }, [currentPrices, match.pctHome]);
 
+  // Calculate prices in cents for display
+  const displayPriceAway = useMemo(() => {
+    if (
+      currentPrices?.awayPrice !== undefined &&
+      currentPrices?.homePrice !== undefined
+    ) {
+      return formatPrice(Number(currentPrices.awayPrice));
+    }
+    return formatPrice(match.pctAway / 100);
+  }, [currentPrices, match.pctAway]);
+
+  const displayPriceHome = useMemo(() => {
+    if (
+      currentPrices?.awayPrice !== undefined &&
+      currentPrices?.homePrice !== undefined
+    ) {
+      return formatPrice(Number(currentPrices.homePrice));
+    }
+    return formatPrice(match.pctHome / 100);
+  }, [currentPrices, match.pctHome]);
+
   return (
     <SafeAreaView style={styles.safe}>
+      {/* Top bar */}
+      <View style={styles.topBar}>
+        <TouchableOpacity
+          style={styles.topBarIcon}
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
+        </TouchableOpacity>
+
+        <View style={styles.headerCenter}>
+          <Image
+            source={require("../assets/images/ScoretradeBlack.png")}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
+        </View>
+
+        <TouchableOpacity style={styles.topBarIcon}>
+          <Ionicons name="share-outline" size={20} color={Colors.textPrimary} />
+        </TouchableOpacity>
+      </View>
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* Top bar */}
-        <View style={styles.topBar}>
-          <TouchableOpacity
-            style={styles.topBarIcon}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons
-              name="chevron-back"
-              size={22}
-              color={Colors.textPrimary}
-            />
-          </TouchableOpacity>
-
-          <View style={styles.headerCenter}>
-            <Image
-              source={require("../assets/images/ScoretradeBlack.png")}
-              style={styles.logoImage}
-              resizeMode="contain"
-            />
-          </View>
-
-          <TouchableOpacity style={styles.topBarIcon}>
-            <Ionicons
-              name="share-outline"
-              size={20}
-              color={Colors.textPrimary}
-            />
-          </TouchableOpacity>
-        </View>
-
         {!!competitionLabel && (
           <View style={styles.competitionRow}>
             <Text style={styles.competitionText}>{competitionLabel}</Text>
@@ -593,7 +646,7 @@ export default function ChartScreen() {
           {event.title}
         </Text>
 
-        {event.volume && (
+        {volume > 0 && (
           <Text
             style={{
               color: Colors.textTertiary,
@@ -602,7 +655,7 @@ export default function ChartScreen() {
               marginBottom: 20,
             }}
           >
-            Volume: {formatCurrency(event.volume)}
+            Volume: {formatCurrency(volume)}
           </Text>
         )}
 
@@ -623,74 +676,7 @@ export default function ChartScreen() {
           />
         </View>
 
-        {/* Prediction */}
-        <Text style={styles.predictionTitle}>Make your prediction</Text>
-        <View style={styles.pickRow}>
-          <TouchableOpacity
-            style={[
-              styles.pickButton,
-              { backgroundColor: match.away.color },
-              selectedSide === "away" && styles.pickButtonSelected,
-            ]}
-            onPress={() => setSelectedSide("away")}
-          >
-            <Text style={[styles.pickButtonText, styles.pickButtonTextWhite]}>
-              {match.away.code} {displayPctAway}%
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.pickButton,
-              { backgroundColor: match.home.color },
-              selectedSide === "home" && styles.pickButtonSelected,
-            ]}
-            onPress={() => setSelectedSide("home")}
-          >
-            <Text style={[styles.pickButtonText, styles.pickButtonTextWhite]}>
-              {match.home.code} {displayPctHome}%
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Chat row */}
-        {/* <View style={styles.chatRowOuter}>
-          <BlurView intensity={18} tint="dark" style={styles.chatRow}>
-            <View style={styles.chatLeft}>
-              <View style={styles.chatAvatars}>
-                <View
-                  style={[
-                    styles.chatAvatar,
-                    { backgroundColor: match.away.color },
-                  ]}
-                />
-                <View
-                  style={[
-                    styles.chatAvatar,
-                    { backgroundColor: match.home.color, marginLeft: -8 },
-                  ]}
-                />
-                <View
-                  style={[
-                    styles.chatAvatar,
-                    { backgroundColor: Colors.primary, marginLeft: -8 },
-                  ]}
-                />
-              </View>
-              <Text style={styles.chatText}>
-                {match.chattingCount} chatting...
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              style={styles.joinChatButton}
-              onPress={() => setChatVisible(true)}
-            >
-              <Text style={styles.joinChatText}>Join Chat</Text>
-            </TouchableOpacity>
-          </BlurView>
-        </View> */}
-
-        <Orders />
+        <Orders event={event} />
         {/* About */}
         <View style={styles.about}>
           <Text style={styles.aboutTitle}>About</Text>
@@ -698,103 +684,45 @@ export default function ChartScreen() {
         </View>
       </ScrollView>
 
-      {/* Chat bottom sheet */}
-      <Modal
-        visible={chatVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setChatVisible(false)}
-      >
-        <KeyboardAvoidingView
-          style={styles.modalOverlay}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-        >
-          <View style={styles.modalSheet}>
-            {/* Modal header */}
-            <View style={styles.modalHeader}>
-              <View style={styles.modalHeaderText}>
-                <Text style={styles.modalTitle}>
-                  {DUMMY_MATCH.away.name} vs. {DUMMY_MATCH.home.name}
-                </Text>
-                <Text style={styles.modalSubtitle}>
-                  {DUMMY_MATCH.chattingCount} chatting
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={styles.modalClose}
-                onPress={() => setChatVisible(false)}
-              >
-                <Ionicons name="close" size={22} color={Colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-
-            {/* Messages list */}
-            <FlatList
-              data={DUMMY_MESSAGES}
-              keyExtractor={(item) => item.id}
-              style={styles.messageList}
-              contentContainerStyle={styles.messageListContent}
-              showsVerticalScrollIndicator={false}
-              renderItem={({ item }) => (
-                <View style={styles.messageRow}>
-                  <View style={styles.messageTextBlock}>
-                    <Text style={styles.messageHandle}>{item.handle}</Text>
-                    <Text style={styles.messageBody}>{item.text}</Text>
-                  </View>
-                  {item.badge && (
-                    <View
-                      style={[
-                        styles.messageBadge,
-                        item.badge.startsWith("PHI")
-                          ? styles.messageBadgeAway
-                          : styles.messageBadgeHome,
-                      ]}
-                    >
-                      <Text style={styles.messageBadgeText}>{item.badge}</Text>
-                    </View>
-                  )}
-                </View>
-              )}
-            />
-
-            {/* Bottom section: prediction buttons + input */}
-            <View style={styles.modalBottomSection}>
-              {/* Chat input */}
-              <View style={styles.modalInputRow}>
-                <TextInput
-                  style={styles.modalInput}
-                  placeholder="Type a message..."
-                  placeholderTextColor={Colors.textMuted}
-                  value={chatInput}
-                  onChangeText={setChatInput}
-                  returnKeyType="send"
-                  onSubmitEditing={() => {
-                    if (!chatInput.trim()) return;
-                    console.log("Sending chat message:", chatInput.trim());
-                    setChatInput("");
-                  }}
-                />
-                <TouchableOpacity
-                  style={styles.modalSendButton}
-                  onPress={() => {
-                    if (!chatInput.trim()) return;
-                    console.log("Sending chat message:", chatInput.trim());
-                    setChatInput("");
-                  }}
-                >
-                  <Ionicons
-                    name="send"
-                    size={18}
-                    color={
-                      chatInput.trim() ? Colors.textPrimary : Colors.textMuted
-                    }
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+      {/* Bottom Bar - Buy Team Buttons */}
+      <SafeAreaView edges={["bottom"]} style={styles.bottomBarContainer}>
+        <View style={styles.bottomBar}>
+          <TouchableOpacity
+            style={[
+              styles.bottomBarButton,
+              { backgroundColor: match.away.color },
+              selectedSide === "away" && styles.bottomBarButtonSelected,
+            ]}
+            onPress={() => setSelectedSide("away")}
+          >
+            <Text
+              style={[
+                styles.bottomBarButtonText,
+                styles.bottomBarButtonTextWhite,
+              ]}
+            >
+              Buy {match.away.code} {displayPriceAway}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.bottomBarButton,
+              { backgroundColor: match.home.color },
+              selectedSide === "home" && styles.bottomBarButtonSelected,
+            ]}
+            onPress={() => setSelectedSide("home")}
+          >
+            <Text
+              style={[
+                styles.bottomBarButtonText,
+                styles.bottomBarButtonTextWhite,
+              ]}
+            >
+              Buy {match.home.code} {displayPriceHome}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
     </SafeAreaView>
   );
 }
@@ -810,7 +738,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.xxxl,
+    paddingBottom: 100, // Extra padding for bottom bar
   },
 
   topBar: {
@@ -820,6 +748,7 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.md,
     paddingBottom: Spacing.lg,
     marginBottom: Spacing.lg,
+    padding: 18,
   },
   topBarIcon: {
     width: 38,
@@ -953,7 +882,7 @@ const styles = StyleSheet.create({
     ...Typography.bodyLarge,
     color: Colors.textPrimary,
     marginTop: Spacing.md,
-    marginBottom: Spacing.md,
+    marginBottom: 16,
   },
   pickRow: {
     flexDirection: "row",
@@ -983,7 +912,38 @@ const styles = StyleSheet.create({
   pickButtonTextDark: {
     color: "#111111",
   },
-
+  bottomBarContainer: {
+    backgroundColor: "black",
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255, 255, 255, 0.1)",
+  },
+  bottomBar: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    backgroundColor: "black",
+  },
+  bottomBarButton: {
+    flex: 1,
+    borderRadius: BorderRadius.round,
+    paddingVertical: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bottomBarButtonSelected: {
+    borderWidth: 3,
+    borderColor: "#FFFFFF",
+  },
+  bottomBarButtonText: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "black",
+    letterSpacing: 0.2,
+  },
+  bottomBarButtonTextWhite: {
+    color: "#FFFFFF",
+  },
   highLowContainer: {
     marginTop: Spacing.md,
     marginBottom: Spacing.lg,
@@ -1176,12 +1136,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.round,
     alignSelf: "center",
   },
-  messageBadgeAway: {
-    backgroundColor: DUMMY_MATCH.away.color,
-  },
-  messageBadgeHome: {
-    backgroundColor: DUMMY_MATCH.home.color,
-  },
+
   messageBadgeText: {
     ...Typography.caption,
     color: "#FFFFFF",

@@ -81,6 +81,9 @@ export default function HomeScreen() {
   const eventsOpacity = useRef(new Animated.Value(0)).current;
   const eventsTranslateY = useRef(new Animated.Value(20)).current;
 
+  // Ref for ScrollView to scroll to top when competition/scope changes
+  const scrollViewRef = useRef(null);
+
   // Create flattened competitions list - filtered to only include desired competitions
   const flattenedCompetitions = useMemo(() => {
     if (!sportsFilters) return [];
@@ -426,6 +429,13 @@ export default function HomeScreen() {
     fetchEventsData();
   }, [fetchEventsData]);
 
+  // Scroll to top when competition or scope changes
+  useEffect(() => {
+    if (scrollViewRef.current) {
+      scrollViewRef.current.scrollTo({ y: 0, animated: true });
+    }
+  }, [selectedCompetition, selectedScope]);
+
   // Handle pull-to-refresh
   const handleRefresh = useCallback(() => {
     console.log(
@@ -502,7 +512,24 @@ export default function HomeScreen() {
             })}
           </ScrollView>
         )}
+      </View>
 
+      {/* EVENTS LIST SECTION (Scrollable with Refresh) */}
+      <ScrollView
+        ref={scrollViewRef}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.eventsScrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={["#BB86FC"]}
+            tintColor="#BB86FC"
+            title="Refreshing markets..."
+            titleColor="#CCCCCC"
+          />
+        }
+      >
         {/* Scopes Chips (Sub-filters) */}
         {selectedCompetition && (
           <View style={styles.scopesWrapper}>
@@ -545,23 +572,6 @@ export default function HomeScreen() {
             </ScrollView>
           </View>
         )}
-      </View>
-
-      {/* EVENTS LIST SECTION (Scrollable with Refresh) */}
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.eventsScrollContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            colors={["#BB86FC"]}
-            tintColor="#BB86FC"
-            title="Refreshing markets..."
-            titleColor="#CCCCCC"
-          />
-        }
-      >
         <Animated.View
           style={[
             styles.eventsContainer,
@@ -648,8 +658,6 @@ const styles = StyleSheet.create({
   filterSection: {
     backgroundColor: "black",
     paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#333333",
   },
   sportsCarouselContent: {
     paddingHorizontal: 20,

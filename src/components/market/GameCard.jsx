@@ -280,8 +280,8 @@ export default function GameCard({ event }) {
               {event.title}
             </Text>
             <View style={styles.metaRow}>
-              <Text style={styles.volume}>{formatCurrency(event.volume)}</Text>
-              <Text style={styles.dot}>•</Text>
+              {/* <Text style={styles.volume}>{formatCurrency(event.volume)}</Text> */}
+              {/* <Text style={styles.dot}>•</Text> */}
               <Text style={styles.date}>{formattedDate}</Text>
             </View>
           </View>
