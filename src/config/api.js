@@ -7,7 +7,6 @@ import { Platform } from "react-native";
 // For Production: Use your actual production API URL
 
 const getApiBaseUrl = () => {
-  // Use deployed backend URL
   return "https://scoretradebackend.onrender.com";
 };
 

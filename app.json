@@ -2,13 +2,13 @@
   "expo": {
     "name": "Scoretrade",
     "slug": "scoretrade",
-    "version": "1.0.5",
+    "version": "1.0.7",
     "orientation": "portrait",
-    "icon": "./assets/images/ScoretradeBlack.png",
+    "icon": "./assets/images/ScoretradeLogo.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/sportsIcons/splash-icon.png",
+      "image": "./assets/images/ScoretradeBlack.png",
       "resizeMode": "contain",
       "backgroundColor": "black"
     },
@@ -22,7 +22,7 @@
     "scheme": "scoretrade",
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/images/ScoretradeLogo.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,

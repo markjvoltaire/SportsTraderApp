@@ -16,7 +16,9 @@ import {
   Image,
   Animated,
   RefreshControl,
+  TextInput,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 // Custom Constants & Components
@@ -79,10 +81,14 @@ export default function HomeScreen() {
 
   // Animation values
   const eventsOpacity = useRef(new Animated.Value(0)).current;
-  const eventsTranslateY = useRef(new Animated.Value(20)).current;
 
   // Ref for ScrollView to scroll to top when competition/scope changes
   const scrollViewRef = useRef(null);
+
+  // Animation refs for category tabs
+  const categoryItemPositions = useRef({});
+  const categoryUnderlineAnim = useRef(new Animated.Value(0)).current;
+  const categoryUnderlineWidthAnim = useRef(new Animated.Value(0)).current;
 
   // Create flattened competitions list - filtered to only include desired competitions
   const flattenedCompetitions = useMemo(() => {
@@ -436,6 +442,27 @@ export default function HomeScreen() {
     }
   }, [selectedCompetition, selectedScope]);
 
+  // Animate underline when selectedCompetition changes
+  useEffect(() => {
+    if (!selectedCompetition) return;
+
+    const position = categoryItemPositions.current[selectedCompetition];
+    if (position) {
+      Animated.parallel([
+        Animated.timing(categoryUnderlineAnim, {
+          toValue: position.x,
+          duration: 300,
+          useNativeDriver: false,
+        }),
+        Animated.timing(categoryUnderlineWidthAnim, {
+          toValue: position.width,
+          duration: 300,
+          useNativeDriver: false,
+        }),
+      ]).start();
+    }
+  }, [selectedCompetition, flattenedCompetitions]);
+
   // Handle pull-to-refresh
   const handleRefresh = useCallback(() => {
     console.log(
@@ -450,67 +477,166 @@ export default function HomeScreen() {
     if (!loading && eventsData) {
       // Reset animation values
       eventsOpacity.setValue(0);
-      eventsTranslateY.setValue(20);
 
-      // Start animation
-      Animated.parallel([
-        Animated.timing(eventsOpacity, {
-          toValue: 1,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-        Animated.timing(eventsTranslateY, {
-          toValue: 0,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-      ]).start();
+      // Start fade in animation
+      Animated.timing(eventsOpacity, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }).start();
     }
-  }, [eventsData, loading, eventsOpacity, eventsTranslateY]);
+  }, [eventsData, loading, eventsOpacity]);
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      {/* HEADER SECTION (Static) */}
+      {/* HEADER SECTION */}
+      <View style={styles.header}>
+        {/* Top Row: Icon, Search, Settings */}
+        <View style={styles.headerTopRow}>
+          {/* Left: Logo */}
+          <Image
+            source={require("../assets/images/ScoretradeBlack.png")}
+            style={styles.headerLogo}
+            resizeMode="contain"
+          />
 
-      {/* STICKY FILTERS SECTION (Fixed position) */}
-      <View style={styles.filterSection}>
-        {/* Competitions Horizontal List */}
+          {/* Center: Search Bar */}
+          <View style={styles.searchBar}>
+            <Ionicons
+              name="search"
+              size={18}
+              color="#888888"
+              style={styles.searchIcon}
+            />
+            <TextInput
+              placeholder="Search"
+              placeholderTextColor="#888888"
+              style={styles.searchInput}
+            />
+          </View>
+
+          {/* Right: Settings Icon */}
+          <TouchableOpacity style={styles.settingsIcon}>
+            <Ionicons name="settings-outline" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Category Navigation Row */}
         {flattenedCompetitions.length > 0 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.sportsCarouselContent}
-          >
-            {flattenedCompetitions.map((competition) => {
-              const isSelected = selectedCompetition === competition.name;
-              return (
-                <TouchableOpacity
-                  key={competition.name}
-                  style={[
-                    styles.sportCard,
-                    isSelected && styles.sportCardSelected,
-                  ]}
-                  onPress={() => {
-                    setSelectedCompetition(competition.name);
-                    // Auto-select the first available scope for this competition
-                    const firstScope = competition.scopes?.[0] || null;
-                    setSelectedScope(firstScope);
-                    console.log("Selected Competition:", competition.name);
-                    console.log("Selected Scope:", firstScope);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.sportName,
-                      isSelected && styles.sportNameSelected,
-                    ]}
+          <View style={styles.categoryContainer}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryRow}
+            >
+              {flattenedCompetitions.map((competition, index) => {
+                const isSelected = selectedCompetition === competition.name;
+                return (
+                  <TouchableOpacity
+                    key={competition.name}
+                    style={styles.categoryItem}
+                    onLayout={(event) => {
+                      const { x, width } = event.nativeEvent.layout;
+                      categoryItemPositions.current[competition.name] = {
+                        x,
+                        width,
+                      };
+
+                      // If this is the selected item, animate to it
+                      if (isSelected) {
+                        Animated.parallel([
+                          Animated.timing(categoryUnderlineAnim, {
+                            toValue: x,
+                            duration: 300,
+                            useNativeDriver: false,
+                          }),
+                          Animated.timing(categoryUnderlineWidthAnim, {
+                            toValue: width,
+                            duration: 300,
+                            useNativeDriver: false,
+                          }),
+                        ]).start();
+                      }
+                    }}
+                    onPress={() => {
+                      setSelectedCompetition(competition.name);
+                      // Auto-select the first available scope for this competition
+                      const firstScope = competition.scopes?.[0] || null;
+                      setSelectedScope(firstScope);
+                      console.log("Selected Competition:", competition.name);
+                      console.log("Selected Scope:", firstScope);
+                    }}
                   >
-                    {competition.displayName}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+                    <Text
+                      style={[
+                        styles.categoryText,
+                        isSelected && styles.categoryTextActive,
+                      ]}
+                    >
+                      {competition.displayName}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            {/* Animated Underline */}
+            <Animated.View
+              style={[
+                styles.categoryUnderline,
+                {
+                  left: categoryUnderlineAnim,
+                  width: categoryUnderlineWidthAnim,
+                },
+              ]}
+            />
+          </View>
+        )}
+
+        {/* Scopes Row */}
+        {selectedCompetition && (
+          <View style={styles.scopesContainer}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.scopesRow}
+            >
+              {flattenedCompetitions
+                .find((comp) => comp.name === selectedCompetition)
+                ?.scopes?.filter(
+                  (scope) =>
+                    !shouldHideScopeForCompetition(selectedCompetition, scope)
+                )
+                .map((scope) => {
+                  const isSelected = selectedScope === scope;
+                  return (
+                    <TouchableOpacity
+                      key={scope}
+                      style={[
+                        styles.scopeButton,
+                        isSelected && styles.scopeButtonActive,
+                      ]}
+                      onPress={() => {
+                        setSelectedScope(scope);
+                        console.log(
+                          "Selected Competition:",
+                          selectedCompetition
+                        );
+                        console.log("Selected Scope:", scope);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.scopeButtonText,
+                          isSelected && styles.scopeButtonTextActive,
+                        ]}
+                      >
+                        {scope}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+            </ScrollView>
+          </View>
         )}
       </View>
 
@@ -531,7 +657,7 @@ export default function HomeScreen() {
         }
       >
         {/* Scopes Chips (Sub-filters) */}
-        {selectedCompetition && (
+        {/* {selectedCompetition && (
           <View style={styles.scopesWrapper}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               {flattenedCompetitions
@@ -571,13 +697,12 @@ export default function HomeScreen() {
                 })}
             </ScrollView>
           </View>
-        )}
+        )} */}
         <Animated.View
           style={[
             styles.eventsContainer,
             {
               opacity: eventsOpacity,
-              transform: [{ translateY: eventsTranslateY }],
             },
           ]}
         >
@@ -634,9 +759,111 @@ const styles = StyleSheet.create({
     backgroundColor: "black",
   },
   header: {
-    paddingHorizontal: 15,
+    backgroundColor: "black",
+    paddingTop: 8,
+    paddingBottom: 12,
+  },
+  headerTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    gap: 12,
+  },
+  headerLogo: {
+    width: 39,
+    height: 39,
 
-    backgroundColor: "#121212",
+    borderRadius: 18,
+  },
+  searchBar: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#2A2A2A",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 40,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    color: "#FFFFFF",
+    fontSize: 16,
+    padding: 0,
+  },
+  settingsIcon: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  categoryContainer: {
+    position: "relative",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.1)",
+  },
+  categoryRow: {
+    paddingHorizontal: 16,
+    gap: 24,
+  },
+  categoryItem: {
+    paddingVertical: 4,
+    marginBottom: 5,
+  },
+  categoryText: {
+    fontSize: 16,
+    color: "grey",
+    fontWeight: "700",
+  },
+  categoryTextActive: {
+    fontWeight: "700",
+    color: "white",
+  },
+  categoryUnderline: {
+    position: "absolute",
+    bottom: 0,
+    height: 2,
+    backgroundColor: "#6552FE",
+  },
+  scopesContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    gap: 12,
+  },
+  competitionLabel: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    minWidth: 50,
+  },
+  scopesRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  scopeButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "transparent",
+    borderWidth: 0,
+    backgroundColor: "#18181B",
+  },
+  scopeButtonActive: {
+    backgroundColor: "#FFFFFF",
+  },
+  scopeButtonText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "white",
+  },
+  scopeButtonTextActive: {
+    color: "#000000",
+    fontWeight: "700",
   },
   titleImage: {
     width: 120,
@@ -654,35 +881,6 @@ const styles = StyleSheet.create({
   eventsScrollContent: {
     flexGrow: 1,
     paddingBottom: 100,
-  },
-  filterSection: {
-    backgroundColor: "black",
-    paddingVertical: 10,
-  },
-  sportsCarouselContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 1,
-  },
-  sportCard: {
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-
-    borderRadius: 25,
-    marginRight: 10,
-    borderWidth: 1,
-    borderColor: "#404040",
-  },
-  sportCardSelected: {
-    backgroundColor: "white",
-    borderColor: "white",
-  },
-  sportName: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#CCCCCC",
-  },
-  sportNameSelected: {
-    color: "black",
   },
   scopesWrapper: {
     marginTop: 12,

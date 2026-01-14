@@ -1,13 +1,17 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { StyleSheet, Text, View, TouchableOpacity, Image } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import Svg, { Polyline } from "react-native-svg";
 import { getNFLTeamColor, getNBATeamColor } from "../../constants/teamColors";
 
+const WEBSOCKET_URL = "wss://dev-prediction-markets-api.dflow.net/api/v1/ws";
+
 export default function GameCard({ event }) {
   const navigation = useNavigation();
 
   const [chartLoading, setChartLoading] = useState(true);
+  const pricesWsRef = useRef(null);
+  const [realtimePrices, setRealtimePrices] = useState({});
 
   if (!event || !event.markets || event.markets.length === 0) return null;
 
@@ -169,6 +173,101 @@ export default function GameCard({ event }) {
     };
   }, [teamData, market, event]);
 
+  // Get market tickers for WebSocket subscription
+  const marketTickers = useMemo(() => {
+    if (!event?.markets) return [];
+    return event.markets.map((m) => m.ticker).filter(Boolean);
+  }, [event?.markets]);
+
+  // WebSocket connection for prices
+  useEffect(() => {
+    if (marketTickers.length === 0) return;
+
+    const ws = new WebSocket(WEBSOCKET_URL);
+
+    ws.onopen = () => {
+      // Subscribe to prices channel
+      ws.send(
+        JSON.stringify({
+          type: "subscribe",
+          channel: "prices",
+          tickers: marketTickers,
+        })
+      );
+    };
+
+    ws.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+
+      if (message.channel === "prices") {
+        // Calculate mid-price from bid and ask
+        const calculateMidPrice = (bid, ask) => {
+          if (!bid && !ask) return null;
+          if (!bid) return parseFloat(ask);
+          if (!ask) return parseFloat(bid);
+          return (parseFloat(bid) + parseFloat(ask)) / 2;
+        };
+
+        const midPrice = calculateMidPrice(message.yes_bid, message.yes_ask);
+
+        if (midPrice !== null) {
+          setRealtimePrices((prev) => ({
+            ...prev,
+            [message.market_ticker]: midPrice,
+          }));
+        }
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error("GameCard WebSocket error:", error);
+    };
+
+    ws.onclose = (event) => {
+      console.log("GameCard WebSocket connection closed:", event.code);
+    };
+
+    pricesWsRef.current = ws;
+
+    // Cleanup function
+    return () => {
+      if (pricesWsRef.current) {
+        const wsToClose = pricesWsRef.current;
+
+        // Remove event handlers to prevent memory leaks
+        wsToClose.onopen = null;
+        wsToClose.onmessage = null;
+        wsToClose.onerror = null;
+        wsToClose.onclose = null;
+
+        // Unsubscribe before closing if connection is open
+        if (wsToClose.readyState === WebSocket.OPEN) {
+          try {
+            wsToClose.send(
+              JSON.stringify({
+                type: "unsubscribe",
+                channel: "prices",
+                tickers: marketTickers,
+              })
+            );
+          } catch (error) {
+            console.error("Error unsubscribing from prices:", error);
+          }
+        }
+
+        // Close the connection
+        if (
+          wsToClose.readyState === WebSocket.OPEN ||
+          wsToClose.readyState === WebSocket.CONNECTING
+        ) {
+          wsToClose.close();
+        }
+
+        pricesWsRef.current = null;
+      }
+    };
+  }, [marketTickers.join(",")]);
+
   // Handle multiple market formats
   let yesPercentage, noPercentage, tiePercentage;
   let displayYesPercentage, displayNoPercentage, displayTiePercentage;
@@ -183,35 +282,57 @@ export default function GameCard({ event }) {
     );
     const tieMarket = event.markets.find((m) => m.yesSubTitle === "Tie");
 
-    const homeTeamBid = homeMarket ? parseFloat(homeMarket.yesBid) * 100 : 0;
-    const awayTeamBid = awayMarket ? parseFloat(awayMarket.yesBid) * 100 : 0;
-    const tieBid = tieMarket ? parseFloat(tieMarket.yesBid) * 100 : 0;
+    // Use real-time price if available, otherwise fallback to yesBid
+    const homePrice =
+      homeMarket?.ticker && realtimePrices[homeMarket.ticker]
+        ? realtimePrices[homeMarket.ticker] * 100
+        : homeMarket
+        ? parseFloat(homeMarket.yesBid) * 100
+        : 0;
+    const awayPrice =
+      awayMarket?.ticker && realtimePrices[awayMarket.ticker]
+        ? realtimePrices[awayMarket.ticker] * 100
+        : awayMarket
+        ? parseFloat(awayMarket.yesBid) * 100
+        : 0;
+    const tiePrice = tieMarket ? parseFloat(tieMarket.yesBid) * 100 : 0;
 
     // Store original percentages for display
-    displayYesPercentage = Math.round(homeTeamBid);
-    displayNoPercentage = Math.round(awayTeamBid);
-    displayTiePercentage = Math.round(tieBid);
+    displayYesPercentage = Math.round(homePrice);
+    displayNoPercentage = Math.round(awayPrice);
+    displayTiePercentage = Math.round(tiePrice);
 
-    // Normalize percentages so they add up to 100% for progress bar visualization
-    const total = homeTeamBid + awayTeamBid + tieBid;
-    const normalizedTotal = total > 0 ? total : 100; // Avoid division by zero, default to 100 if all zero
-
-    yesPercentage = Math.round((homeTeamBid / normalizedTotal) * 100);
-    noPercentage = Math.round((awayTeamBid / normalizedTotal) * 100);
-    tiePercentage = Math.round((tieBid / normalizedTotal) * 100);
+    yesPercentage = displayYesPercentage;
+    noPercentage = displayNoPercentage;
+    tiePercentage = displayTiePercentage;
   } else if (event.markets && event.markets.length >= 2) {
     // NFL/NBA format: 2 markets (one per team)
-    const firstTeamBid = parseFloat(event.markets[0].yesBid) * 100;
-    const secondTeamBid = parseFloat(event.markets[1].yesBid) * 100;
-    displayYesPercentage = Math.round(firstTeamBid);
-    displayNoPercentage = Math.round(secondTeamBid);
+    const firstMarket = event.markets[0];
+    const secondMarket = event.markets[1];
+
+    // Use real-time price if available, otherwise fallback to yesBid
+    const firstTeamPrice =
+      firstMarket?.ticker && realtimePrices[firstMarket.ticker]
+        ? realtimePrices[firstMarket.ticker] * 100
+        : parseFloat(firstMarket.yesBid) * 100;
+    const secondTeamPrice =
+      secondMarket?.ticker && realtimePrices[secondMarket.ticker]
+        ? realtimePrices[secondMarket.ticker] * 100
+        : parseFloat(secondMarket.yesBid) * 100;
+
+    displayYesPercentage = Math.round(firstTeamPrice);
+    displayNoPercentage = Math.round(secondTeamPrice);
     yesPercentage = displayYesPercentage;
     noPercentage = displayNoPercentage;
     tiePercentage = null;
     displayTiePercentage = null;
   } else {
     // Single market format (fallback)
-    displayYesPercentage = Math.round(parseFloat(market.yesBid) * 100);
+    const marketPrice =
+      market?.ticker && realtimePrices[market.ticker]
+        ? realtimePrices[market.ticker] * 100
+        : parseFloat(market.yesBid) * 100;
+    displayYesPercentage = Math.round(marketPrice);
     displayNoPercentage = 100 - displayYesPercentage;
     yesPercentage = displayYesPercentage;
     noPercentage = displayNoPercentage;
@@ -233,12 +354,32 @@ export default function GameCard({ event }) {
   };
 
   const eventDate = new Date(market.closeTime * 1000);
-  console.log("market", market.ticker);
+
   const formattedDate = eventDate.toLocaleDateString("en-US", {
     day: "numeric",
     month: "short",
     year: "numeric",
   });
+
+  // Determine which team gets which position and color
+  // Left team: awayTeam (3 markets) or noTeam (2 markets)
+  // Right team: homeTeam (3 markets) or yesTeam (2 markets)
+  const leftTeam = hasThreeMarkets ? awayTeam : noTeam;
+  const rightTeam = hasThreeMarkets ? homeTeam : yesTeam;
+  const leftPercentage = hasThreeMarkets
+    ? displayNoPercentage
+    : displayNoPercentage;
+  const rightPercentage = hasThreeMarkets
+    ? displayYesPercentage
+    : displayYesPercentage;
+
+  // Get colors for left and right teams
+  const leftTeamColor = hasThreeMarkets
+    ? teamColors.awayColor || "#FF9500"
+    : teamColors.noColor || "#FF9500";
+  const rightTeamColor = hasThreeMarkets
+    ? teamColors.homeColor || "#FF3B30"
+    : teamColors.yesColor || "#FF3B30";
 
   return (
     <TouchableOpacity
@@ -248,203 +389,58 @@ export default function GameCard({ event }) {
       activeOpacity={0.9}
     >
       <View style={styles.card}>
-        {/* Header with image and title */}
-        <View style={styles.header}>
-          <View style={styles.imageContainer}>
-            <Image
-              source={
-                event.seriesTicker === "KXNFLGAME" ||
-                event.seriesTicker === "KXCFBGAME" ||
-                event.seriesTicker === "KXCFBPLAYOFF" ||
-                event.seriesTicker === "KXNCAAFGAME"
-                  ? require("../../../assets/images/football.png")
-                  : event.seriesTicker === "KXNBAGAME" ||
-                    event.seriesTicker === "KXCBGAME" ||
-                    event.seriesTicker === "KXCWBBGAME" ||
-                    event.seriesTicker === "KXWNBA" ||
-                    event.seriesTicker === "KXNCAAMBGAME" ||
-                    event.seriesTicker === "KXNCAAWBGAME"
-                  ? require("../../../assets/images/basketball.jpg")
-                  : event.seriesTicker === "KXMMA" ||
-                    event.seriesTicker === "KXUFCFIGHT"
-                  ? require("../../../assets/images/MMA.png")
-                  : { uri: event.imageUrl }
-              }
-              style={styles.thumbnail}
-              resizeMode="cover"
-            />
-          </View>
+        {/* Market Question Title */}
+        <Text style={styles.marketTitle} numberOfLines={2}>
+          {event.title}
+        </Text>
 
-          <View style={styles.titleContainer}>
-            <Text style={styles.title} numberOfLines={2}>
-              {event.title}
+        {/* Market Options */}
+        <View style={styles.optionsContainer}>
+          {/* Left Option */}
+          <View style={styles.optionLeft}>
+            <Text style={styles.optionTeamName}>{leftTeam}</Text>
+            <Text style={[styles.optionPercentage, { color: leftTeamColor }]}>
+              {leftPercentage}%
             </Text>
-            <View style={styles.metaRow}>
-              {/* <Text style={styles.volume}>{formatCurrency(event.volume)}</Text> */}
-              {/* <Text style={styles.dot}>•</Text> */}
-              <Text style={styles.date}>{formattedDate}</Text>
-            </View>
+          </View>
+
+          {/* Right Option */}
+          <View style={styles.optionRight}>
+            <Text style={styles.optionTeamName}>{rightTeam}</Text>
+            <Text style={[styles.optionPercentage, { color: rightTeamColor }]}>
+              {rightPercentage}%
+            </Text>
           </View>
         </View>
 
-        {/* Range labels */}
-        <View style={styles.rangeContainer}>
-          {hasThreeMarkets ? (
-            <>
-              <Text style={styles.rangeText}>
-                {homeTeam} {displayYesPercentage}%
-              </Text>
-              <Text style={styles.rangeText}>
-                {tieTeam} {displayTiePercentage}%
-              </Text>
-              <Text style={styles.rangeText}>
-                {awayTeam} {displayNoPercentage}%
-              </Text>
-            </>
-          ) : (
-            <>
-              <Text style={styles.rangeText}>
-                {yesTeam} {displayYesPercentage}%
-              </Text>
-              <Text style={styles.rangeText}>
-                {noTeam} {displayNoPercentage}%
-              </Text>
-            </>
-          )}
-        </View>
-
-        {/* Progress bar */}
+        {/* Progress Bar */}
         <View style={styles.progressBarContainer}>
           <View style={styles.progressBarBackground}>
-            {/* Team color section for yes/home percentage */}
             <View
               style={[
-                styles.progressBarFill,
+                styles.progressBarSegment,
+                styles.progressBarLeft,
+                { width: `${leftPercentage}%`, backgroundColor: leftTeamColor },
+              ]}
+            />
+            <View style={styles.progressBarGap} />
+            <View
+              style={[
+                styles.progressBarSegment,
+                styles.progressBarRight,
                 {
-                  width: `${yesPercentage}%`,
-                  backgroundColor: hasThreeMarkets
-                    ? teamColors.homeColor || "#FFFFFF"
-                    : teamColors.yesColor || "#FFFFFF",
+                  width: `${rightPercentage}%`,
+                  backgroundColor: rightTeamColor,
                 },
               ]}
             />
-            {/* Team color section for no/away percentage */}
-            <View
-              style={[
-                styles.progressBarFill,
-                {
-                  width: `${noPercentage}%`,
-                  backgroundColor: hasThreeMarkets
-                    ? teamColors.awayColor || "#EF4444"
-                    : teamColors.noColor || "#EF4444",
-                  position: "absolute",
-                  left: `${yesPercentage}%`,
-                },
-              ]}
-            />
-            {hasThreeMarkets && tiePercentage !== null && (
-              <View
-                style={[
-                  styles.progressBarFill,
-                  {
-                    width: `${tiePercentage}%`,
-                    backgroundColor: "#10c962",
-                    position: "absolute",
-                    left: `${yesPercentage + noPercentage}%`,
-                  },
-                ]}
-              />
-            )}
           </View>
         </View>
 
-        {/* Action buttons */}
-        <View
-          style={
-            hasThreeMarkets
-              ? styles.threeButtonContainer
-              : styles.buttonContainer
-          }
-        >
-          <TouchableOpacity
-            style={[
-              styles.button,
-              styles.yesButton,
-              {
-                backgroundColor: hasThreeMarkets
-                  ? teamColors.homeColor || "#1a1f2e"
-                  : teamColors.yesColor || "#1a1f2e",
-              },
-            ]}
-          >
-            <View style={styles.buttonContent}>
-              <Text
-                style={[
-                  styles.yesButtonText,
-                  (hasThreeMarkets
-                    ? teamColors.homeColor
-                    : teamColors.yesColor) && styles.buttonTextWhite,
-                ]}
-              >
-                {hasThreeMarkets ? homeTeam : yesTeam}
-              </Text>
-              <Text
-                style={[
-                  styles.buttonPriceText,
-                  (hasThreeMarkets
-                    ? teamColors.homeColor
-                    : teamColors.yesColor) && styles.buttonPriceTextWhite,
-                ]}
-              >
-                {displayYesPercentage}¢
-              </Text>
-            </View>
-          </TouchableOpacity>
-          {hasThreeMarkets && (
-            <TouchableOpacity style={[styles.button, styles.tieButton]}>
-              <View style={styles.buttonContent}>
-                <Text style={styles.tieButtonText}>{tieTeam}</Text>
-                <Text style={styles.buttonPriceText}>
-                  {displayTiePercentage}¢
-                </Text>
-              </View>
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            style={[
-              styles.button,
-              styles.noButton,
-              {
-                backgroundColor: hasThreeMarkets
-                  ? teamColors.awayColor || "#1a1f2e"
-                  : teamColors.noColor || "#1a1f2e",
-              },
-            ]}
-          >
-            <View style={styles.buttonContent}>
-              <Text
-                style={[
-                  styles.noButtonText,
-                  (hasThreeMarkets
-                    ? teamColors.awayColor
-                    : teamColors.noColor) && styles.buttonTextWhite,
-                ]}
-              >
-                {hasThreeMarkets ? awayTeam : noTeam}
-              </Text>
-              <Text
-                style={[
-                  styles.buttonPriceText,
-                  (hasThreeMarkets
-                    ? teamColors.awayColor
-                    : teamColors.noColor) && styles.buttonPriceTextWhite,
-                ]}
-              >
-                {displayNoPercentage}¢
-              </Text>
-            </View>
-          </TouchableOpacity>
-        </View>
+        {/* Trade Button */}
+        <TouchableOpacity style={styles.tradeButton}>
+          <Text style={styles.tradeButtonText}>Trade</Text>
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
@@ -452,117 +448,77 @@ export default function GameCard({ event }) {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 24,
+    borderRadius: 16,
     padding: 20,
     marginVertical: 8,
-    borderWidth: 2,
-    borderColor: "#141414",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 5,
-  },
-  header: { flexDirection: "row", marginBottom: 20 },
-  imageContainer: { position: "relative", marginRight: 12 },
-  thumbnail: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
-    backgroundColor: "#1a1f2e",
-  },
-  badge: {
-    position: "absolute",
-    bottom: -4,
-    right: -4,
-    backgroundColor: "#1F2937",
-    borderRadius: 12,
-    width: 24,
-    height: 24,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: "#0c111d",
-  },
-  badgeText: { fontSize: 12, color: "#fefefe" },
-  titleContainer: { flex: 1, justifyContent: "center" },
-  title: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#fefefe",
-    marginBottom: 6,
-    lineHeight: 24,
-  },
-  metaRow: { flexDirection: "row", alignItems: "center" },
-  volume: { fontSize: 13, color: "#758292", fontWeight: "500" },
-  dot: { fontSize: 13, color: "rgba(255, 255, 255, 0.2)", marginHorizontal: 6 },
-  date: { fontSize: 13, color: "#758292" },
-  outcomeSection: { marginBottom: 16 },
-  outcomeLabel: {
-    fontSize: 32,
-    fontWeight: "700",
-    color: "#fefefe",
-    marginBottom: 4,
-  },
-  change: { fontSize: 16, fontWeight: "600", color: "#EF4444" },
-  changePositive: { color: "#4ADE80" },
-  chartContainer: { height: 180, marginBottom: 12 },
-  rangeContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 20,
-    paddingHorizontal: 4,
-  },
-  rangeText: { fontSize: 14, color: "#758292", fontWeight: "500" },
-  progressBarContainer: { marginBottom: 20 },
-  progressBarBackground: {
-    height: 8,
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderRadius: 4,
-    overflow: "hidden",
-  },
-  progressBarFill: {
-    height: "100%",
-    borderRadius: 4,
-  },
-  buttonContainer: { flexDirection: "row", gap: 12 },
-  threeButtonContainer: { flexDirection: "row", gap: 8 },
-  button: {
-    flex: 1,
-    paddingVertical: 16,
-    borderRadius: 16,
-    alignItems: "center",
-    backgroundColor: "#1a1f2e",
+    backgroundColor: "#000000",
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.1)",
   },
-  buttonContent: {
-    alignItems: "center",
-  },
-  yesButton: {
-    backgroundColor: "#1a1f2e",
-    borderColor: "rgba(255, 255, 255, 0.15)",
-  },
-  noButton: {
-    backgroundColor: "#1a1f2e",
-    borderColor: "rgba(255, 255, 255, 0.15)",
-  },
-  tieButton: {
-    backgroundColor: "#1a1f2e",
-    borderColor: "rgba(255, 255, 255, 0.15)",
-  },
-  yesButtonText: { fontSize: 17, fontWeight: "600", color: "#fefefe" },
-  noButtonText: { fontSize: 17, fontWeight: "600", color: "#fefefe" },
-  tieButtonText: { fontSize: 17, fontWeight: "600", color: "#fefefe" },
-  buttonTextWhite: { color: "#FFFFFF" },
-  buttonPriceText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#758292",
-    marginTop: 4,
-  },
-  buttonPriceTextWhite: {
+  marketTitle: {
+    fontSize: 16,
+    fontWeight: "700",
     color: "#FFFFFF",
-    opacity: 0.95,
+    textAlign: "center",
+    marginBottom: 20,
+    lineHeight: 22,
+  },
+  optionsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+  optionLeft: {
+    alignItems: "flex-start",
+  },
+  optionRight: {
+    alignItems: "flex-end",
+  },
+  optionTeamName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#FFFFFF",
+    marginBottom: 4,
+  },
+  optionPercentage: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  progressBarContainer: {
+    marginBottom: 20,
+  },
+  progressBarBackground: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    flexDirection: "row",
+    overflow: "hidden",
+  },
+  progressBarSegment: {
+    height: "100%",
+  },
+  progressBarGap: {
+    width: 2,
+    height: "100%",
+  },
+  progressBarLeft: {
+    borderTopLeftRadius: 4,
+    borderBottomLeftRadius: 4,
+  },
+  progressBarRight: {
+    borderTopRightRadius: 4,
+    borderBottomRightRadius: 4,
+  },
+  tradeButton: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tradeButtonText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#000000",
   },
 });

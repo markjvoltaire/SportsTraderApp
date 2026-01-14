@@ -34,13 +34,13 @@ import {
 import { getNFLTeamColor, getNBATeamColor } from "../src/constants/teamColors";
 import { formatCurrency, formatPrice } from "../src/utils/formatters";
 import Orders from "../src/components/market/Orders";
+import BuyButtons from "../src/components/market/BuyButtons";
 
 export default function ChartScreen() {
   const navigation = useNavigation();
   const route = useRoute();
 
   const [timeframe, setTimeframe] = useState("All");
-  const [selectedSide, setSelectedSide] = useState(null);
   const [chatVisible, setChatVisible] = useState(false);
   const [chatInput, setChatInput] = useState("");
 
@@ -54,6 +54,12 @@ export default function ChartScreen() {
   // Trades WebSocket state
   const tradesWsRef = useRef(null);
   const [trades, setTrades] = useState([]);
+  const [realtimePrices, setRealtimePrices] = useState({});
+
+  // Separate WebSocket for prices (used directly by bottom buttons)
+  const pricesWsRef = useRef(null);
+  const [buttonPrices, setButtonPrices] = useState({});
+  const lastCandlestickPricesRef = useRef({}); // Track last price for each ticker to detect changes
 
   // Volume state - initialized with event.volume, incremented with each trade
   const [volume, setVolume] = useState(() => event?.volume || 0);
@@ -133,6 +139,15 @@ export default function ChartScreen() {
           tickers: marketTickers,
         })
       );
+
+      // Subscribe to prices channel
+      ws.send(
+        JSON.stringify({
+          type: "subscribe",
+          channel: "prices",
+          tickers: marketTickers,
+        })
+      );
     };
 
     ws.onmessage = (event) => {
@@ -162,6 +177,23 @@ export default function ChartScreen() {
         setTrades((prevTrades) => {
           return [tradeData, ...prevTrades].slice(0, 50);
         });
+      } else if (message.channel === "prices") {
+        // Calculate mid-price from bid and ask
+        const calculateMidPrice = (bid, ask) => {
+          if (!bid && !ask) return null;
+          if (!bid) return parseFloat(ask);
+          if (!ask) return parseFloat(bid);
+          return (parseFloat(bid) + parseFloat(ask)) / 2;
+        };
+
+        const midPrice = calculateMidPrice(message.yes_bid, message.yes_ask);
+
+        if (midPrice !== null) {
+          setRealtimePrices((prev) => ({
+            ...prev,
+            [message.market_ticker]: midPrice,
+          }));
+        }
       }
     };
 
@@ -188,8 +220,189 @@ export default function ChartScreen() {
     // Cleanup function
     return () => {
       if (tradesWsRef.current) {
-        tradesWsRef.current.close();
+        const wsToClose = tradesWsRef.current;
+
+        // Remove event handlers to prevent memory leaks
+        wsToClose.onopen = null;
+        wsToClose.onmessage = null;
+        wsToClose.onerror = null;
+        wsToClose.onclose = null;
+
+        // Unsubscribe before closing if connection is open
+        if (wsToClose.readyState === WebSocket.OPEN) {
+          try {
+            // Unsubscribe from trades
+            wsToClose.send(
+              JSON.stringify({
+                type: "unsubscribe",
+                channel: "trades",
+                tickers: marketTickers,
+              })
+            );
+            // Unsubscribe from prices
+            wsToClose.send(
+              JSON.stringify({
+                type: "unsubscribe",
+                channel: "prices",
+                tickers: marketTickers,
+              })
+            );
+          } catch (error) {
+            console.error("Error unsubscribing from channels:", error);
+          }
+        }
+
+        // Close the connection
+        if (
+          wsToClose.readyState === WebSocket.OPEN ||
+          wsToClose.readyState === WebSocket.CONNECTING
+        ) {
+          wsToClose.close();
+        }
+
         tradesWsRef.current = null;
+      }
+    };
+  }, [marketTickers.join(",")]);
+
+  // Separate WebSocket connection for prices (for bottom buttons)
+  useEffect(() => {
+    if (marketTickers.length === 0) return;
+
+    const ws = new WebSocket(WEBSOCKET_URL);
+
+    ws.onopen = () => {
+      // Subscribe to prices channel
+      ws.send(
+        JSON.stringify({
+          type: "subscribe",
+          channel: "prices",
+          tickers: marketTickers,
+        })
+      );
+    };
+
+    ws.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+
+      if (message.channel === "prices") {
+        // Calculate mid-price from bid and ask
+        const calculateMidPrice = (bid, ask) => {
+          if (!bid && !ask) return null;
+          if (!bid) return parseFloat(ask);
+          if (!ask) return parseFloat(bid);
+          return (parseFloat(bid) + parseFloat(ask)) / 2;
+        };
+
+        const midPrice = calculateMidPrice(message.yes_bid, message.yes_ask);
+
+        if (midPrice !== null) {
+          setButtonPrices((prev) => ({
+            ...prev,
+            [message.market_ticker]: midPrice,
+          }));
+
+          // Update candlestickData only if price has changed
+          const lastPrice = lastCandlestickPricesRef.current[message.market_ticker];
+          const priceChanged = lastPrice === undefined || lastPrice !== midPrice;
+
+          if (priceChanged) {
+            lastCandlestickPricesRef.current[message.market_ticker] = midPrice;
+
+            setCandlestickData((prevData) => {
+              if (!prevData?.market_candlesticks) return prevData;
+
+              // Determine which market_candlestick array to update
+              // marketTicker1 (markets[0]) -> market_candlesticks[0]
+              // marketTicker2 (markets[1]) -> market_candlesticks[1]
+              let marketIndex = -1;
+              if (message.market_ticker === marketTicker1) {
+                marketIndex = 0;
+              } else if (message.market_ticker === marketTicker2) {
+                marketIndex = 1;
+              }
+
+              if (marketIndex === -1) return prevData;
+
+              // Create new candlestick point
+              const timestamp = Math.floor(Date.now() / 1000);
+              const newCandlestickPoint = {
+                price: {
+                  close: midPrice,
+                  close_dollars: midPrice,
+                },
+                end_period_ts: timestamp,
+                timestamp: timestamp,
+                time: timestamp,
+              };
+
+              // Create updated market_candlesticks array
+              const updatedMarketCandlesticks = [...prevData.market_candlesticks];
+              if (!updatedMarketCandlesticks[marketIndex]) {
+                updatedMarketCandlesticks[marketIndex] = [];
+              }
+
+              // Add new point to the array
+              updatedMarketCandlesticks[marketIndex] = [
+                ...updatedMarketCandlesticks[marketIndex],
+                newCandlestickPoint,
+              ];
+
+              return {
+                ...prevData,
+                market_candlesticks: updatedMarketCandlesticks,
+              };
+            });
+          }
+        }
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error("Prices WebSocket error:", error);
+    };
+
+    ws.onclose = (event) => {
+      console.log("Prices WebSocket connection closed:", event.code);
+    };
+
+    pricesWsRef.current = ws;
+
+    // Cleanup function
+    return () => {
+      if (pricesWsRef.current) {
+        const wsToClose = pricesWsRef.current;
+
+        // Remove event handlers to prevent memory leaks
+        wsToClose.onopen = null;
+        wsToClose.onmessage = null;
+        wsToClose.onerror = null;
+        wsToClose.onclose = null;
+
+        // Unsubscribe before closing if connection is open
+        if (wsToClose.readyState === WebSocket.OPEN) {
+          try {
+            wsToClose.send(
+              JSON.stringify({
+                type: "unsubscribe",
+                channel: "prices",
+                tickers: marketTickers,
+              })
+            );
+          } catch (error) {
+            console.error("Error unsubscribing from prices:", error);
+          }
+        }
+
+        // Close the connection
+        if (
+          wsToClose.readyState === WebSocket.OPEN ||
+          wsToClose.readyState === WebSocket.CONNECTING
+        ) {
+          wsToClose.close();
+        }
+
+        pricesWsRef.current = null;
       }
     };
   }, [marketTickers.join(",")]);
@@ -432,22 +645,29 @@ export default function ChartScreen() {
       homePrice = parseFloat(market.homeTeam?.price) || null;
     }
 
-    // Calculate percentages from event bid data
+    // Calculate percentages from event bid data or real-time WebSocket prices
     let pctAway, pctHome;
     if (event?.markets && event.markets.length >= 2) {
       // Use actual bid prices from the event
       const awayMarket = event.markets[1]; // Second market is for away team (Buffalo)
       const homeMarket = event.markets[0]; // First market is for home team (Jacksonville)
 
-      const awayBid = parseFloat(awayMarket.yesBid) || 0;
-      const homeBid = parseFloat(homeMarket.yesBid) || 0;
+      // Use real-time WebSocket price if available, otherwise fallback to yesBid
+      const awayPrice =
+        awayMarket?.ticker && realtimePrices[awayMarket.ticker]
+          ? realtimePrices[awayMarket.ticker]
+          : parseFloat(awayMarket.yesBid) || 0;
+      const homePrice =
+        homeMarket?.ticker && realtimePrices[homeMarket.ticker]
+          ? realtimePrices[homeMarket.ticker]
+          : parseFloat(homeMarket.yesBid) || 0;
 
-      if (awayBid > 0 && homeBid > 0) {
-        // Convert bids to percentages (bids are already in decimal format like 0.5000)
-        pctAway = Math.round(awayBid * 100);
-        pctHome = Math.round(homeBid * 100);
+      if (awayPrice > 0 && homePrice > 0) {
+        // Convert prices to percentages (prices are already in decimal format like 0.5000)
+        pctAway = Math.round(awayPrice * 100);
+        pctHome = Math.round(homePrice * 100);
       } else {
-        // Fallback to default if bid data not available
+        // Fallback to default if price data not available
         pctAway = 50;
         pctHome = 50;
       }
@@ -536,7 +756,7 @@ export default function ChartScreen() {
       chattingCount: 0,
       about,
     };
-  }, [market, event]);
+  }, [market, event, realtimePrices]);
 
   // Map UI timeframes to MyChart expected values
   const chartTimeFrame = useMemo(() => {
@@ -560,46 +780,41 @@ export default function ChartScreen() {
   const competitionLabel =
     event?.competition || event?.league || market?.league || match.league;
 
+  // Extract price values from dedicated prices WebSocket for bottom buttons
+  const awayTickerPrice = useMemo(() => {
+    if (!event?.markets || event.markets.length < 2) return null;
+    const awayMarket = event.markets[1];
+    return awayMarket?.ticker ? buttonPrices[awayMarket.ticker] : null;
+  }, [buttonPrices, event?.markets]);
+
+  const homeTickerPrice = useMemo(() => {
+    if (!event?.markets || event.markets.length < 2) return null;
+    const homeMarket = event.markets[0];
+    return homeMarket?.ticker ? buttonPrices[homeMarket.ticker] : null;
+  }, [buttonPrices, event?.markets]);
+
+  // Calculate prices in cents for display - directly from prices WebSocket for faster updates
   const displayPctAway = useMemo(() => {
-    if (
-      currentPrices?.awayPrice !== undefined &&
-      currentPrices?.homePrice !== undefined
-    ) {
-      return Math.round(Number(currentPrices.awayPrice) * 100);
+    if (awayTickerPrice !== null && awayTickerPrice !== undefined) {
+      return Math.round(awayTickerPrice * 100);
     }
     return match.pctAway;
-  }, [currentPrices, match.pctAway]);
+  }, [awayTickerPrice, match.pctAway]);
 
   const displayPctHome = useMemo(() => {
-    if (
-      currentPrices?.awayPrice !== undefined &&
-      currentPrices?.homePrice !== undefined
-    ) {
-      return Math.round(Number(currentPrices.homePrice) * 100);
+    if (homeTickerPrice !== null && homeTickerPrice !== undefined) {
+      return Math.round(homeTickerPrice * 100);
     }
     return match.pctHome;
-  }, [currentPrices, match.pctHome]);
+  }, [homeTickerPrice, match.pctHome]);
 
-  // Calculate prices in cents for display
   const displayPriceAway = useMemo(() => {
-    if (
-      currentPrices?.awayPrice !== undefined &&
-      currentPrices?.homePrice !== undefined
-    ) {
-      return formatPrice(Number(currentPrices.awayPrice));
-    }
-    return formatPrice(match.pctAway / 100);
-  }, [currentPrices, match.pctAway]);
+    return formatPrice(displayPctAway / 100);
+  }, [displayPctAway]);
 
   const displayPriceHome = useMemo(() => {
-    if (
-      currentPrices?.awayPrice !== undefined &&
-      currentPrices?.homePrice !== undefined
-    ) {
-      return formatPrice(Number(currentPrices.homePrice));
-    }
-    return formatPrice(match.pctHome / 100);
-  }, [currentPrices, match.pctHome]);
+    return formatPrice(displayPctHome / 100);
+  }, [displayPctHome]);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -685,44 +900,11 @@ export default function ChartScreen() {
       </ScrollView>
 
       {/* Bottom Bar - Buy Team Buttons */}
-      <SafeAreaView edges={["bottom"]} style={styles.bottomBarContainer}>
-        <View style={styles.bottomBar}>
-          <TouchableOpacity
-            style={[
-              styles.bottomBarButton,
-              { backgroundColor: match.away.color },
-              selectedSide === "away" && styles.bottomBarButtonSelected,
-            ]}
-            onPress={() => setSelectedSide("away")}
-          >
-            <Text
-              style={[
-                styles.bottomBarButtonText,
-                styles.bottomBarButtonTextWhite,
-              ]}
-            >
-              Buy {match.away.code} {displayPriceAway}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.bottomBarButton,
-              { backgroundColor: match.home.color },
-              selectedSide === "home" && styles.bottomBarButtonSelected,
-            ]}
-            onPress={() => setSelectedSide("home")}
-          >
-            <Text
-              style={[
-                styles.bottomBarButtonText,
-                styles.bottomBarButtonTextWhite,
-              ]}
-            >
-              Buy {match.home.code} {displayPriceHome}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
+      <BuyButtons
+        awayTeam={match.away}
+        homeTeam={match.home}
+        event={event}
+      />
     </SafeAreaView>
   );
 }
@@ -911,38 +1093,6 @@ const styles = StyleSheet.create({
   },
   pickButtonTextDark: {
     color: "#111111",
-  },
-  bottomBarContainer: {
-    backgroundColor: "black",
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255, 255, 255, 0.1)",
-  },
-  bottomBar: {
-    flexDirection: "row",
-    gap: Spacing.md,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    backgroundColor: "black",
-  },
-  bottomBarButton: {
-    flex: 1,
-    borderRadius: BorderRadius.round,
-    paddingVertical: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  bottomBarButtonSelected: {
-    borderWidth: 3,
-    borderColor: "#FFFFFF",
-  },
-  bottomBarButtonText: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: "black",
-    letterSpacing: 0.2,
-  },
-  bottomBarButtonTextWhite: {
-    color: "#FFFFFF",
   },
   highLowContainer: {
     marginTop: Spacing.md,

@@ -842,7 +842,7 @@ export default function MyChart({
                     style={{
                       data: {
                         stroke: marketData.awayTeam.color,
-                        strokeWidth: 2,
+                        strokeWidth: 3,
                         strokeLinecap: "round",
                         strokeLinejoin: "round",
                         strokeDasharray: "0",
@@ -867,7 +867,7 @@ export default function MyChart({
                     style={{
                       data: {
                         stroke: marketData.homeTeam.color,
-                        strokeWidth: 2,
+                        strokeWidth: 3,
                         strokeLinecap: "round",
                         strokeLinejoin: "round",
                         strokeDasharray: "0",

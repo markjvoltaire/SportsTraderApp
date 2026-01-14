@@ -7,6 +7,7 @@ import {
   Typography,
   BorderRadius,
 } from "../../constants/theme";
+import { getNFLTeamColor, getNBATeamColor } from "../../constants/teamColors";
 
 export default function EventCard({ event }) {
   const navigation = useNavigation();
@@ -74,7 +75,7 @@ export default function EventCard({ event }) {
         return { label, askPercent, askPriceText: toPercentText(askPercent) };
       })
       .sort((a, b) => (b.askPercent ?? -1) - (a.askPercent ?? -1))
-      .slice(0, 2);
+      .slice(0, 3);
     const remainingMarketsCount = Math.max(
       0,
       allMarketsRaw.length - topMarkets.length
@@ -107,12 +108,51 @@ export default function EventCard({ event }) {
 
   if (!model) return null;
 
-  const formatCurrency = (value) => {
-    if (!value) return "$0";
-    if (value >= 1000000) return `$${(value / 1000000).toFixed(2)}M`;
-    if (value >= 1000) return `$${(value / 1000).toFixed(1)}K`;
-    return `$${Math.round(value).toLocaleString()}`;
+  // Helper function to brighten colors
+  const brightenColor = (color, boost = 0.25) => {
+    if (!color) return null;
+    const hex = color.replace("#", "");
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    const brightR = Math.min(255, Math.round(r + (255 - r) * boost));
+    const brightG = Math.min(255, Math.round(g + (255 - g) * boost));
+    const brightB = Math.min(255, Math.round(b + (255 - b) * boost));
+    return `#${brightR.toString(16).padStart(2, "0")}${brightG
+      .toString(16)
+      .padStart(2, "0")}${brightB.toString(16).padStart(2, "0")}`;
   };
+
+  // Get colors for markets (2 or 3)
+  const getMarketColors = () => {
+    if (!model.topMarkets || model.topMarkets.length < 2) {
+      return {
+        colors: ["#FF9500", "#FF3B30"],
+      };
+    }
+
+    // Try to get team colors based on market labels
+    const seriesTicker = String(event?.seriesTicker || "").toUpperCase();
+    const isProFootball = /pro football|nfl/i.test(seriesTicker);
+    const isProBasketball = /pro basketball|nba/i.test(seriesTicker);
+
+    const colorBoost = isProFootball ? 0.3 : isProBasketball ? 0.22 : 0;
+    const defaultColors = ["#FF9500", "#FF3B30", "#4CAF50"];
+
+    const colors = model.topMarkets.map((market, idx) => {
+      let color = null;
+      if (isProFootball) {
+        color = getNFLTeamColor(market.label) || getNFLTeamColor(market.label?.split(" ")[0]);
+      } else if (isProBasketball) {
+        color = getNBATeamColor(market.label) || getNBATeamColor(market.label?.split(" ")[0]);
+      }
+      return color ? brightenColor(color, colorBoost) : defaultColors[idx] || defaultColors[0];
+    });
+
+    return { colors };
+  };
+
+  const marketColors = getMarketColors();
 
   return (
     <TouchableOpacity
@@ -122,57 +162,31 @@ export default function EventCard({ event }) {
       activeOpacity={0.9}
     >
       <View style={styles.card}>
-        <View style={styles.titleRow}>
-          {model.isFootballRelated && (
-            <Image
-              source={require("../../../assets/images/football.png")}
-              style={styles.sportIcon}
-              resizeMode="cover"
-            />
-          )}
-          <Text style={styles.title} numberOfLines={2}>
-            {model.title}
-          </Text>
-        </View>
+        {/* Market Question Title */}
+        <Text style={styles.marketTitle} numberOfLines={2}>
+          {model.title}
+        </Text>
 
-        {/* Top 2 markets */}
-        {model.topMarkets?.length > 0 && (
-          <View style={styles.topMarkets}>
-            {model.topMarkets.map((m, idx) => (
-              <View
-                key={`${m.label}-${idx}`}
-                style={[
-                  styles.marketRow,
-                  idx === model.topMarkets.length - 1 && styles.marketRowLast,
-                ]}
-              >
-                <Text style={styles.marketLabel} numberOfLines={1}>
-                  {m.label}
-                </Text>
-                <Text style={styles.marketAsk}>{m.askPriceText}</Text>
-              </View>
-            ))}
+        {/* Market Options */}
+        {model.topMarkets && model.topMarkets.length > 0 && (
+          <>
+            <View style={styles.marketsList}>
+              {model.topMarkets.map((market, idx) => (
+                <View key={idx} style={styles.marketItem}>
+                  <Text style={styles.marketLabel}>{market.label}</Text>
+                  <Text style={[styles.marketPercentage, { color: marketColors.colors[idx] }]}>
+                    {market.askPercent || 0}%
+                  </Text>
+                </View>
+              ))}
+            </View>
 
-            {/* View all markets */}
-            {model.remainingMarketsCount > 0 && (
-              <View style={styles.viewAllRow}>
-                <Text style={styles.viewAllText}>
-                  View all markets ({model.remainingMarketsCount})
-                </Text>
-              </View>
-            )}
-          </View>
+            {/* Trade Button */}
+            <TouchableOpacity style={styles.tradeButton}>
+              <Text style={styles.tradeButtonText}>Trade</Text>
+            </TouchableOpacity>
+          </>
         )}
-
-        <View style={styles.metaRow}>
-          <Text style={styles.metaText}>{formatCurrency(model.volume)}</Text>
-          {!!model.subtitle && (
-            <>
-              <Text style={styles.dot}>•</Text>
-              <Text style={styles.metaText}>{model.subtitle}</Text>
-            </>
-          )}
-        </View>
       </View>
     </TouchableOpacity>
   );
@@ -180,82 +194,50 @@ export default function EventCard({ event }) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#0c111d",
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.xl,
+    borderRadius: 16,
+    padding: 20,
     marginVertical: 8,
+    backgroundColor: "#000000",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.06)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 5,
+    borderColor: "rgba(255, 255, 255, 0.1)",
   },
-  title: {
-    ...Typography.bodyLarge,
-    color: Colors.textPrimary,
-    marginBottom: Spacing.md,
-    flex: 1,
+  marketTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    textAlign: "center",
+    marginBottom: 20,
+    lineHeight: 22,
   },
-  titleRow: {
+  marketsList: {
+    marginBottom: 20,
+    gap: 12,
+  },
+  marketItem: {
     flexDirection: "row",
-    alignItems: "center",
-  },
-  sportIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: BorderRadius.md,
-    marginRight: Spacing.md,
-    backgroundColor: "#1a1f2e",
-  },
-  topMarkets: {
-    marginBottom: Spacing.lg,
-    gap: Spacing.sm,
-  },
-  viewAllRow: {
-    paddingTop: Spacing.sm,
-  },
-  viewAllText: {
-    ...Typography.caption,
-    color: Colors.textTertiary,
-    fontWeight: "500",
-  },
-  marketRow: {
-    flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: Spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 255, 255, 0.06)",
-  },
-  marketRowLast: {
-    borderBottomWidth: 0,
+    alignItems: "center",
   },
   marketLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#FFFFFF",
     flex: 1,
-    ...Typography.body,
-    color: Colors.textPrimary,
-    marginRight: Spacing.md,
-    fontWeight: "500",
   },
-  marketAsk: {
-    ...Typography.body,
-    color: Colors.textPrimary,
-    fontWeight: "700",
+  marketPercentage: {
+    fontSize: 16,
+    fontWeight: "600",
   },
-  metaRow: {
-    flexDirection: "row",
+  tradeButton: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    paddingVertical: 14,
     alignItems: "center",
+    justifyContent: "center",
   },
-  metaText: {
-    ...Typography.caption,
-    color: Colors.textTertiary,
-    fontWeight: "500",
-  },
-  dot: {
-    ...Typography.caption,
-    color: "rgba(255, 255, 255, 0.2)",
-    marginHorizontal: Spacing.sm,
+  tradeButtonText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#000000",
   },
 });

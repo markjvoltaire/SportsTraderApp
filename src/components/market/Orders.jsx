@@ -104,13 +104,27 @@ export default function Orders({ event }) {
     // Cleanup function
     return () => {
       if (wsRef.current) {
-        // Unsubscribe from orderbook before closing
-        if (
-          marketTickers.length > 0 &&
-          wsRef.current.readyState === WebSocket.OPEN
-        ) {
+        const wsToClose = wsRef.current;
+        
+        // Remove event handlers to prevent memory leaks
+        wsToClose.onopen = null;
+        wsToClose.onmessage = null;
+        wsToClose.onerror = null;
+        wsToClose.onclose = null;
+        
+        // Unsubscribe from both channels before closing if connection is open
+        if (marketTickers.length > 0 && wsToClose.readyState === WebSocket.OPEN) {
           try {
-            wsRef.current.send(
+            // Unsubscribe from trades
+            wsToClose.send(
+              JSON.stringify({
+                type: "unsubscribe",
+                channel: "trades",
+                tickers: marketTickers,
+              })
+            );
+            // Unsubscribe from orderbook
+            wsToClose.send(
               JSON.stringify({
                 type: "unsubscribe",
                 channel: "orderbook",
@@ -118,14 +132,19 @@ export default function Orders({ event }) {
               })
             );
           } catch (error) {
-            console.error("Error unsubscribing from orderbook:", error);
+            console.error("Error unsubscribing from channels:", error);
           }
         }
-        wsRef.current.close();
+        
+        // Close the connection
+        if (wsToClose.readyState === WebSocket.OPEN || wsToClose.readyState === WebSocket.CONNECTING) {
+          wsToClose.close();
+        }
+        
         wsRef.current = null;
       }
     };
-  }, []);
+  }, [marketTickers.join(",")]);
 
   const TradeRow = ({ trade }) => {
     // Calculate amount spent in dollars (price per share × number of shares)
