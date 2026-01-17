@@ -1077,13 +1077,13 @@ export default function MyChart({
           />
         </View>
       )}
-      {!loading && chartData && chartData.length > 0 && (
       <Animated.View
         style={[
           styles.chartAnimatedContainer,
           animatedChartStyle,
+          loading && { opacity: 0 },
         ]}
-        pointerEvents="auto"
+        pointerEvents={loading ? "none" : "auto"}
       >
         <GestureHandlerRootView style={styles.chartContainer}>
           <GestureDetector gesture={panGesture}>
@@ -1264,7 +1264,6 @@ export default function MyChart({
           </GestureDetector>
         </GestureHandlerRootView>
       </Animated.View>
-      )}
     </View>
   );
 }
