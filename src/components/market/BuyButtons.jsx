@@ -295,7 +295,7 @@ const styles = StyleSheet.create({
   },
   button: {
     flex: 1,
-    borderRadius: 10,
+    borderRadius: 30,
     paddingVertical: 16,
     alignItems: "center",
     justifyContent: "center",

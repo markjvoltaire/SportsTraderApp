@@ -11,6 +11,7 @@ export default function Orders({ event }) {
   const wsRef = useRef(null);
   const [trades, setTrades] = useState([]);
   const [orderbookData, setOrderbookData] = useState({});
+  const prevOrderbookRef = useRef({});
 
   // Get the game winner market ticker for each side
   const marketTicker1 = event?.markets?.[0]?.ticker || null;
@@ -50,6 +51,9 @@ export default function Orders({ event }) {
       const message = JSON.parse(event.data);
 
       if (message.channel === "trades") {
+        // Log the full trade message to see all available fields
+        console.log("Trade message:", JSON.stringify(message, null, 2));
+
         const tradeData = {
           ticker: message.market_ticker,
           tradeId: message.trade_id,
@@ -65,12 +69,45 @@ export default function Orders({ event }) {
           return [tradeData, ...prevTrades].slice(0, 50);
         });
       } else if (message.channel === "orderbook") {
+        // Check for sell orders (asks)
+        const yesAsks = message.yes_asks || {};
+        const noAsks = message.no_asks || {};
+
+        // Get previous orderbook state for this ticker
+        const prevOrderbook =
+          prevOrderbookRef.current[message.market_ticker] || {};
+        const prevYesAsks = prevOrderbook.yes_asks || {};
+        const prevNoAsks = prevOrderbook.no_asks || {};
+
+        // Detect new sell orders by comparing current asks with previous asks
+        const hasNewYesAsks =
+          Object.keys(yesAsks).length > 0 &&
+          (Object.keys(yesAsks).length > Object.keys(prevYesAsks).length ||
+            JSON.stringify(yesAsks) !== JSON.stringify(prevYesAsks));
+        const hasNewNoAsks =
+          Object.keys(noAsks).length > 0 &&
+          (Object.keys(noAsks).length > Object.keys(prevNoAsks).length ||
+            JSON.stringify(noAsks) !== JSON.stringify(prevNoAsks));
+
+        // Console log if a sell order is detected
+        if (hasNewYesAsks || hasNewNoAsks) {
+          console.log("sell");
+        }
+
         // Handle orderbook updates
         const orderbookUpdate = {
           market_ticker: message.market_ticker,
           yes_bids: message.yes_bids || {},
           no_bids: message.no_bids || {},
+          yes_asks: yesAsks,
+          no_asks: noAsks,
           timestamp: Date.now(),
+        };
+
+        // Store previous orderbook state for comparison
+        prevOrderbookRef.current[message.market_ticker] = {
+          yes_asks: yesAsks,
+          no_asks: noAsks,
         };
 
         // Store orderbook data by ticker
@@ -105,15 +142,18 @@ export default function Orders({ event }) {
     return () => {
       if (wsRef.current) {
         const wsToClose = wsRef.current;
-        
+
         // Remove event handlers to prevent memory leaks
         wsToClose.onopen = null;
         wsToClose.onmessage = null;
         wsToClose.onerror = null;
         wsToClose.onclose = null;
-        
+
         // Unsubscribe from both channels before closing if connection is open
-        if (marketTickers.length > 0 && wsToClose.readyState === WebSocket.OPEN) {
+        if (
+          marketTickers.length > 0 &&
+          wsToClose.readyState === WebSocket.OPEN
+        ) {
           try {
             // Unsubscribe from trades
             wsToClose.send(
@@ -135,12 +175,15 @@ export default function Orders({ event }) {
             console.error("Error unsubscribing from channels:", error);
           }
         }
-        
+
         // Close the connection
-        if (wsToClose.readyState === WebSocket.OPEN || wsToClose.readyState === WebSocket.CONNECTING) {
+        if (
+          wsToClose.readyState === WebSocket.OPEN ||
+          wsToClose.readyState === WebSocket.CONNECTING
+        ) {
           wsToClose.close();
         }
-        
+
         wsRef.current = null;
       }
     };

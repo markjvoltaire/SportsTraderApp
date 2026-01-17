@@ -29,7 +29,6 @@ import AddFundsScreen from "./Screens/AddFundsScreen";
 import DepositAmountScreen from "./Screens/DepositAmountScreen";
 import MoonPayScreen from "./Screens/MoonPayScreen";
 import MarketDetailScreen from "./Screens/MarketDetailScreen";
-import GameDetail from "./Screens/GameDetail";
 import EventDetail from "./Screens/EventDetail";
 import { Colors, Spacing, Typography } from "./src/constants/theme";
 import ChartScreen from "./Screens/ChartScreen";
@@ -71,13 +70,7 @@ function HomeStackScreen() {
           headerShown: false,
         }}
       />
-      <HomeStack.Screen
-        name="GameDetail"
-        component={GameDetail}
-        options={{
-          headerShown: false,
-        }}
-      />
+
       <HomeStack.Screen
         name="EventDetail"
         component={EventDetail}

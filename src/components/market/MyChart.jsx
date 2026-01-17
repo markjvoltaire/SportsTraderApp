@@ -28,6 +28,7 @@ import { useRoute } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import ChartSkeleton from "./ChartSkeleton";
 import { normalize, widthPercentage } from "../../utils/dimensions";
+import API_BASE_URL from "../../config/api";
 import {
   Colors,
   Spacing,
@@ -77,6 +78,7 @@ export default function MyChart({
   awayColor,
   homeColor,
   colorBoost = 0.22,
+  realtimePrices = {},
 }) {
   const route = useRoute();
   // Prefer explicitly passed market; fall back to navigation params
@@ -86,17 +88,219 @@ export default function MyChart({
   // State for price history - now process candlestickData directly
   const [awayHistory, setAwayHistory] = useState(null);
   const [homeHistory, setHomeHistory] = useState(null);
+  const [fetchedCandlestickData, setFetchedCandlestickData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Track previous prices to detect changes
+  const previousPricesRef = useRef({ away: null, home: null });
+  const PRICE_CHANGE_THRESHOLD = 0.01; // 1% change threshold
+
+  useEffect(() => {
+    const fetchCandlestickData = async () => {
+      if (!event?.markets || event.markets.length < 2) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setError(null);
+
+        const marketTicker1 = event.markets[0]?.ticker;
+        const marketTicker2 = event.markets[1]?.ticker;
+
+        if (!marketTicker1 || !marketTicker2) {
+          setLoading(false);
+          return;
+        }
+
+        // --- 1. Calculate 1-hour window ---
+        const endTs = Math.floor(Date.now() / 1000); // Now (Unix seconds)
+        const startTs = endTs - 1 * 60 * 60; // 1 hour ago
+        const periodInterval = 1; // 1-minute granularity
+
+        // --- 2. Build Query String ---
+        const queryParams = `?startTs=${startTs}&endTs=${endTs}&periodInterval=${periodInterval}`;
+
+        // --- 3. Parallel API calls with query strings ---
+        const [response1, response2] = await Promise.all([
+          fetch(
+            `http://scoretradebackend.onrender.com/api/v1/market/${marketTicker1}/candlesticks${queryParams}`
+          ),
+          fetch(
+            `http://scoretradebackend.onrender.com/api/v1/market/${marketTicker2}/candlesticks${queryParams}`
+          ),
+        ]);
+
+        if (!response1.ok || !response2.ok) {
+          throw new Error(
+            `Failed to fetch candlestick data: ${
+              response1.status || response2.status
+            }`
+          );
+        }
+
+        const data1 = await response1.json();
+        const data2 = await response2.json();
+
+        // --- 4. Handle different API response formats ---
+        // The API might return an array directly, or wrapped in an object
+        const candlesticks1 = Array.isArray(data1)
+          ? data1
+          : data1.candlesticks || data1.data || [];
+        const candlesticks2 = Array.isArray(data2)
+          ? data2
+          : data2.candlesticks || data2.data || [];
+
+        // --- 5. Combine data for the UI ---
+        const combinedData = {
+          market_candlesticks: [candlesticks1, candlesticks2],
+        };
+
+        setFetchedCandlestickData(combinedData);
+      } catch (err) {
+        console.error("Error fetching candlestick data:", err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCandlestickData();
+  }, [event?.markets]);
+
+  // Update candlestick data only when prices change significantly
+  useEffect(() => {
+    if (!event?.markets || event.markets.length < 2 || !realtimePrices) {
+      return;
+    }
+
+    const awayMarket = event.markets[1]; // Second market is for away team
+    const homeMarket = event.markets[0]; // First market is for home team
+
+    const currentAwayPrice = awayMarket?.ticker
+      ? realtimePrices[awayMarket.ticker]
+      : null;
+    const currentHomePrice = homeMarket?.ticker
+      ? realtimePrices[homeMarket.ticker]
+      : null;
+
+    // Check if prices have changed significantly
+    const awayPriceChanged =
+      currentAwayPrice !== undefined &&
+      currentAwayPrice !== null &&
+      (previousPricesRef.current.away === null ||
+        Math.abs(currentAwayPrice - previousPricesRef.current.away) >=
+          PRICE_CHANGE_THRESHOLD);
+
+    const homePriceChanged =
+      currentHomePrice !== undefined &&
+      currentHomePrice !== null &&
+      (previousPricesRef.current.home === null ||
+        Math.abs(currentHomePrice - previousPricesRef.current.home) >=
+          PRICE_CHANGE_THRESHOLD);
+
+    // Only update if prices have changed significantly
+    if (awayPriceChanged || homePriceChanged) {
+      previousPricesRef.current = {
+        away: currentAwayPrice,
+        home: currentHomePrice,
+      };
+
+      // Add new data points to make the chart progress
+      if (fetchedCandlestickData?.market_candlesticks) {
+        setFetchedCandlestickData((prev) => {
+          if (!prev || !prev.market_candlesticks) return prev;
+
+          const updated = { ...prev };
+          const now = Math.floor(Date.now() / 1000);
+
+          // Add new candlestick points for each market
+          [0, 1].forEach((index) => {
+            if (!updated.market_candlesticks[index]) {
+              updated.market_candlesticks[index] = [];
+            }
+
+            const price = index === 0 ? currentHomePrice : currentAwayPrice;
+
+            if (price !== null && price !== undefined) {
+              // Get the last point to use as reference
+              const lastPoint =
+                updated.market_candlesticks[index].length > 0
+                  ? updated.market_candlesticks[index][
+                      updated.market_candlesticks[index].length - 1
+                    ]
+                  : null;
+
+              // Create a new candlestick point
+              const newPoint = {
+                price: {
+                  close: price,
+                  close_dollars: price.toString(),
+                  open: lastPoint?.price?.close || price,
+                  open_dollars: (lastPoint?.price?.close || price).toString(),
+                  high: Math.max(price, lastPoint?.price?.close || price),
+                  high_dollars: Math.max(
+                    price,
+                    lastPoint?.price?.close || price
+                  ).toString(),
+                  low: Math.min(price, lastPoint?.price?.close || price),
+                  low_dollars: Math.min(
+                    price,
+                    lastPoint?.price?.close || price
+                  ).toString(),
+                },
+                end_period_ts: now,
+                timestamp: now,
+                time: now,
+              };
+
+              // Add the new point to the array
+              const updatedArray = [
+                ...updated.market_candlesticks[index],
+                newPoint,
+              ];
+
+              // Keep only the last hour of data (60 points for 1-minute intervals)
+              // This prevents the array from growing too large
+              const maxPoints = 60;
+              if (updatedArray.length > maxPoints) {
+                updated.market_candlesticks[index] = updatedArray.slice(
+                  -maxPoints
+                );
+              } else {
+                updated.market_candlesticks[index] = updatedArray;
+              }
+            }
+          });
+
+          return updated;
+        });
+      }
+    }
+  }, [realtimePrices, event?.markets, fetchedCandlestickData]);
+  // Use fetched candlestickData if available, otherwise fall back to prop
+  const candlestickDataToUse = fetchedCandlestickData;
+
   // Process candlestickData when it changes
   useEffect(() => {
-    if (!candlestickData?.market_candlesticks) {
+    if (!candlestickDataToUse?.market_candlesticks) {
       setLoading(true);
       return;
     }
 
     const extractTeamData = (teamData, teamIndex) => {
       const processedData = [];
+
+      // Ensure teamData is an array
+      if (!teamData || !Array.isArray(teamData)) {
+        console.warn(
+          `Team data at index ${teamIndex} is not an array:`,
+          teamData
+        );
+        return processedData;
+      }
 
       teamData.forEach((point, pointIndex) => {
         let price =
@@ -119,11 +323,11 @@ export default function MyChart({
     };
 
     // Extract data for both teams
-    const team1Data = candlestickData.market_candlesticks[0]
-      ? extractTeamData(candlestickData.market_candlesticks[0], 0)
+    const team1Data = candlestickDataToUse.market_candlesticks[0]
+      ? extractTeamData(candlestickDataToUse.market_candlesticks[0], 0)
       : [];
-    const team2Data = candlestickData.market_candlesticks[1]
-      ? extractTeamData(candlestickData.market_candlesticks[1], 1)
+    const team2Data = candlestickDataToUse.market_candlesticks[1]
+      ? extractTeamData(candlestickDataToUse.market_candlesticks[1], 1)
       : [];
 
     // Ensure both teams have the same number of data points
@@ -154,10 +358,13 @@ export default function MyChart({
       });
     }
 
-    setAwayHistory(team1Data);
-    setHomeHistory(team2Data);
+    // Map candlestick data correctly:
+    // market_candlesticks[0] = home team (event.markets[0]) -> homeHistory
+    // market_candlesticks[1] = away team (event.markets[1]) -> awayHistory
+    setHomeHistory(team1Data);
+    setAwayHistory(team2Data);
     setLoading(false);
-  }, [candlestickData]);
+  }, [candlestickDataToUse]);
 
   const chartPadding = {
     top: Spacing.md,
@@ -573,6 +780,30 @@ export default function MyChart({
 
       const data = getValueAtX(xPos);
       const currentDataIndex = Math.floor(data.index);
+      const isAtLatestPoint = currentDataIndex >= chartData.length - 1;
+
+      // Use real-time prices if cursor is at the latest point and real-time prices are available
+      let displayAwayPrice = data.awayPrice;
+      let displayHomePrice = data.homePrice;
+
+      if (isAtLatestPoint && event?.markets && event.markets.length >= 2) {
+        const awayMarket = event.markets[1]; // Second market is for away team
+        const homeMarket = event.markets[0]; // First market is for home team
+
+        // Use real-time price if available, otherwise fallback to chart data
+        if (
+          awayMarket?.ticker &&
+          realtimePrices[awayMarket.ticker] !== undefined
+        ) {
+          displayAwayPrice = realtimePrices[awayMarket.ticker];
+        }
+        if (
+          homeMarket?.ticker &&
+          realtimePrices[homeMarket.ticker] !== undefined
+        ) {
+          displayHomePrice = realtimePrices[homeMarket.ticker];
+        }
+      }
 
       // Trigger haptic feedback when crossing data point boundaries
       if (
@@ -589,8 +820,8 @@ export default function MyChart({
 
       setTooltipData({
         index: data.index,
-        awayPrice: data.awayPrice,
-        homePrice: data.homePrice,
+        awayPrice: displayAwayPrice,
+        homePrice: displayHomePrice,
         timestamp: data.timestamp,
         awayTeamName: marketData.awayTeam.name || "Away",
         homeTeamName: marketData.homeTeam.name || "Home",
@@ -602,8 +833,8 @@ export default function MyChart({
       if (onTimestampChange) onTimestampChange(data.timestamp);
       if (onPriceChange) {
         onPriceChange({
-          awayPrice: data.awayPrice,
-          homePrice: data.homePrice,
+          awayPrice: displayAwayPrice,
+          homePrice: displayHomePrice,
         });
       }
     },
@@ -615,6 +846,9 @@ export default function MyChart({
       onPriceChange,
       marketData,
       chartData.length,
+      chartData,
+      event,
+      realtimePrices,
     ]
   );
 
@@ -646,8 +880,9 @@ export default function MyChart({
         .onEnd(() => {
           "worklet";
           isActive.value = false;
-          cursorX.value = plotWidth;
-          runOnJS(updateCursorData)(plotWidth);
+          // Keep cursor at current position to show tooltips, but hide the line
+          // cursorX.value stays at its current position for tooltip visibility
+          runOnJS(updateCursorData)(cursorX.value);
         }),
     [
       chartPadding.left,
@@ -659,6 +894,7 @@ export default function MyChart({
     ]
   );
 
+  // Initialize cursor position to show tooltips at the end of chart
   useEffect(() => {
     if (chartData && chartData.length > 0 && cursorX.value === -1) {
       cursorX.value = plotWidth;
@@ -667,6 +903,56 @@ export default function MyChart({
       setShowTooltip(true);
     }
   }, [chartData, plotWidth, cursorX, updateCursorData, isActive]);
+
+  // Update tooltip with real-time prices when they change and cursor is at latest point
+  useEffect(() => {
+    if (!chartData || chartData.length === 0 || !showTooltip) return;
+
+    // Check if cursor is at the latest point (rightmost position)
+    const isAtLatestPoint = tooltipData.index >= chartData.length - 1;
+
+    if (isAtLatestPoint && event?.markets && event.markets.length >= 2) {
+      const awayMarket = event.markets[1]; // Second market is for away team
+      const homeMarket = event.markets[0]; // First market is for home team
+
+      let displayAwayPrice = tooltipData.awayPrice;
+      let displayHomePrice = tooltipData.homePrice;
+
+      // Use real-time price if available
+      if (
+        awayMarket?.ticker &&
+        realtimePrices[awayMarket.ticker] !== undefined
+      ) {
+        displayAwayPrice = realtimePrices[awayMarket.ticker];
+      }
+      if (
+        homeMarket?.ticker &&
+        realtimePrices[homeMarket.ticker] !== undefined
+      ) {
+        displayHomePrice = realtimePrices[homeMarket.ticker];
+      }
+
+      // Only update if prices have changed
+      if (
+        displayAwayPrice !== tooltipData.awayPrice ||
+        displayHomePrice !== tooltipData.homePrice
+      ) {
+        setTooltipData((prev) => ({
+          ...prev,
+          awayPrice: displayAwayPrice,
+          homePrice: displayHomePrice,
+        }));
+      }
+    }
+  }, [
+    realtimePrices,
+    chartData,
+    tooltipData.index,
+    event,
+    showTooltip,
+    tooltipData.awayPrice,
+    tooltipData.homePrice,
+  ]);
 
   useEffect(() => {
     if (!loading && chartData && chartData.length > 0) {
@@ -693,7 +979,8 @@ export default function MyChart({
   const tooltipMargin = normalize(8); // Spacing.sm value
 
   const animatedCursorStyle = useAnimatedStyle(() => {
-    const opacity = isActive.value ? 1 : cursorX.value >= 0 ? 0.6 : 0;
+    // Only show cursor line when actively scrolling (isActive is true)
+    const opacity = isActive.value ? 1 : 0;
     return {
       opacity,
       transform: [{ translateX: cursorX.value - 1 }],
@@ -711,6 +998,7 @@ export default function MyChart({
   };
 
   const animatedTooltipHighStyle = useAnimatedStyle(() => {
+    // Show tooltips when cursor is visible (either scrolling or at a position)
     const opacity = isActive.value ? 1 : cursorX.value >= 0 ? 0.8 : 0;
     // Calculate tooltip Y position - offset above the line
     const tooltipY = cursorYHigh.value - tooltipOffset;
@@ -729,6 +1017,7 @@ export default function MyChart({
   });
 
   const animatedTooltipLowStyle = useAnimatedStyle(() => {
+    // Show tooltips when cursor is visible (either scrolling or at a position)
     const opacity = isActive.value ? 1 : cursorX.value >= 0 ? 0.8 : 0;
     return {
       opacity,

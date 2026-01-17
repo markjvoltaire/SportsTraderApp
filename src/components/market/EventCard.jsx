@@ -9,6 +9,12 @@ import {
 } from "../../constants/theme";
 import { getNFLTeamColor, getNBATeamColor } from "../../constants/teamColors";
 
+// Helper function to convert percentage to text format
+const toPercentText = (percent) => {
+  if (!Number.isFinite(Number(percent))) return "—";
+  return `${Math.round(Number(percent))}%`;
+};
+
 export default function EventCard({ event }) {
   const navigation = useNavigation();
 
@@ -57,6 +63,11 @@ export default function EventCard({ event }) {
     const toPercentText = (percent) => {
       if (!Number.isFinite(Number(percent))) return "—";
       return `${Math.round(Number(percent))}%`;
+    };
+
+    const toCentsText = (percent) => {
+      if (!Number.isFinite(Number(percent))) return "—";
+      return `${Math.round(Number(percent))}¢`;
     };
 
     const allMarketsRaw = Array.isArray(event.markets) ? event.markets : [];
@@ -142,11 +153,17 @@ export default function EventCard({ event }) {
     const colors = model.topMarkets.map((market, idx) => {
       let color = null;
       if (isProFootball) {
-        color = getNFLTeamColor(market.label) || getNFLTeamColor(market.label?.split(" ")[0]);
+        color =
+          getNFLTeamColor(market.label) ||
+          getNFLTeamColor(market.label?.split(" ")[0]);
       } else if (isProBasketball) {
-        color = getNBATeamColor(market.label) || getNBATeamColor(market.label?.split(" ")[0]);
+        color =
+          getNBATeamColor(market.label) ||
+          getNBATeamColor(market.label?.split(" ")[0]);
       }
-      return color ? brightenColor(color, colorBoost) : defaultColors[idx] || defaultColors[0];
+      return color
+        ? brightenColor(color, colorBoost)
+        : defaultColors[idx] || defaultColors[0];
     });
 
     return { colors };
@@ -174,17 +191,19 @@ export default function EventCard({ event }) {
               {model.topMarkets.map((market, idx) => (
                 <View key={idx} style={styles.marketItem}>
                   <Text style={styles.marketLabel}>{market.label}</Text>
-                  <Text style={[styles.marketPercentage, { color: marketColors.colors[idx] }]}>
-                    {market.askPercent || 0}%
-                  </Text>
+                  <View style={styles.percentagePill}>
+                    <Text style={styles.percentagePillText}>
+                      {toPercentText(market.askPercent || 0)}
+                    </Text>
+                  </View>
                 </View>
               ))}
             </View>
 
             {/* Trade Button */}
-            <TouchableOpacity style={styles.tradeButton}>
+            {/* <TouchableOpacity style={styles.tradeButton}>
               <Text style={styles.tradeButtonText}>Trade</Text>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
           </>
         )}
       </View>
@@ -227,6 +246,22 @@ const styles = StyleSheet.create({
   marketPercentage: {
     fontSize: 16,
     fontWeight: "600",
+  },
+  percentagePill: {
+    backgroundColor: "#000000",
+    borderWidth: 1,
+    borderColor: "#FFFFFF",
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    minWidth: 50,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  percentagePillText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   tradeButton: {
     backgroundColor: "#FFFFFF",

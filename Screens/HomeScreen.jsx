@@ -26,6 +26,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import GameCard from "../src/components/market/GameCard";
 import EventCard from "../src/components/market/EventCard";
 import LottieView from "lottie-react-native";
+import Ticker from "../src/components/ui/Ticker";
 
 const { width } = Dimensions.get("window");
 
@@ -76,6 +77,31 @@ export default function HomeScreen() {
     );
   };
 
+  // Check if competition is Soccer related
+  const isSoccerCompetition = (competitionName) => {
+    const soccerCompetitions = [
+      "EPL",
+      "La Liga",
+      "Ligue 1",
+      "Bundesliga",
+      "Serie A",
+      "UCL",
+      "FIFA World Cup",
+      "Eredivisie",
+      "AFCON",
+      "EFL Championship",
+      "Scottish Premiership",
+      "Saudi Pro League",
+      "Liga Portugal",
+      "FA Cup",
+      "Liga MX",
+      "Brasileiro Serie A",
+      "Australian A League",
+      "Taca de Portugal",
+    ];
+    return soccerCompetitions.includes(competitionName);
+  };
+
   // Cache for API responses
   const eventsCache = useRef(new Map());
 
@@ -85,10 +111,8 @@ export default function HomeScreen() {
   // Ref for ScrollView to scroll to top when competition/scope changes
   const scrollViewRef = useRef(null);
 
-  // Animation refs for category tabs
+  // Position tracking for category tabs (if needed for future features)
   const categoryItemPositions = useRef({});
-  const categoryUnderlineAnim = useRef(new Animated.Value(0)).current;
-  const categoryUnderlineWidthAnim = useRef(new Animated.Value(0)).current;
 
   // Create flattened competitions list - filtered to only include desired competitions
   const flattenedCompetitions = useMemo(() => {
@@ -442,27 +466,6 @@ export default function HomeScreen() {
     }
   }, [selectedCompetition, selectedScope]);
 
-  // Animate underline when selectedCompetition changes
-  useEffect(() => {
-    if (!selectedCompetition) return;
-
-    const position = categoryItemPositions.current[selectedCompetition];
-    if (position) {
-      Animated.parallel([
-        Animated.timing(categoryUnderlineAnim, {
-          toValue: position.x,
-          duration: 300,
-          useNativeDriver: false,
-        }),
-        Animated.timing(categoryUnderlineWidthAnim, {
-          toValue: position.width,
-          duration: 300,
-          useNativeDriver: false,
-        }),
-      ]).start();
-    }
-  }, [selectedCompetition, flattenedCompetitions]);
-
   // Handle pull-to-refresh
   const handleRefresh = useCallback(() => {
     console.log(
@@ -491,7 +494,7 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container} edges={["top"]}>
       {/* HEADER SECTION */}
       <View style={styles.header}>
-        {/* Top Row: Icon, Search, Settings */}
+        {/* Top Row: Icon, Search, Discord */}
         <View style={styles.headerTopRow}>
           {/* Left: Logo */}
           <Image
@@ -515,9 +518,13 @@ export default function HomeScreen() {
             />
           </View>
 
-          {/* Right: Settings Icon */}
+          {/* Right: Discord Icon */}
           <TouchableOpacity style={styles.settingsIcon}>
-            <Ionicons name="settings-outline" size={22} color="#FFFFFF" />
+            <Image
+              source={require("../assets/images/discord.png")}
+              style={styles.discordIcon}
+              resizeMode="contain"
+            />
           </TouchableOpacity>
         </View>
 
@@ -541,22 +548,6 @@ export default function HomeScreen() {
                         x,
                         width,
                       };
-
-                      // If this is the selected item, animate to it
-                      if (isSelected) {
-                        Animated.parallel([
-                          Animated.timing(categoryUnderlineAnim, {
-                            toValue: x,
-                            duration: 300,
-                            useNativeDriver: false,
-                          }),
-                          Animated.timing(categoryUnderlineWidthAnim, {
-                            toValue: width,
-                            duration: 300,
-                            useNativeDriver: false,
-                          }),
-                        ]).start();
-                      }
                     }}
                     onPress={() => {
                       setSelectedCompetition(competition.name);
@@ -579,63 +570,6 @@ export default function HomeScreen() {
                 );
               })}
             </ScrollView>
-            {/* Animated Underline */}
-            <Animated.View
-              style={[
-                styles.categoryUnderline,
-                {
-                  left: categoryUnderlineAnim,
-                  width: categoryUnderlineWidthAnim,
-                },
-              ]}
-            />
-          </View>
-        )}
-
-        {/* Scopes Row */}
-        {selectedCompetition && (
-          <View style={styles.scopesContainer}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.scopesRow}
-            >
-              {flattenedCompetitions
-                .find((comp) => comp.name === selectedCompetition)
-                ?.scopes?.filter(
-                  (scope) =>
-                    !shouldHideScopeForCompetition(selectedCompetition, scope)
-                )
-                .map((scope) => {
-                  const isSelected = selectedScope === scope;
-                  return (
-                    <TouchableOpacity
-                      key={scope}
-                      style={[
-                        styles.scopeButton,
-                        isSelected && styles.scopeButtonActive,
-                      ]}
-                      onPress={() => {
-                        setSelectedScope(scope);
-                        console.log(
-                          "Selected Competition:",
-                          selectedCompetition
-                        );
-                        console.log("Selected Scope:", scope);
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.scopeButtonText,
-                          isSelected && styles.scopeButtonTextActive,
-                        ]}
-                      >
-                        {scope}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-            </ScrollView>
           </View>
         )}
       </View>
@@ -656,6 +590,59 @@ export default function HomeScreen() {
           />
         }
       >
+        {/* Scopes Row or Ticker */}
+        {selectedCompetition === "Trending" ? (
+          <View style={styles.tickerWrapper}>
+            <Ticker />
+          </View>
+        ) : (
+          selectedCompetition && (
+            <View style={styles.scopesContainer}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.scopesRow}
+              >
+                {flattenedCompetitions
+                  .find((comp) => comp.name === selectedCompetition)
+                  ?.scopes?.filter(
+                    (scope) =>
+                      !shouldHideScopeForCompetition(selectedCompetition, scope)
+                  )
+                  .map((scope) => {
+                    const isSelected = selectedScope === scope;
+                    return (
+                      <TouchableOpacity
+                        key={scope}
+                        style={[
+                          styles.scopeButton,
+                          isSelected && styles.scopeButtonActive,
+                        ]}
+                        onPress={() => {
+                          setSelectedScope(scope);
+                          console.log(
+                            "Selected Competition:",
+                            selectedCompetition
+                          );
+                          console.log("Selected Scope:", scope);
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.scopeButtonText,
+                            isSelected && styles.scopeButtonTextActive,
+                          ]}
+                        >
+                          {scope}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+              </ScrollView>
+            </View>
+          )
+        )}
+
         {/* Scopes Chips (Sub-filters) */}
         {/* {selectedCompetition && (
           <View style={styles.scopesWrapper}>
@@ -718,7 +705,8 @@ export default function HomeScreen() {
               </View>
             ) : (
               eventsList.map((event, index) =>
-                selectedScope === "Games" ? (
+                selectedScope === "Games" &&
+                !isSoccerCompetition(selectedCompetition) ? (
                   <GameCard
                     key={event.ticker || event.id || index}
                     event={event}
@@ -800,6 +788,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  discordIcon: {
+    width: 22,
+    height: 22,
+  },
   categoryContainer: {
     position: "relative",
     borderBottomWidth: 1,
@@ -822,17 +814,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "white",
   },
-  categoryUnderline: {
-    position: "absolute",
-    bottom: 0,
-    height: 2,
-    backgroundColor: "#6552FE",
-  },
   scopesContainer: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 1,
+    marginBottom: 10,
     gap: 12,
   },
   competitionLabel: {
@@ -865,15 +852,15 @@ const styles = StyleSheet.create({
     color: "#000000",
     fontWeight: "700",
   },
+  tickerWrapper: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
   titleImage: {
     width: 120,
     height: 40,
     marginBottom: 1,
     right: 30,
-  },
-  tickerWrapper: {
-    marginTop: 15,
-    marginBottom: 5,
   },
   scrollContent: {
     flexGrow: 1,

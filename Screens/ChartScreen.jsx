@@ -303,8 +303,10 @@ export default function ChartScreen() {
           }));
 
           // Update candlestickData only if price has changed
-          const lastPrice = lastCandlestickPricesRef.current[message.market_ticker];
-          const priceChanged = lastPrice === undefined || lastPrice !== midPrice;
+          const lastPrice =
+            lastCandlestickPricesRef.current[message.market_ticker];
+          const priceChanged =
+            lastPrice === undefined || lastPrice !== midPrice;
 
           if (priceChanged) {
             lastCandlestickPricesRef.current[message.market_ticker] = midPrice;
@@ -337,7 +339,9 @@ export default function ChartScreen() {
               };
 
               // Create updated market_candlesticks array
-              const updatedMarketCandlesticks = [...prevData.market_candlesticks];
+              const updatedMarketCandlesticks = [
+                ...prevData.market_candlesticks,
+              ];
               if (!updatedMarketCandlesticks[marketIndex]) {
                 updatedMarketCandlesticks[marketIndex] = [];
               }
@@ -887,6 +891,7 @@ export default function ChartScreen() {
             timeFrame={chartTimeFrame}
             awayColor={match.away.color}
             homeColor={match.home.color}
+            realtimePrices={realtimePrices}
             colorBoost={isProFootball ? 0.3 : 0.22}
           />
         </View>
@@ -900,11 +905,7 @@ export default function ChartScreen() {
       </ScrollView>
 
       {/* Bottom Bar - Buy Team Buttons */}
-      <BuyButtons
-        awayTeam={match.away}
-        homeTeam={match.home}
-        event={event}
-      />
+      <BuyButtons awayTeam={match.away} homeTeam={match.home} event={event} />
     </SafeAreaView>
   );
 }

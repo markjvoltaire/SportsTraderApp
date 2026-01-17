@@ -2,14 +2,14 @@
   "expo": {
     "name": "Scoretrade",
     "slug": "scoretrade",
-    "version": "1.0.7",
+    "version": "1.0.8",
     "orientation": "portrait",
     "icon": "./assets/images/ScoretradeLogo.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/ScoretradeBlack.png",
-      "resizeMode": "contain",
+      "image": "./assets/images/scoretradeSplash.png",
+      "resizeMode": "cover",
       "backgroundColor": "black"
     },
     "ios": {

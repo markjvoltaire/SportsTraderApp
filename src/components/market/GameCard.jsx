@@ -3,8 +3,78 @@ import { StyleSheet, Text, View, TouchableOpacity, Image } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import Svg, { Polyline } from "react-native-svg";
 import { getNFLTeamColor, getNBATeamColor } from "../../constants/teamColors";
+import { formatCurrency } from "../../utils/formatters";
+import GameCardDetails from "./GameCardDetails";
 
 const WEBSOCKET_URL = "wss://dev-prediction-markets-api.dflow.net/api/v1/ws";
+
+// Unix time converter utilities
+const unixTimeConverter = {
+  // Convert Unix timestamp (seconds) to Date object
+  toDate: (timestamp) => {
+    if (!timestamp) return null;
+    // If timestamp is a number, assume it's Unix seconds (multiply by 1000)
+    if (typeof timestamp === "number") {
+      // Check if it's already in milliseconds (13+ digits) or seconds (10 digits)
+      if (timestamp.toString().length >= 13) {
+        return new Date(timestamp);
+      }
+      return new Date(timestamp * 1000);
+    }
+    // If it's a string, try to parse it
+    if (typeof timestamp === "string") {
+      // Check if it's a numeric string (Unix timestamp)
+      const numTimestamp = Number(timestamp);
+      if (!isNaN(numTimestamp)) {
+        return numTimestamp.toString().length >= 13
+          ? new Date(numTimestamp)
+          : new Date(numTimestamp * 1000);
+      }
+      // Try parsing as ISO string
+      return new Date(timestamp.replace("+00", "Z") || timestamp);
+    }
+    return null;
+  },
+
+  // Convert Date object or timestamp to Unix timestamp (seconds)
+  toUnix: (date) => {
+    if (!date) return null;
+    if (date instanceof Date) {
+      return Math.floor(date.getTime() / 1000);
+    }
+    if (typeof date === "number") {
+      // If already in seconds (10 digits), return as-is
+      if (date.toString().length <= 10) {
+        return date;
+      }
+      // If in milliseconds, convert to seconds
+      return Math.floor(date / 1000);
+    }
+    if (typeof date === "string") {
+      const parsed = new Date(date.replace("+00", "Z") || date);
+      if (!isNaN(parsed.getTime())) {
+        return Math.floor(parsed.getTime() / 1000);
+      }
+    }
+    return null;
+  },
+
+  // Check if a value is a Unix timestamp
+  isUnixTimestamp: (value) => {
+    if (typeof value === "number") {
+      const str = value.toString();
+      return str.length === 10 || str.length === 13;
+    }
+    if (typeof value === "string") {
+      const num = Number(value);
+      if (!isNaN(num)) {
+        const str = num.toString();
+        return str.length === 10 || str.length === 13;
+      }
+    }
+    return false;
+  },
+};
 
 export default function GameCard({ event }) {
   const navigation = useNavigation();
@@ -12,6 +82,7 @@ export default function GameCard({ event }) {
   const [chartLoading, setChartLoading] = useState(true);
   const pricesWsRef = useRef(null);
   const [realtimePrices, setRealtimePrices] = useState({});
+  const [countdown, setCountdown] = useState(null);
 
   if (!event || !event.markets || event.markets.length === 0) return null;
 
@@ -268,6 +339,63 @@ export default function GameCard({ event }) {
     };
   }, [marketTickers.join(",")]);
 
+  // Countdown timer for market open time
+  useEffect(() => {
+    // Use event.openTime
+    const openTime = event?.openTime;
+
+    if (!openTime) return;
+
+    const formatCountdown = (timeValue) => {
+      if (!timeValue) return null;
+
+      try {
+        // Use unixTimeConverter to convert to Date
+        const gameDate = unixTimeConverter.toDate(timeValue);
+        if (!gameDate) return null;
+
+        const now = new Date();
+        const diff = gameDate - now;
+
+        if (diff <= 0) {
+          return "Market Open";
+        }
+
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor(
+          (diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
+        );
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+        if (days > 0) {
+          return `Opens in ${days}d ${hours}h ${minutes}m`;
+        } else if (hours > 0) {
+          return `Opens in ${hours}h ${minutes}m ${seconds}s`;
+        } else if (minutes > 0) {
+          return `Opens in ${minutes}m ${seconds}s`;
+        } else {
+          return `Opens in ${seconds}s`;
+        }
+      } catch (error) {
+        return null;
+      }
+    };
+
+    const updateCountdown = () => {
+      const formatted = formatCountdown(openTime);
+      setCountdown(formatted);
+    };
+
+    // Update immediately
+    updateCountdown();
+
+    // Update every second
+    const interval = setInterval(updateCountdown, 1000);
+
+    return () => clearInterval(interval);
+  }, [event?.openTime]);
+
   // Handle multiple market formats
   let yesPercentage, noPercentage, tiePercentage;
   let displayYesPercentage, displayNoPercentage, displayTiePercentage;
@@ -389,30 +517,19 @@ export default function GameCard({ event }) {
       activeOpacity={0.9}
     >
       <View style={styles.card}>
-        {/* Market Question Title */}
-        <Text style={styles.marketTitle} numberOfLines={2}>
-          {event.title}
-        </Text>
-
+        <GameCardDetails event={event} />
         {/* Market Options */}
         <View style={styles.optionsContainer}>
           {/* Left Option */}
           <View style={styles.optionLeft}>
             <Text style={styles.optionTeamName}>{leftTeam}</Text>
-            <Text style={[styles.optionPercentage, { color: leftTeamColor }]}>
-              {leftPercentage}%
-            </Text>
           </View>
 
           {/* Right Option */}
           <View style={styles.optionRight}>
             <Text style={styles.optionTeamName}>{rightTeam}</Text>
-            <Text style={[styles.optionPercentage, { color: rightTeamColor }]}>
-              {rightPercentage}%
-            </Text>
           </View>
         </View>
-
         {/* Progress Bar */}
         <View style={styles.progressBarContainer}>
           <View style={styles.progressBarBackground}>
@@ -436,11 +553,28 @@ export default function GameCard({ event }) {
             />
           </View>
         </View>
+        {/* Price Buttons */}
+        <View style={styles.pricesContainer}>
+          {/* Left Price Button */}
+          <TouchableOpacity
+            style={styles.priceButton}
+            onPress={() => {
+              navigation.navigate("Chart", { event });
+            }}
+          >
+            <Text style={styles.priceText}>{leftPercentage}¢</Text>
+          </TouchableOpacity>
 
-        {/* Trade Button */}
-        <TouchableOpacity style={styles.tradeButton}>
-          <Text style={styles.tradeButtonText}>Trade</Text>
-        </TouchableOpacity>
+          {/* Right Price Button */}
+          <TouchableOpacity
+            style={styles.priceButton}
+            onPress={() => {
+              navigation.navigate("Chart", { event });
+            }}
+          >
+            <Text style={styles.priceText}>{rightPercentage}¢</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -454,6 +588,28 @@ const styles = StyleSheet.create({
     backgroundColor: "#000000",
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.1)",
+  },
+  eventInfo: {
+    marginBottom: 16,
+  },
+  eventTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    marginBottom: 8,
+    lineHeight: 22,
+  },
+  eventVolume: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "rgba(255, 255, 255, 0.7)",
+    marginBottom: 4,
+  },
+  countdownText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#6552FE",
+    marginTop: 4,
   },
   marketTitle: {
     fontSize: 16,
@@ -485,7 +641,28 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   progressBarContainer: {
-    marginBottom: 20,
+    marginBottom: 28,
+  },
+  pricesContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 0,
+  },
+  priceButton: {
+    backgroundColor: "rgba(0, 0, 0, 0.3)",
+    borderWidth: 1,
+    borderColor: "#FFFFFF",
+    borderRadius: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+    minWidth: 100,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  priceText: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#FFFFFF",
   },
   progressBarBackground: {
     height: 8,

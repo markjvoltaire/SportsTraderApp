@@ -6,7 +6,7 @@ import {
   Easing,
   Text,
 } from "react-native";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Colors, Spacing, Typography } from "../../../constants/theme";
 
 const DEFAULT_HEADLINES = [
@@ -20,17 +20,75 @@ const DEFAULT_HEADLINES = [
   "Dodgers trade for All-Star",
 ];
 
-export default function Ticker({ items = DEFAULT_HEADLINES }) {
+export default function Ticker({ items }) {
+  const [tickerItems, setTickerItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // If items are provided as props, use them directly
+    if (items) {
+      setTickerItems(items);
+      setLoading(false);
+      return;
+    }
+
+    // Fetch NFL futures data
+    const fetchNFLData = async () => {
+      try {
+        const response = await fetch('https://scoretradebackend.onrender.com/api/futures/nfl');
+        const data = await response.json();
+        
+        if (data.events && data.events.length > 0) {
+          // Collect all markets from all events where percentage > 0
+          const allMarkets = [];
+          
+          data.events.forEach(event => {
+            if (event.markets && event.markets.length > 0) {
+              event.markets.forEach(market => {
+                if (market.yesBid) {
+                  const price = Math.round(parseFloat(market.yesBid) * 100);
+                  // Only include markets with percentage > 0
+                  if (price > 0) {
+                    allMarkets.push({
+                      eventTitle: event.title,
+                      marketTitle: market.yesSubTitle,
+                      price: price,
+                    });
+                  }
+                }
+              });
+            }
+          });
+          
+          // Format for display
+          const formattedItems = allMarkets.map(market => 
+            `${market.eventTitle}: ${market.marketTitle} ${market.price}%`
+          );
+          
+          setTickerItems(formattedItems);
+        }
+      } catch (error) {
+        console.error('Error fetching NFL data:', error);
+        setTickerItems([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchNFLData();
+  }, [items]);
+
+  const displayItems = items || tickerItems;
   const tickerAnim = useRef(new Animated.Value(0)).current;
   const tickerAnimationRef = useRef(null);
   const dragStartValue = useRef(0);
   const isDragging = useRef(false);
 
   // 1. DIMENSIONS (Must be consistent for the math to work)
-  const ITEM_WIDTH = 250;
+  const ITEM_WIDTH = 320;
   const ITEM_MARGIN = Spacing.xl;
   const TICKER_BOX_WIDTH = ITEM_WIDTH + ITEM_MARGIN;
-  const SINGLE_SET_WIDTH = items.length * TICKER_BOX_WIDTH;
+  const SINGLE_SET_WIDTH = displayItems.length * TICKER_BOX_WIDTH;
 
   // Speed control: pixels per millisecond (lower = slower)
   const SPEED = 0.04;
@@ -132,9 +190,16 @@ export default function Ticker({ items = DEFAULT_HEADLINES }) {
   ).current;
 
   useEffect(() => {
-    startTicker(0);
+    if (!loading && displayItems.length > 0) {
+      startTicker(0);
+    }
     return () => tickerAnimationRef.current?.stop();
-  }, [items]);
+  }, [displayItems, loading]);
+
+  // Don't render anything while loading
+  if (loading || displayItems.length === 0) {
+    return null;
+  }
 
   return (
     <View style={styles.tickerContainer} {...panResponder.panHandlers}>
@@ -148,8 +213,8 @@ export default function Ticker({ items = DEFAULT_HEADLINES }) {
         ]}
       >
         {/* Render two copies of the data side-by-side */}
-        {items.concat(items).map((item, index) => (
-          <View key={index} style={[styles.tickerBox, { width: ITEM_WIDTH }]}>
+        {displayItems.concat(displayItems).map((item, index) => (
+          <View key={index} style={[styles.tickerBox]}>
             <Text style={styles.tickerText} numberOfLines={1}>
               {item}
             </Text>
@@ -162,8 +227,9 @@ export default function Ticker({ items = DEFAULT_HEADLINES }) {
 
 const styles = StyleSheet.create({
   tickerContainer: {
-    height: 60,
-    backgroundColor: "white",
+    height: 20,
+    marginBottom: 10,
+    bottom: 5,
     overflow: "hidden",
     justifyContent: "center",
   },
@@ -177,8 +243,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   tickerText: {
-    ...Typography.body,
-    color: "black",
+    
+    color: "white",
     fontSize: 14,
     fontWeight: "600",
   },
