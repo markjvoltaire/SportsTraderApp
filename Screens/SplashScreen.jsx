@@ -29,7 +29,7 @@ export default function SplashScreen() {
     if (loading) return;
 
     // Fade out animation after showing logo for 2 seconds (from when auth finishes loading)
-    const minDisplayTime = 2000; // Minimum 2 seconds to show logo
+    const minDisplayTime = 1000; // Minimum 2 seconds to show logo
     const fadeDuration = 800;
 
     const timer = setTimeout(() => {

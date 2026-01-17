@@ -126,10 +126,10 @@ export default function MyChart({
         // --- 3. Parallel API calls with query strings ---
         const [response1, response2] = await Promise.all([
           fetch(
-            `http://scoretradebackend.onrender.com/api/v1/market/${marketTicker1}/candlesticks${queryParams}`
+            `https://scoretradebackend.onrender.com/api/v1/market/${marketTicker1}/candlesticks${queryParams}`
           ),
           fetch(
-            `http://scoretradebackend.onrender.com/api/v1/market/${marketTicker2}/candlesticks${queryParams}`
+            `https://scoretradebackend.onrender.com/api/v1/market/${marketTicker2}/candlesticks${queryParams}`
           ),
         ]);
 
@@ -1077,13 +1077,13 @@ export default function MyChart({
           />
         </View>
       )}
+      {!loading && chartData && chartData.length > 0 && (
       <Animated.View
         style={[
           styles.chartAnimatedContainer,
           animatedChartStyle,
-          loading && { opacity: 0 },
         ]}
-        pointerEvents={loading ? "none" : "auto"}
+        pointerEvents="auto"
       >
         <GestureHandlerRootView style={styles.chartContainer}>
           <GestureDetector gesture={panGesture}>
@@ -1264,6 +1264,7 @@ export default function MyChart({
           </GestureDetector>
         </GestureHandlerRootView>
       </Animated.View>
+      )}
     </View>
   );
 }
