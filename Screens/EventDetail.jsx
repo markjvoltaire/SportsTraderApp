@@ -18,6 +18,7 @@ import {
 } from "../src/constants/theme";
 import EventChartData from "../src/components/market/EventChartData";
 import Orders from "../src/components/market/Orders";
+import API_BASE_URL from "../src/config/api";
 import { useCallback, useMemo } from "react";
 import LottieView from "lottie-react-native";
 
@@ -26,17 +27,15 @@ export default function EventDetail() {
   const route = useRoute();
   const event = route.params.event;
 
-  console.log("route", route);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [candlestickData1, setCandlestickData1] = useState(null);
   const [candlestickData2, setCandlestickData2] = useState(null);
-  const [candlestickData3, setCandlestickData3] = useState(null);
-  const [top3Markets, setTop3Markets] = useState([]);
+  const [top2Markets, setTop2Markets] = useState([]);
 
-  // Helper function to get top 3 markets consistently
-  const getTop3Markets = useCallback((markets) => {
+  // Helper function to get top 2 markets consistently
+  const getTop2Markets = useCallback((markets) => {
     if (!markets || !Array.isArray(markets)) return [];
     return [...markets]
       .sort((a, b) => {
@@ -44,7 +43,7 @@ export default function EventDetail() {
         const priceB = parseFloat(b.yesBid) || parseFloat(b.yesAsk) || 0;
         return priceB - priceA;
       })
-      .slice(0, 3);
+      .slice(0, 2);
   }, []);
 
   // Build about section from event data (similar to ChartScreen)
@@ -85,20 +84,16 @@ export default function EventDetail() {
     return about;
   }, [event]);
 
-  // Console log all markets
   useEffect(() => {
     if (event?.markets && Array.isArray(event.markets)) {
-      // Get top 3 markets by yes price
-      const top3 = getTop3Markets(event.markets);
-      setTop3Markets(top3);
-      const top3Tickers = top3.map((market) => market.ticker);
-      console.log("Top 3 Market Tickers:", top3Tickers);
+      const top2 = getTop2Markets(event.markets);
+      setTop2Markets(top2);
     }
-  }, [event, getTop3Markets]);
+  }, [event, getTop2Markets]);
 
   useEffect(() => {
     const fetchCandlestickData = async () => {
-      if (!event?.markets || event.markets.length < 3) {
+      if (!event?.markets || event.markets.length < 2) {
         return;
       }
 
@@ -106,98 +101,52 @@ export default function EventDetail() {
         setLoading(true);
         setError(null);
 
-        // Get top 3 markets by yes price using consistent helper
-        const top3 = getTop3Markets(event.markets);
+        const top2 = getTop2Markets(event.markets);
+        setTop2Markets(top2);
 
-        // Update top3Markets state to ensure consistency
-        setTop3Markets(top3);
+        const marketTickers = top2.map((market) => market.ticker);
 
-        const marketTickers = top3.map((market) => market.ticker);
-
-        console.log(
-          "Top 3 Market Tickers for Candlestick Data:",
-          marketTickers
-        );
-        console.log(
-          "Top 3 Markets:",
-          top3.map((m) => ({ name: m.yesSubTitle, ticker: m.ticker }))
-        );
-
-        if (marketTickers.length < 3) {
+        if (marketTickers.length < 2) {
           setLoading(false);
           return;
         }
 
         const marketTicker1 = marketTickers[0];
         const marketTicker2 = marketTickers[1];
-        const marketTicker3 = marketTickers[2];
 
-        // --- 1. Calculate 30-day window ---
-        const endTs = Math.floor(Date.now() / 1000); // Now (Unix seconds)
-        const startTs = endTs - 5 * 24 * 60 * 60; // 30 days ago
-        const periodInterval = 60; // 60-minute (hourly) granularity for 30-day window
-
-        // --- 2. Build Query String ---
+        const endTs = Math.floor(Date.now() / 1000);
+        const startTs = endTs - 5 * 24 * 60 * 60;
+        const periodInterval = 60;
         const queryParams = `?startTs=${startTs}&endTs=${endTs}&periodInterval=${periodInterval}`;
 
-        // --- 3. Parallel API calls with query strings ---
-        const [response1, response2, response3] = await Promise.all([
-          fetch(
-            `https://scoretradebackend.onrender.com/api/v1/market/${marketTicker1}/candlesticks${queryParams}`
-          ),
-          fetch(
-            `https://scoretradebackend.onrender.com/api/v1/market/${marketTicker2}/candlesticks${queryParams}`
-          ),
-          fetch(
-            `https://scoretradebackend.onrender.com/api/v1/market/${marketTicker3}/candlesticks${queryParams}`
-          ),
+        const url1 = `${API_BASE_URL}/api/candlesticksbyticker/${encodeURIComponent(marketTicker1)}${queryParams}`;
+        const url2 = `${API_BASE_URL}/api/candlesticksbyticker/${encodeURIComponent(marketTicker2)}${queryParams}`;
+
+        const [response1, response2] = await Promise.all([
+          fetch(url1),
+          fetch(url2),
         ]);
 
-        if (!response1.ok || !response2.ok || !response3.ok) {
+        if (!response1.ok || !response2.ok) {
           throw new Error(
             `Failed to fetch candlestick data: ${
-              response1.status || response2.status || response3.status
+              response1.status || response2.status
             }`
           );
         }
 
         const data1 = await response1.json();
         const data2 = await response2.json();
-        const data3 = await response3.json();
 
-        // --- 4. Handle different API response formats ---
-        // The API might return an array directly, or wrapped in an object
         const candlesticks1 = Array.isArray(data1)
           ? data1
           : data1.candlesticks || data1.data || [];
         const candlesticks2 = Array.isArray(data2)
           ? data2
           : data2.candlesticks || data2.data || [];
-        const candlesticks3 = Array.isArray(data3)
-          ? data3
-          : data3.candlesticks || data3.data || [];
-
-        // --- 5. Set each response to its own state ---
-        console.log("Setting candlestick data:");
-        console.log(
-          `Market 1 (${top3[0]?.yesSubTitle} - ${marketTicker1}):`,
-          candlesticks1.length,
-          "points"
-        );
-        console.log(
-          `Market 2 (${top3[1]?.yesSubTitle} - ${marketTicker2}):`,
-          candlesticks2.length,
-          "points"
-        );
-        console.log(
-          `Market 3 (${top3[2]?.yesSubTitle} - ${marketTicker3}):`,
-          candlesticks3.length,
-          "points"
-        );
 
         setCandlestickData1(candlesticks1);
         setCandlestickData2(candlesticks2);
-        setCandlestickData3(candlesticks3);
       } catch (err) {
         console.error("Error fetching candlestick data:", err);
         setError(err.message);
@@ -207,7 +156,7 @@ export default function EventDetail() {
     };
 
     fetchCandlestickData();
-  }, [event?.markets, getTop3Markets]);
+  }, [event?.markets, getTop2Markets]);
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -258,20 +207,16 @@ export default function EventDetail() {
           </View>
         )}
 
-        {candlestickData1 && candlestickData2 && candlestickData3 && (
+        {candlestickData1 && candlestickData2 && (
           <EventChartData
             candlestickData1={candlestickData1}
             candlestickData2={candlestickData2}
-            candlestickData3={candlestickData3}
-            market1Name={top3Markets[0]?.yesSubTitle || "Market 1"}
-            market2Name={top3Markets[1]?.yesSubTitle || "Market 2"}
-            market3Name={top3Markets[2]?.yesSubTitle || "Market 3"}
+            market1Name={top2Markets[0]?.yesSubTitle || "Market 1"}
+            market2Name={top2Markets[1]?.yesSubTitle || "Market 2"}
             market1Color="#9333EA"
             market2Color="#3B82F6"
-            market3Color="#10B981"
-            market1Ticker={top3Markets[0]?.ticker || null}
-            market2Ticker={top3Markets[1]?.ticker || null}
-            market3Ticker={top3Markets[2]?.ticker || null}
+            market1Ticker={top2Markets[0]?.ticker || null}
+            market2Ticker={top2Markets[1]?.ticker || null}
           />
         )}
 

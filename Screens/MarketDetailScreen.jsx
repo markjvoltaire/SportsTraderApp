@@ -210,6 +210,21 @@ export default function MarketDetailScreen({ route: routeProp }) {
 
       <TeamHeader market={market} />
       <MarketChart market={market} />
+
+      {/* Trade buttons - Buy Away / Buy Home */}
+      <View style={styles.tradeSection}>
+        <ButtonRow
+          market={market}
+          onBuyAway={({ team, price }) => {
+            // TODO: open purchase modal or navigate to buy flow
+            console.log("Buy away:", team, price);
+          }}
+          onBuyHome={({ team, price }) => {
+            // TODO: open purchase modal or navigate to buy flow
+            console.log("Buy home:", team, price);
+          }}
+        />
+      </View>
     </SafeAreaView>
   );
 }
@@ -274,6 +289,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: Spacing.xl,
+  },
+  tradeSection: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    paddingBottom: Spacing.xl,
   },
   emptyText: {
     ...Typography.body,

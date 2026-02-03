@@ -25,8 +25,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import GameCard from "../src/components/market/GameCard";
 import EventCard from "../src/components/market/EventCard";
+import Trending from "../src/components/trending/Trending";
 import LottieView from "lottie-react-native";
 import Ticker from "../src/components/ui/Ticker";
+import API_BASE_URL from "../src/config/api";
 
 const { width } = Dimensions.get("window");
 
@@ -71,6 +73,7 @@ export default function HomeScreen() {
       .trim()
       .toLowerCase();
     return (
+      normalized === "games" ||
       normalized === "receiving yards" ||
       normalized === "rushing yards" ||
       normalized === "rushing"
@@ -124,8 +127,6 @@ export default function HomeScreen() {
       "Pro Football": "NFL",
       "Pro Baseball": "MLB",
       "Pro Basketball (M)": "NBA",
-      "College Football": "COLLEGE FB",
-      "College Football Playoffs": "CFP",
       "College Basketball (M)": "COLLEGE BB (M)",
       "College Basketball (W)": "COLLEGE BB (W)",
       EPL: "EPL",
@@ -133,7 +134,6 @@ export default function HomeScreen() {
       "Ligue 1": "LIGUE 1",
       Bundesliga: "BUNDESLIGA",
       UFC: "UFC",
-      "FIFA World Cup": "WORLD CUP",
       "Serie A": "SERIE A",
       UCL: "UCL",
     };
@@ -193,14 +193,11 @@ export default function HomeScreen() {
       MLB: 4,
       EPL: 5,
       "LA LIGA": 6,
-      CFP: 8,
-      "COLLEGE FB": 7,
       "COLLEGE BB (M)": 9,
       "COLLEGE BB (W)": 10,
       "LIGUE 1": 11,
       BUNDESLIGA: 12,
       UFC: 13,
-      "WORLD CUP": 14,
       "SERIE A": 15,
       UCL: 16,
     };
@@ -226,13 +223,13 @@ export default function HomeScreen() {
     const fetchSportsFilters = async () => {
       try {
         const response = await fetch(
-          "https://scoretradebackend.onrender.com/api/sports-filters"
+          `${API_BASE_URL}/api/sports-filters`
         );
         const data = await response.json();
-        console.log("Sports Filters:", data);
+     
         setSportsFilters(data);
       } catch (error) {
-        console.error("Error fetching sports filters:", error);
+       
       }
     };
     fetchSportsFilters();
@@ -241,7 +238,7 @@ export default function HomeScreen() {
   // Helper function to build the correct URL based on competition and scope
   const buildApiUrl = useCallback((competition, scope) => {
     // Dynamic route selection for games, fights, and futures
-    let url = "https://scoretradebackend.onrender.com/api/events"; // Default fallback
+    let url = `${API_BASE_URL}/api/events`; // Default fallback
 
     // Hit specific routes when scope is one we support
     if (
@@ -262,8 +259,6 @@ export default function HomeScreen() {
         "Pro Basketball (M)": "/api/games/nba",
 
         // College Sports
-        "College Football": "/api/games/ncaaf",
-        "College Football Playoffs": "/api/games/ncaaf",
         "College Basketball (M)": "/api/games/ncaamb",
         "College Basketball (W)": "/api/games/ncaawb",
 
@@ -296,11 +291,12 @@ export default function HomeScreen() {
         const futuresRouteMap = {
           "Pro Football": "/api/futures/nfl", // NFL Futures
           "Pro Basketball (M)": "/api/futures/nba", // NBA Futures
+          "Pro Baseball": "/api/futures/mlb", // MLB Futures
         };
 
         const futuresRoute = futuresRouteMap[competition];
         if (futuresRoute) {
-          url = `https://scoretradebackend.onrender.com${futuresRoute}`;
+          url = `${API_BASE_URL}${futuresRoute}`;
         }
       } else if (scope === "Awards") {
         // Specific awards routes
@@ -311,7 +307,7 @@ export default function HomeScreen() {
 
         const awardsRoute = awardsRouteMap[competition];
         if (awardsRoute) {
-          url = `https://scoretradebackend.onrender.com${awardsRoute}`;
+          url = `${API_BASE_URL}${awardsRoute}`;
         }
       } else if (scope === "Draft") {
         // Specific draft routes
@@ -322,7 +318,7 @@ export default function HomeScreen() {
 
         const draftRoute = draftRouteMap[competition];
         if (draftRoute) {
-          url = `https://scoretradebackend.onrender.com${draftRoute}`;
+          url = `${API_BASE_URL}${draftRoute}`;
         }
       } else if (scope === "Events") {
         // Current events routes
@@ -333,7 +329,7 @@ export default function HomeScreen() {
 
         const currentEventsRoute = currentEventsRouteMap[competition];
         if (currentEventsRoute) {
-          url = `https://scoretradebackend.onrender.com${currentEventsRoute}`;
+          url = `${API_BASE_URL}${currentEventsRoute}`;
         }
       } else if (scope === "Win totals") {
         // Specific win totals routes
@@ -343,7 +339,7 @@ export default function HomeScreen() {
 
         const winTotalsRoute = winTotalsRouteMap[competition];
         if (winTotalsRoute) {
-          url = `https://scoretradebackend.onrender.com${winTotalsRoute}`;
+          url = `${API_BASE_URL}${winTotalsRoute}`;
         }
       } else if (scope === "Divisions") {
         // Specific divisions routes
@@ -353,7 +349,7 @@ export default function HomeScreen() {
 
         const divisionsRoute = divisionsRouteMap[competition];
         if (divisionsRoute) {
-          url = `https://scoretradebackend.onrender.com${divisionsRoute}`;
+          url = `${API_BASE_URL}${divisionsRoute}`;
         }
       } else if (scope === "League Leader") {
         // Specific league leaders routes
@@ -363,14 +359,14 @@ export default function HomeScreen() {
 
         const leagueLeadersRoute = leagueLeadersRouteMap[competition];
         if (leagueLeadersRoute) {
-          url = `https://scoretradebackend.onrender.com${leagueLeadersRoute}`;
+          url = `${API_BASE_URL}${leagueLeadersRoute}`;
         }
       } else {
         // Handle Games and Fights scopes
         // Find the matching route for the current competition
         const route = routeMap[competition];
         if (route) {
-          url = `https://scoretradebackend.onrender.com${route}`;
+          url = `${API_BASE_URL}${route}`;
         }
       }
     }
@@ -435,7 +431,7 @@ export default function HomeScreen() {
         // Fallback to general events if specific route fails
         try {
           const fallbackResponse = await fetch(
-            "https://scoretradebackend.onrender.com/api/events"
+            `${API_BASE_URL}/api/events`
           );
           const fallbackData = await fallbackResponse.json();
 
@@ -458,6 +454,17 @@ export default function HomeScreen() {
   useEffect(() => {
     fetchEventsData();
   }, [fetchEventsData]);
+
+  // When NFL is selected and scope is "Games" (now hidden), switch to Futures
+  useEffect(() => {
+    if (selectedCompetition !== "Pro Football" || selectedScope !== "Games")
+      return;
+    const nfl = flattenedCompetitions.find((c) => c.name === "Pro Football");
+    const useFutures =
+      nfl?.scopes?.includes("Futures");
+    if (useFutures) setSelectedScope("Futures");
+    else if (nfl?.scopes?.[0]) setSelectedScope(nfl.scopes[0]);
+  }, [selectedCompetition, selectedScope, flattenedCompetitions]);
 
   // Scroll to top when competition or scope changes
   useEffect(() => {
@@ -504,19 +511,21 @@ export default function HomeScreen() {
           />
 
           {/* Center: Search Bar */}
-          <View style={styles.searchBar}>
+          <TouchableOpacity 
+            style={styles.searchBar}
+            onPress={() => {
+              // TODO: Navigate to search screen
+              console.log("Search pressed");
+            }}
+          >
             <Ionicons
               name="search"
               size={18}
               color="#888888"
               style={styles.searchIcon}
             />
-            <TextInput
-              placeholder="Search"
-              placeholderTextColor="#888888"
-              style={styles.searchInput}
-            />
-          </View>
+            <Text style={styles.searchPlaceholder}>Search</Text>
+          </TouchableOpacity>
 
           {/* Right: Discord Icon */}
           <TouchableOpacity style={styles.settingsIcon}>
@@ -551,11 +560,16 @@ export default function HomeScreen() {
                     }}
                     onPress={() => {
                       setSelectedCompetition(competition.name);
-                      // Auto-select the first available scope for this competition
-                      const firstScope = competition.scopes?.[0] || null;
-                      setSelectedScope(firstScope);
+                      // For NFL, default to Futures (Games is hidden); otherwise first available scope
+                      const scopes = competition.scopes || [];
+                      const initialScope =
+                        competition.name === "Pro Football" &&
+                        scopes.includes("Futures")
+                          ? "Futures"
+                          : scopes[0] || null;
+                      setSelectedScope(initialScope);
                       console.log("Selected Competition:", competition.name);
-                      console.log("Selected Scope:", firstScope);
+                      console.log("Selected Scope:", initialScope);
                     }}
                   >
                     <Text
@@ -606,8 +620,26 @@ export default function HomeScreen() {
                 {flattenedCompetitions
                   .find((comp) => comp.name === selectedCompetition)
                   ?.scopes?.filter(
-                    (scope) =>
-                      !shouldHideScopeForCompetition(selectedCompetition, scope)
+                    (scope) => {
+                      // For soccer competitions, only show "Games" scope
+                      if (isSoccerCompetition(selectedCompetition)) {
+                        return scope === "Games";
+                      }
+                      // For MLB, exclude "Events" scope
+                      if (selectedCompetition === "Pro Baseball") {
+                        const allowedScopes = ["Games", "Futures", "Awards"];
+                        return (
+                          allowedScopes.includes(scope) &&
+                          !shouldHideScopeForCompetition(selectedCompetition, scope)
+                        );
+                      }
+                      // For other competitions, show allowed scopes
+                      const allowedScopes = ["Games", "Futures", "Awards", "Events"];
+                      return (
+                        allowedScopes.includes(scope) &&
+                        !shouldHideScopeForCompetition(selectedCompetition, scope)
+                      );
+                    }
                   )
                   .map((scope) => {
                     const isSelected = selectedScope === scope;
@@ -693,7 +725,9 @@ export default function HomeScreen() {
             },
           ]}
         >
-          {isDataBackedScope ? (
+          {selectedCompetition === "Trending" ? (
+            <Trending events={eventsList} loading={loading} />
+          ) : isDataBackedScope ? (
             loading ? (
               <View style={styles.loaderContainer}>
                 <LottieView
@@ -710,6 +744,7 @@ export default function HomeScreen() {
                   <GameCard
                     key={event.ticker || event.id || index}
                     event={event}
+                    competitionFallback={selectedCompetition}
                   />
                 ) : (
                   <EventCard
@@ -729,12 +764,15 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* Empty State - show for data-backed scopes */}
-          {isDataBackedScope && !loading && eventsList.length === 0 && (
-            <Text style={styles.emptyText}>
-              No active markets for this selection.
-            </Text>
-          )}
+          {/* Empty State - show for data-backed scopes (non-Trending) */}
+          {selectedCompetition !== "Trending" &&
+            isDataBackedScope &&
+            !loading &&
+            eventsList.length === 0 && (
+              <Text style={styles.emptyText}>
+                No active markets for this selection.
+              </Text>
+            )}
         </Animated.View>
       </ScrollView>
     </SafeAreaView>
@@ -776,11 +814,10 @@ const styles = StyleSheet.create({
   searchIcon: {
     marginRight: 8,
   },
-  searchInput: {
+  searchPlaceholder: {
     flex: 1,
-    color: "#FFFFFF",
+    color: "#888888",
     fontSize: 16,
-    padding: 0,
   },
   settingsIcon: {
     width: 36,

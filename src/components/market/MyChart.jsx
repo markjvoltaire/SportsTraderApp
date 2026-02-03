@@ -126,10 +126,10 @@ export default function MyChart({
         // --- 3. Parallel API calls with query strings ---
         const [response1, response2] = await Promise.all([
           fetch(
-            `https://scoretradebackend.onrender.com/api/v1/market/${marketTicker1}/candlesticks${queryParams}`
+            `${API_BASE_URL}/api/v1/market/${marketTicker1}/candlesticks${queryParams}`
           ),
           fetch(
-            `https://scoretradebackend.onrender.com/api/v1/market/${marketTicker2}/candlesticks${queryParams}`
+            `${API_BASE_URL}/api/v1/market/${marketTicker2}/candlesticks${queryParams}`
           ),
         ]);
 
@@ -880,9 +880,12 @@ export default function MyChart({
         .onEnd(() => {
           "worklet";
           isActive.value = false;
-          // Keep cursor at current position to show tooltips, but hide the line
-          // cursorX.value stays at its current position for tooltip visibility
-          runOnJS(updateCursorData)(cursorX.value);
+          // Reset cursor to initial position (rightmost) when user lets go
+          cursorX.value = withTiming(plotWidth, {
+            duration: 300,
+            easing: Easing.out(Easing.ease),
+          });
+          runOnJS(updateCursorData)(plotWidth);
         }),
     [
       chartPadding.left,

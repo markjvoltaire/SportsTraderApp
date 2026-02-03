@@ -19,6 +19,7 @@ import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import MyChart from "../src/components/market/MyChart";
+import API_BASE_URL from "../src/config/api";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -110,7 +111,7 @@ export default function ChartScreen() {
       try {
         setChartLoading(true);
         const response = await fetch(
-          `https://scoretradebackend.onrender.com/api/game/candlestick/${event.ticker}`
+          `${API_BASE_URL}/api/game/candlestick/${event.ticker}`
         );
         const data = await response.json();
 
@@ -896,7 +897,7 @@ export default function ChartScreen() {
           />
         </View>
 
-        <Orders event={event} />
+    
         {/* About */}
         <View style={styles.about}>
           <Text style={styles.aboutTitle}>About</Text>

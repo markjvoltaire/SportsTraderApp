@@ -18,6 +18,7 @@ const toPercentText = (percent) => {
 export default function EventCard({ event }) {
   const navigation = useNavigation();
 
+
   const model = useMemo(() => {
     if (!event) return null;
 
@@ -84,6 +85,12 @@ export default function EventCard({ event }) {
           parseOutcomePrices(m?.outcomePrices)?.[0];
         const askPercent = normalizeAskToPercent(rawAsk);
         return { label, askPercent, askPriceText: toPercentText(askPercent) };
+      })
+      .filter((market) => {
+        // Filter out markets with NaN, null, or undefined prices
+        return market.askPercent !== null && 
+               market.askPercent !== undefined && 
+               !Number.isNaN(market.askPercent);
       })
       .sort((a, b) => (b.askPercent ?? -1) - (a.askPercent ?? -1))
       .slice(0, 3);

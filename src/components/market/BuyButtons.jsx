@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Colors, Spacing } from "../../constants/theme";
 import { formatPrice } from "../../utils/formatters";
+import API_BASE_URL from "../../config/api";
 
 const WEBSOCKET_URL = "wss://dev-prediction-markets-api.dflow.net/api/v1/ws";
 
@@ -97,7 +98,7 @@ export default function BuyButtons({
       try {
         setLoadingPrices(true);
         const response = await fetch(
-          "https://scoretradebackend.onrender.com/api/v1/markets/batch",
+          `${API_BASE_URL}/api/v1/markets/batch`,
           {
             method: "POST",
             headers: {

@@ -15,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../src/contexts/AuthContext";
 import { Colors, Spacing } from "../src/constants/theme";
 import LottieLoader from "../src/components/ui/LottieLoader";
+import API_BASE_URL from "../src/config/api";
 
 export default function AddFundsScreen() {
   const navigation = useNavigation();
@@ -46,7 +47,7 @@ export default function AddFundsScreen() {
     const createOrder = async () => {
       try {
         const response = await fetch(
-          "https://scoretradebackend.onrender.com/api/crossmint/create-order",
+          `${API_BASE_URL}/api/crossmint/orders`,
           {
             method: "POST",
             headers: {
@@ -62,6 +63,19 @@ export default function AddFundsScreen() {
             }),
           }
         );
+
+        if (!response.ok) {
+          let errorMessage = `Request failed (${response.status})`;
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData?.error || errorData?.message || errorMessage;
+          } catch (_e) {
+            // Could not parse error response as JSON
+          }
+          setError(errorMessage);
+          setLoading(false);
+          return;
+        }
 
         const data = await response.json();
         console.log("Order created:", JSON.stringify(data, null, 2));
@@ -79,7 +93,7 @@ export default function AddFundsScreen() {
         }
       } catch (err) {
         console.error("Error creating order:", err);
-        setError(err.message);
+        setError(err.message || "Failed to connect to server. Please check your connection.");
       } finally {
         setLoading(false);
       }
@@ -157,8 +171,17 @@ export default function AddFundsScreen() {
   }
 
   if (error) {
+    console.log("Error:", error);
     return (
       <SafeAreaView style={styles.container}>
+            <View style={styles.topBar}>
+        <TouchableOpacity
+          style={styles.topBarIcon}
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
+        </TouchableOpacity>
+      </View>
         <Text style={styles.errorText}>Error: {error}</Text>
       </SafeAreaView>
     );
@@ -166,10 +189,10 @@ export default function AddFundsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Back Button */}
-      <View style={styles.header}>
+      {/* Top bar with Back Button */}
+      <View style={styles.topBar}>
         <TouchableOpacity
-          style={styles.backButton}
+          style={styles.topBarIcon}
           onPress={() => navigation.goBack()}
         >
           <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
@@ -189,76 +212,37 @@ export default function AddFundsScreen() {
                 defaultMethod: "fiat",
               }}
               appearance={{
-                variables: {
-                  buttonText: `Add $${amount}`,
-                  buttonLabel: `Add $${amount}`,
-                  ctaText: `Add $${amount}`,
-                  // Text colors for receipt/confirmation screen - make all text white
-                  primaryText: "#FFFFFF",
-                  secondaryText: "#FFFFFF",
-                  componentText: "#FFFFFF",
-                  textPrimary: "#FFFFFF",
-                  textSecondary: "#FFFFFF",
-                  colorText: "#FFFFFF",
-                  // Heading colors
-                  headingColor: "#FFFFFF",
-                  sectionHeadingColor: "#FFFFFF",
-                  titleColor: "#FFFFFF",
-                  // Success message colors
-                  successText: "#FFFFFF",
-                  successColor: "#FFFFFF",
-                  successMessageColor: "#FFFFFF",
-                  // Amount/price colors
-                  amountColor: "#FFFFFF",
-                  priceColor: "#FFFFFF",
-                  // Link colors
-                  linkColor: "#FFFFFF",
-                  linkTextColor: "#FFFFFF",
-                  // Label colors
-                  labelColor: "#FFFFFF",
-                  // Subtext and secondary text
-                  subtextColor: "#FFFFFF",
-                  subTextColor: "#FFFFFF",
-                  secondaryTextColor: "#FFFFFF",
-                  placeholderText: "#FFFFFF",
-                  // Heading/subheading colors
-                  subheadingColor: "#FFFFFF",
-                  subHeadingColor: "#FFFFFF",
-                  // Form label colors
-                  formLabelColor: "#FFFFFF",
-                  inputLabelColor: "#FFFFFF",
-                  // General text overrides
-                  color: "#FFFFFF",
-                  textColor: "#FFFFFF",
-                  fontColor: "#FFFFFF",
-                },
-                colors: {
-                  primaryText: "#FFFFFF",
-                  secondaryText: "#FFFFFF",
-                  componentText: "#FFFFFF",
-                  text: "#FFFFFF",
-                  heading: "#FFFFFF",
-                  subheading: "#FFFFFF",
-                  subtext: "#FFFFFF",
-                  success: "#FFFFFF",
-                  link: "#FFFFFF",
-                  label: "#FFFFFF",
-                  placeholder: "#FFFFFF",
-                  formLabel: "#FFFFFF",
-                },
-                strings: {
-                  buttonText: `Add $${amount}`,
-                },
+                 variables: {
+            fontFamily: "Inter, system-ui, sans-serif",
+            colors: {
+              backgroundPrimary: "#1A1A1A",
+              textPrimary: "#FFFFFF",
+              textSecondary: "#A0A0A0",
+              borderPrimary: "#333333",
+              accent: "#7928CA"
+            },
+            Label: {
+              font: {
+                  family: "Inter",
+                  size: "14px",
+                  weight: "500",
+              },
+              colors: {
+                  text: "#333333",
+              },
+          },
+        },
                 rules: {
                   DestinationInput: {
                     display: "hidden",
                   },
-                  // Try to override text colors via CSS-like rules
-                  "*": {
-                    color: "#FFFFFF",
-                  },
+                  ReceiptEmailInput: {
+                    display: "hidden"  // Hides the email input
+                  }
                 },
               }}
+
+              
               onReady={() => {
                 console.log("✅ Crossmint widget onReady event fired");
                 setWidgetLoaded(true);
@@ -280,16 +264,24 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 10,
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.lg,
+    marginBottom: Spacing.lg,
+    padding: 18,
   },
-  backButton: {
-    width: 40,
-    height: 40,
+  topBarIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 999,
+    alignItems: "center",
     justifyContent: "center",
-    alignItems: "flex-start",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
   checkoutContainer: {
     flex: 1,

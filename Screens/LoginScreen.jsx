@@ -213,18 +213,14 @@ export default function LoginScreen() {
             color={Colors.textPrimary}
           />
         </TouchableOpacity>
-        {!codeSent && (
-          <TouchableOpacity onPress={handleSendCode} activeOpacity={0.7}>
-            <Text style={styles.tryNowText}>Try now</Text>
-          </TouchableOpacity>
-        )}
+ 
       </View>
 
       {/* Content */}
       <View style={styles.content}>
         {!codeSent ? (
           <>
-            <Text style={styles.heading}>Hello, what's your phone number?</Text>
+            <Text style={styles.heading}>what's your phone number?</Text>
 
             <Text style={styles.description}>
               Customer Messages may be sent within iOS Notifications, Natural or
@@ -382,7 +378,7 @@ const styles = StyleSheet.create({
   },
   heading: {
     ...Typography.pageTitle,
-    fontSize: normalizeFont(32),
+    fontSize: normalizeFont(38),
     fontWeight: "700",
     color: Colors.textPrimary,
     marginBottom: Spacing.sm + Spacing.xs,

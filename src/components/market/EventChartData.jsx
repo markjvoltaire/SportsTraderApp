@@ -69,7 +69,7 @@ const WEBSOCKET_URL = "wss://dev-prediction-markets-api.dflow.net/api/v1/ws";
 export default function EventChartData({
   candlestickData1,
   candlestickData2,
-  candlestickData3,
+  candlestickData3 = null,
   market1Name = "Market 1",
   market2Name = "Market 2",
   market3Name = "Market 3",
@@ -82,6 +82,7 @@ export default function EventChartData({
   market3Ticker = null,
 }) {
   const { width } = Dimensions.get("window");
+  const hasThirdMarket = candlestickData3 && Array.isArray(candlestickData3) && candlestickData3.length > 0;
 
   // State for price history for each market
   const [history1, setHistory1] = useState(null);
@@ -100,18 +101,11 @@ export default function EventChartData({
 
   // Process candlestick data when it changes
   useEffect(() => {
-    // Set loading to true if we don't have all data or if arrays are empty
-    if (
-      !candlestickData1 ||
-      !candlestickData2 ||
-      !candlestickData3 ||
-      !Array.isArray(candlestickData1) ||
-      !Array.isArray(candlestickData2) ||
-      !Array.isArray(candlestickData3) ||
-      candlestickData1.length === 0 ||
-      candlestickData2.length === 0 ||
-      candlestickData3.length === 0
-    ) {
+    const hasData1 = candlestickData1 && Array.isArray(candlestickData1) && candlestickData1.length > 0;
+    const hasData2 = candlestickData2 && Array.isArray(candlestickData2) && candlestickData2.length > 0;
+    const hasData3 = candlestickData3 && Array.isArray(candlestickData3) && candlestickData3.length > 0;
+
+    if (!hasData1 || !hasData2) {
       setLoading(true);
       return;
     }
@@ -189,25 +183,23 @@ export default function EventChartData({
       );
     }
 
-    // Extract data for all 3 markets
+    // Extract data for markets (third is optional)
     const market1Data = candlestickData1
       ? extractMarketData(candlestickData1, 0)
       : [];
     const market2Data = candlestickData2
       ? extractMarketData(candlestickData2, 1)
       : [];
-    const market3Data = candlestickData3
+    const market3Data = hasData3 && candlestickData3
       ? extractMarketData(candlestickData3, 2)
       : [];
 
-    // Ensure all markets have the same number of data points
     const maxLength = Math.max(
       market1Data.length,
       market2Data.length,
       market3Data.length
     );
 
-    // Pad shorter arrays with last known values
     const padArray = (arr, targetLength) => {
       const padded = [...arr];
       while (padded.length < targetLength) {
@@ -225,26 +217,26 @@ export default function EventChartData({
 
     const padded1 = padArray(market1Data, maxLength);
     const padded2 = padArray(market2Data, maxLength);
-    const padded3 = padArray(market3Data, maxLength);
+    const padded3 = hasData3 ? padArray(market3Data, maxLength) : [];
 
-    // Only set loading to false if we have valid data
     if (
       maxLength > 0 &&
-      (padded1.length > 0 || padded2.length > 0 || padded3.length > 0)
+      (padded1.length > 0 || padded2.length > 0)
     ) {
       setHistory1(padded1);
       setHistory2(padded2);
-      setHistory3(padded3);
+      setHistory3(hasData3 ? padded3 : []);
       setLoading(false);
     } else {
-      // If no data, keep loading state
       setLoading(true);
     }
   }, [candlestickData1, candlestickData2, candlestickData3]);
 
   // WebSocket connection for trades - updates chart data when percentages change
   useEffect(() => {
-    const marketTickers = [market1Ticker, market2Ticker, market3Ticker].filter(
+    const tickers = [market1Ticker, market2Ticker];
+    if (hasThirdMarket && market3Ticker) tickers.push(market3Ticker);
+    const marketTickers = tickers.filter(
       (ticker) => ticker !== null && ticker !== undefined
     );
 
@@ -417,7 +409,7 @@ export default function EventChartData({
         tradesWsRef.current = null;
       }
     };
-  }, [market1Ticker, market2Ticker, market3Ticker]);
+  }, [market1Ticker, market2Ticker, market3Ticker, hasThirdMarket]);
 
   const chartPadding = {
     top: Spacing.md,
@@ -436,10 +428,8 @@ export default function EventChartData({
     if (
       !history1 ||
       !history2 ||
-      !history3 ||
       history1.length === 0 ||
-      history2.length === 0 ||
-      history3.length === 0
+      history2.length === 0
     ) {
       return [];
     }
@@ -447,19 +437,19 @@ export default function EventChartData({
     const maxLength = Math.max(
       history1.length,
       history2.length,
-      history3.length
+      hasThirdMarket && history3?.length ? history3.length : 0
     );
     const combined = [];
 
     for (let i = 0; i < maxLength; i++) {
       const point1 = history1[i];
       const point2 = history2[i];
-      const point3 = history3[i];
+      const point3 = history3?.[i];
       combined.push({
         x: i,
         price1: point1?.y || 0.5,
         price2: point2?.y || 0.5,
-        price3: point3?.y || 0.5,
+        price3: hasThirdMarket && point3 ? point3.y : null,
         timestamp:
           point1?.timestamp ||
           point2?.timestamp ||
@@ -469,7 +459,7 @@ export default function EventChartData({
     }
 
     return combined;
-  }, [history1, history2, history3]);
+  }, [history1, history2, history3, hasThirdMarket]);
 
   // Determine animation settings
   const animationConfig = useMemo(() => {
@@ -500,7 +490,11 @@ export default function EventChartData({
   const yDomain = useMemo(() => {
     if (!chartData || chartData.length === 0) return [0, 1];
     const allPrices = chartData
-      .flatMap((d) => [d.price1, d.price2, d.price3])
+      .flatMap((d) => {
+        const prices = [d.price1, d.price2];
+        if (d.price3 != null) prices.push(d.price3);
+        return prices;
+      })
       .filter((p) => p > 0 && p <= 1);
 
     if (allPrices.length === 0) return [0, 1];
@@ -571,7 +565,9 @@ export default function EventChartData({
       const interpolatedPrice2 =
         currentPoint.price2 + (nextPoint.price2 - currentPoint.price2) * t;
       const interpolatedPrice3 =
-        currentPoint.price3 + (nextPoint.price3 - currentPoint.price3) * t;
+        currentPoint.price3 != null && nextPoint.price3 != null
+          ? currentPoint.price3 + (nextPoint.price3 - currentPoint.price3) * t
+          : 0.5;
       const interpolatedTimestamp = currentPoint.timestamp
         ? currentPoint.timestamp +
           (nextPoint.timestamp - currentPoint.timestamp) * t
@@ -599,6 +595,10 @@ export default function EventChartData({
         domainPaddingY +
         (1 - normalizedY3) * effectivePlotHeight;
 
+      const y3 = currentPoint.price3 != null
+        ? chartPadding.top + domainPaddingY + (1 - (interpolatedPrice3 - domainMin) / domainRange) * effectivePlotHeight
+        : 0;
+
       return {
         index: dataIndex,
         price1: interpolatedPrice1,
@@ -607,7 +607,7 @@ export default function EventChartData({
         timestamp: interpolatedTimestamp,
         y1: chartY1,
         y2: chartY2,
-        y3: chartY3,
+        y3: y3,
       };
     },
     [plotWidth, plotHeight, chartPadding, chartData, yDomain]
@@ -920,32 +920,34 @@ export default function EventChartData({
                         : undefined
                     }
                   />,
-                  <VictoryLine
-                    key="market3"
-                    data={chartData}
-                    x="x"
-                    y="price3"
-                    interpolation={animationConfig.interpolation}
-                    style={{
-                      data: {
-                        stroke: displayColor3,
-                        strokeWidth: 3,
-                        strokeLinecap: "round",
-                        strokeLinejoin: "round",
-                        strokeDasharray: "0",
-                      },
-                    }}
-                    animate={
-                      animationConfig.enabled
-                        ? {
-                            duration: animationConfig.duration,
-                            onLoad: { duration: animationConfig.duration },
-                            easing: "back",
-                          }
-                        : undefined
-                    }
-                  />,
-                ]}
+                  hasThirdMarket && (
+                    <VictoryLine
+                      key="market3"
+                      data={chartData}
+                      x="x"
+                      y="price3"
+                      interpolation={animationConfig.interpolation}
+                      style={{
+                        data: {
+                          stroke: displayColor3,
+                          strokeWidth: 3,
+                          strokeLinecap: "round",
+                          strokeLinejoin: "round",
+                          strokeDasharray: "0",
+                        },
+                      }}
+                      animate={
+                        animationConfig.enabled
+                          ? {
+                              duration: animationConfig.duration,
+                              onLoad: { duration: animationConfig.duration },
+                              easing: "back",
+                            }
+                          : undefined
+                      }
+                    />
+                  ),
+                ].filter(Boolean)}
               </VictoryChart>
 
               {/* Cursor Line */}
@@ -1030,31 +1032,32 @@ export default function EventChartData({
                     </Text>
                   </Animated.View>
 
-                  {/* Market 3 Tooltip */}
-                  <Animated.View
-                    style={[
-                      styles.tooltip,
-                      styles.tooltipLow,
-                      animatedTooltip3Style,
-                      { borderLeftColor: displayColor3 },
-                    ]}
-                    pointerEvents="none"
-                  >
-                    <Text
-                      style={[styles.tooltipPrice, { color: displayColor3 }]}
+                  {hasThirdMarket && (
+                    <Animated.View
+                      style={[
+                        styles.tooltip,
+                        styles.tooltipLow,
+                        animatedTooltip3Style,
+                        { borderLeftColor: displayColor3 },
+                      ]}
+                      pointerEvents="none"
                     >
-                      {`${Math.round(
-                        (Number(tooltipData.price3) || 0) * 100
-                      )}%`}
-                    </Text>
-                    <Text
-                      style={styles.tooltipLabel}
-                      numberOfLines={2}
-                      ellipsizeMode="tail"
-                    >
-                      {market3Name}
-                    </Text>
-                  </Animated.View>
+                      <Text
+                        style={[styles.tooltipPrice, { color: displayColor3 }]}
+                      >
+                        {`${Math.round(
+                          (Number(tooltipData.price3) || 0) * 100
+                        )}%`}
+                      </Text>
+                      <Text
+                        style={styles.tooltipLabel}
+                        numberOfLines={2}
+                        ellipsizeMode="tail"
+                      >
+                        {market3Name}
+                      </Text>
+                    </Animated.View>
+                  )}
                 </>
               )}
             </View>

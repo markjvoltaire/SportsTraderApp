@@ -7,7 +7,8 @@ import {
   Text,
 } from "react-native";
 import React, { useEffect, useRef, useState } from "react";
-import { Colors, Spacing, Typography } from "../../../constants/theme";
+import { Colors, Spacing, Typography } from "../../constants/theme";
+import API_BASE_URL from "../../config/api";
 
 const DEFAULT_HEADLINES = [
   "Lakers beat Warriors 120-115",
@@ -35,8 +36,12 @@ export default function Ticker({ items }) {
     // Fetch NFL futures data
     const fetchNFLData = async () => {
       try {
-        const response = await fetch('https://scoretradebackend.onrender.com/api/futures/nfl');
+        const response = await fetch(`${API_BASE_URL}/api/futures/nfl`);
         const data = await response.json();
+
+        console.log('data', data)
+
+        console.log("NFL Futures Data:", data);
         
         if (data.events && data.events.length > 0) {
           // Collect all markets from all events where percentage > 0
@@ -196,8 +201,59 @@ export default function Ticker({ items }) {
     return () => tickerAnimationRef.current?.stop();
   }, [displayItems, loading]);
 
-  // Don't render anything while loading
-  if (loading || displayItems.length === 0) {
+  // Skeleton loader animation
+  const skeletonAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (loading) {
+      const animation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(skeletonAnim, {
+            toValue: 1,
+            duration: 1000,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(skeletonAnim, {
+            toValue: 0,
+            duration: 1000,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      animation.start();
+      return () => animation.stop();
+    }
+  }, [loading, skeletonAnim]);
+
+  const skeletonOpacity = skeletonAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.3, 0.7],
+  });
+
+  // Show skeleton loader while loading
+  if (loading) {
+    return (
+      <View style={styles.tickerContainer}>
+        <View style={styles.tickerContent}>
+          {[...Array(5)].map((_, index) => (
+            <View key={index} style={[styles.tickerBox, { width: 320 }]}>
+              <Animated.View
+                style={[
+                  styles.skeletonItem,
+                  { opacity: skeletonOpacity },
+                ]}
+              />
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  }
+
+  // Don't render anything if no items
+  if (displayItems.length === 0) {
     return null;
   }
 
@@ -243,9 +299,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   tickerText: {
-    
     color: "white",
     fontSize: 14,
     fontWeight: "600",
+  },
+  skeletonItem: {
+    height: 14,
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
+    borderRadius: 4,
+    width: "80%",
   },
 });

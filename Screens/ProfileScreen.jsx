@@ -53,14 +53,13 @@ export default function ProfileScreen() {
   // Handle Deposit
   // -------------------------
   const handleDeposit = () => {
-    handleFundWallet();
+    Alert.alert("Coming Soon", "Deposit functionality is coming soon.");
   };
 
   // -------------------------
-  // Handle Fund Wallet - Navigate to Deposit Screen
+  // Handle Fund Wallet - Navigate to Deposit Screen (kept for other callers if any)
   // -------------------------
   const handleFundWallet = () => {
-    // Find the embedded wallet from linked_accounts
     const embeddedWallet = user?.linked_accounts?.find(
       (account) =>
         account.type === "wallet" && account.wallet_client_type === "privy"
@@ -71,7 +70,6 @@ export default function ProfileScreen() {
       return;
     }
 
-    // Navigate to DepositAmount screen
     navigation.navigate("DepositAmount");
   };
 

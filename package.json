@@ -13,6 +13,8 @@
     "@dome-api/sdk": "^0.16.0",
     "@ethersproject/shims": "^5.8.0",
     "@expo-google-fonts/inter": "^0.4.2",
+    "@lightsparkdev/lightspark-sdk": "^1.9.15",
+    "@lightsparkdev/react-native": "^0.3.19",
     "@privy-io/expo": "^0.62.0",
     "@privy-io/expo-native-extensions": "^0.0.6",
     "@privy-io/react-auth": "^3.9.0",

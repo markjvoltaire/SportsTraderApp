@@ -1,13 +1,14 @@
 import { Platform } from "react-native";
 
 // API Configuration
-// For iOS Simulator: Use Mac's IP address
-// For Android Emulator: Use 10.0.2.2 (special IP for Android emulator)
-// For Physical Devices: Use Mac's IP address
-// For Production: Use your actual production API URL
+// Set EXPO_PUBLIC_API_BASE_URL in .env for production (e.g. https://api.yourapp.com)
+// In __DEV__ we default to localhost for local backend
 
 const getApiBaseUrl = () => {
-  return "https://scoretradebackend.onrender.com";
+  if (process.env.EXPO_PUBLIC_API_BASE_URL) {
+    return process.env.EXPO_PUBLIC_API_BASE_URL.replace(/\/$/, "");
+  }
+  return __DEV__ ? "https://scoretradebackend.onrender.com" : "https://scoretradebackend.onrender.com";
 };
 
 const API_BASE_URL = getApiBaseUrl();

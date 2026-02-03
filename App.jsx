@@ -2,12 +2,14 @@ import React, { useEffect, useCallback } from "react";
 import { StatusBar } from "expo-status-bar";
 import { StyleSheet, View, TouchableOpacity, Text } from "react-native";
 import * as ExpoSplashScreen from "expo-splash-screen";
+import { useFonts } from "expo-font";
 
 // Keep the splash screen visible while we fetch resources
 ExpoSplashScreen.preventAutoHideAsync();
 import {
   NavigationContainer,
   useNavigationContainerRef,
+  getFocusedRouteNameFromRoute,
 } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
@@ -27,13 +29,16 @@ import PortfolioScreen from "./Screens/PortfolioScreen";
 import ProfileScreen from "./Screens/ProfileScreen";
 import AddFundsScreen from "./Screens/AddFundsScreen";
 import DepositAmountScreen from "./Screens/DepositAmountScreen";
-import MoonPayScreen from "./Screens/MoonPayScreen";
 import MarketDetailScreen from "./Screens/MarketDetailScreen";
 import EventDetail from "./Screens/EventDetail";
 import { Colors, Spacing, Typography } from "./src/constants/theme";
+import { formatCurrency } from "./src/utils/formatters";
 import ChartScreen from "./Screens/ChartScreen";
 import ErrorBoundary from "./src/components/ErrorBoundary";
 import SplashScreen from "./Screens/SplashScreen";
+import ScanScreen from "./Screens/ScanScreen";
+import WalletScreen from "./Screens/WalletScreen";
+import DepositScreen from "./Screens/DepositScreen";
 
 // 1. Import Crossmint Provider
 import { CrossmintProvider } from "@crossmint/client-sdk-react-native-ui";
@@ -41,12 +46,14 @@ import { CrossmintProvider } from "@crossmint/client-sdk-react-native-ui";
 const Tab = createBottomTabNavigator();
 const HomeStack = createNativeStackNavigator();
 const ProfileStack = createNativeStackNavigator();
+const ScanStack = createNativeStackNavigator();
+const WalletStack = createNativeStackNavigator();
 const AuthStack = createNativeStackNavigator();
 const RootStack = createNativeStackNavigator();
 
 function HomeStackScreen() {
   return (
-    <HomeStack.Navigator>
+    <HomeStack.Navigator initialRouteName="HomeMain">
       <HomeStack.Screen
         name="HomeMain"
         component={HomeScreen}
@@ -82,9 +89,38 @@ function HomeStackScreen() {
   );
 }
 
+function ScanStackScreen() {
+  return (
+    <ScanStack.Navigator initialRouteName="ScanMain">
+      <ScanStack.Screen
+        name="ScanMain"
+        component={ScanScreen}
+        options={{ headerShown: false }}
+      />
+    </ScanStack.Navigator>
+  );
+}
+
+function WalletStackScreen() {
+  return (
+    <WalletStack.Navigator initialRouteName="WalletMain">
+      <WalletStack.Screen
+        name="WalletMain"
+        component={WalletScreen}
+        options={{ headerShown: false }}
+      />
+      <WalletStack.Screen
+        name="Deposit"
+        component={DepositScreen}
+        options={{ headerShown: false }}
+      />
+    </WalletStack.Navigator>
+  );
+}
+
 function ProfileStackScreen() {
   return (
-    <ProfileStack.Navigator>
+    <ProfileStack.Navigator initialRouteName="ProfileMain">
       <ProfileStack.Screen
         name="ProfileMain"
         component={ProfileScreen}
@@ -100,11 +136,7 @@ function ProfileStackScreen() {
         component={AddFundsScreen}
         options={{ headerShown: false }}
       />
-      <ProfileStack.Screen
-        name="MoonPay"
-        component={MoonPayScreen}
-        options={{ headerShown: false }}
-      />
+  
     </ProfileStack.Navigator>
   );
 }
@@ -128,24 +160,49 @@ function AuthNavigator() {
 function AppNavigator() {
   const { session } = useAuth();
 
+  const renderTabBar = (props) => (
+    <CustomTabBar {...props} />
+  );
+
   return (
     <Tab.Navigator
+      tabBar={renderTabBar}
       screenOptions={{
         headerShown: false,
-        tabBarStyle: styles.tabBar,
-        tabBarItemStyle: styles.tabItem,
+        tabBarShowLabel: false,
         tabBarActiveTintColor: "white",
         tabBarInactiveTintColor: "#999999",
-        tabBarLabelStyle: styles.tabLabel,
       }}
     >
       <Tab.Screen
         name="Home"
         component={HomeStackScreen}
+        options={({ route }) => {
+          // Get the nested route state to check current screen
+          const state = route.state;
+          const nestedRoute = state?.routes?.[state.index ?? 0];
+          const isChartScreen = nestedRoute?.name === "Chart";
+          
+          return {
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={focused ? "home" : "home-outline"}
+                size={size}
+                color={color}
+              />
+            ),
+            tabBarStyle: isChartScreen ? { display: "none" } : undefined,
+          };
+        }}
+      />
+
+      <Tab.Screen
+        name="Wallet"
+        component={WalletStackScreen}
         options={{
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons
-              name={focused ? "home" : "home-outline"}
+              name={focused ? "wallet" : "wallet-outline"}
               size={size}
               color={color}
             />
@@ -169,6 +226,203 @@ function AppNavigator() {
         />
       )}
     </Tab.Navigator>
+  );
+}
+
+function CustomTabBar({ state, descriptors, navigation }) {
+  // Check current active tab and nested screen
+  const currentTabInfo = React.useMemo(() => {
+    const activeTabIndex = state.index;
+    const activeTab = state.routes[activeTabIndex];
+    const activeTabName = activeTab?.name;
+    
+    let currentScreenName = null;
+    if (activeTab?.state?.routes) {
+      const nestedIndex = activeTab.state.index ?? 0;
+      currentScreenName = activeTab.state.routes[nestedIndex]?.name;
+    } else {
+      // If no nested state, we're likely on the initial route
+      // For Home tab, initial route is HomeMain
+      if (activeTabName === "Home") {
+        currentScreenName = "HomeMain";
+      } else if (activeTabName === "Wallet") {
+        currentScreenName = "WalletMain";
+      } else if (activeTabName === "Profile") {
+        currentScreenName = "ProfileMain";
+      }
+    }
+    
+    return {
+      activeTabName,
+      currentScreenName,
+      isHomeTab: activeTabName === "Home",
+      isWalletTab: activeTabName === "Wallet",
+      isProfileTab: activeTabName === "Profile",
+    };
+  }, [state]);
+
+  // Check if we're on the HomeMain screen (only when on Home tab)
+  // Also active if we're on Home tab and currentScreenName is null/undefined (initial route)
+  const isOnHomeMain = currentTabInfo.isHomeTab && 
+    (currentTabInfo.currentScreenName === "HomeMain" || 
+     currentTabInfo.currentScreenName === null ||
+     currentTabInfo.currentScreenName === undefined);
+
+  // Check if we're on the WalletMain screen (only when on Wallet tab)
+  const isOnWalletMain = currentTabInfo.isWalletTab && 
+    (currentTabInfo.currentScreenName === "WalletMain" || 
+     currentTabInfo.currentScreenName === null ||
+     currentTabInfo.currentScreenName === undefined);
+
+  // Check if we're on the ProfileMain screen (only when on Profile tab)
+  const isOnProfileMain = currentTabInfo.isProfileTab && 
+    (currentTabInfo.currentScreenName === "ProfileMain" || 
+     currentTabInfo.currentScreenName === null ||
+     currentTabInfo.currentScreenName === undefined);
+
+  // Hide tab bar on ChartScreen (only when on Home tab)
+  // Use React Navigation helper to get focused route name reliably
+  const homeRoute = state.routes.find((r) => r.name === "Home");
+  const focusedHomeRoute =
+    (homeRoute && getFocusedRouteNameFromRoute(homeRoute)) || "HomeMain";
+  const isOnChartScreen =
+    currentTabInfo.isHomeTab && focusedHomeRoute === "Chart";
+  const isOnEventDetail =
+    currentTabInfo.isHomeTab && focusedHomeRoute === "EventDetail";
+  const isOnMarketDetail =
+    currentTabInfo.isHomeTab && focusedHomeRoute === "MarketDetail";
+
+  if (isOnChartScreen || isOnEventDetail || isOnMarketDetail) {
+    return null;
+  }
+
+  return (
+    <View style={styles.tabBarContainer}>
+      <View style={styles.tabPill}>
+        {state.routes.map((route, index) => {
+          const { options } = descriptors[route.key];
+          const isTabFocused = state.index === index;
+          
+          // Determine if tab should appear active based on nested screen
+          let isFocused = false;
+          if (route.name === "Home") {
+            isFocused = isTabFocused && isOnHomeMain;
+          } else if (route.name === "Wallet") {
+            isFocused = isTabFocused && isOnWalletMain;
+          } else if (route.name === "Profile") {
+            isFocused = isTabFocused && isOnProfileMain;
+          } else {
+            isFocused = isTabFocused;
+          }
+          
+          const color = isFocused ? "#FFFFFF" : "#B0B0B0";
+          const size = 22;
+          const onPress = () => {
+            const event = navigation.emit({
+              type: "tabPress",
+              target: route.key,
+              canPreventDefault: true,
+            });
+
+            if (!isTabFocused && !event.defaultPrevented) {
+              navigation.navigate(route.name);
+              return;
+            }
+
+            // Navigate to the main screen using nested navigation
+            // Use the existing route key to ensure we use the existing screen instance
+            // This preserves component state
+            if (route.name === "Home" && isTabFocused && !isOnHomeMain) {
+              // Find HomeMain in the stack and navigate to it using its key
+              const homeState = route.state;
+              const homeMainRoute = homeState?.routes?.find(
+                (r) => r.name === "HomeMain"
+              );
+              if (homeMainRoute) {
+                // Navigate using the existing route key to preserve state
+                navigation.navigate("Home", {
+                  screen: "HomeMain",
+                  params: {},
+                  key: homeMainRoute.key,
+                });
+              } else {
+                // Fallback if HomeMain not found in stack
+                navigation.navigate("Home", {
+                  screen: "HomeMain",
+                  params: {},
+                });
+              }
+            } else if (
+              route.name === "Wallet" &&
+              isTabFocused &&
+              !isOnWalletMain
+            ) {
+              const walletState = route.state;
+              const walletMainRoute = walletState?.routes?.find(
+                (r) => r.name === "WalletMain"
+              );
+              if (walletMainRoute) {
+                navigation.navigate("Wallet", {
+                  screen: "WalletMain",
+                  params: {},
+                  key: walletMainRoute.key,
+                });
+              } else {
+                navigation.navigate("Wallet", {
+                  screen: "WalletMain",
+                  params: {},
+                });
+              }
+            } else if (
+              route.name === "Profile" &&
+              isTabFocused &&
+              !isOnProfileMain
+            ) {
+              const profileState = route.state;
+              const profileMainRoute = profileState?.routes?.find(
+                (r) => r.name === "ProfileMain"
+              );
+              if (profileMainRoute) {
+                navigation.navigate("Profile", {
+                  screen: "ProfileMain",
+                  params: {},
+                  key: profileMainRoute.key,
+                });
+              } else {
+                navigation.navigate("Profile", {
+                  screen: "ProfileMain",
+                  params: {},
+                });
+              }
+            }
+          };
+
+          // Get the icon component, but override focused state with our custom logic
+          const iconElement = options.tabBarIcon
+            ? options.tabBarIcon({ 
+                color, 
+                size, 
+                focused: isFocused // Use our custom isFocused instead of React Navigation's default
+              })
+            : null;
+
+          return (
+            <TouchableOpacity
+              key={route.key}
+              accessibilityRole="button"
+              accessibilityState={isFocused ? { selected: true } : {}}
+              onPress={onPress}
+              style={[
+                styles.tabButton,
+                isFocused && styles.tabButtonFocused,
+              ]}
+            >
+              {iconElement}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
   );
 }
 
@@ -279,6 +533,11 @@ function AppContent() {
 }
 
 export default function App() {
+  // Load custom fonts
+  const [fontsLoaded] = useFonts({
+    SubwayTickerGrid: require("./assets/fonts/SubwayTickerGrid.ttf"),
+  });
+
   // Get Privy App ID and Client ID from environment variables
   const PRIVY_APP_ID = process.env.EXPO_PUBLIC_PRIVY_APP_ID;
   const PRIVY_CLIENT_ID = process.env.EXPO_PUBLIC_PRIVY_CLIENT_ID;
@@ -301,6 +560,11 @@ export default function App() {
   }
 
   const navigationRef = useNavigationContainerRef();
+
+  // Wait for fonts to load before rendering
+  if (!fontsLoaded) {
+    return null;
+  }
 
   // Only proceed if we have valid Privy credentials
   // In production, missing credentials will show an error screen instead of crashing
@@ -327,21 +591,22 @@ export default function App() {
   return (
     <ErrorBoundary>
       <CrossmintProvider apiKey={CROSSMINT_API_KEY}>
-        <PrivyProvider
-          appId={PRIVY_APP_ID || "placeholder-app-id"}
-          clientId={PRIVY_CLIENT_ID || "placeholder-client-id"}
-          config={{
-            embeddedWallets: {
-              ethereum: {
-                createOnLogin: "users-without-wallets",
-              },
-            },
-            appearance: {
-              theme: "dark",
-              accentColor: "#6366F1",
-            },
-          }}
-        >
+ <PrivyProvider
+   appId={PRIVY_APP_ID || "placeholder-app-id"}
+   clientId={PRIVY_CLIENT_ID || "placeholder-client-id"}
+   config={{
+     // Create embedded Solana wallets on login
+     embedded: {
+       solana: {
+         createOnLogin: "users-without-wallets",
+       },
+     },
+     appearance: {
+       theme: "dark",
+       accentColor: "#6366F1",
+     },
+   }}
+ >
           <SupabaseProvider>
             <SupabaseInitializedWrapper>
               <AuthProvider>
@@ -382,33 +647,49 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: Spacing.md,
   },
-  tabBar: {
+  tabBarContainer: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    height: 72,
-    borderRadius: 0,
-    backgroundColor: "black",
-    opacity: 1,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255, 255, 255, 0.1)",
-    borderWidth: 0,
-    paddingHorizontal: Spacing.md,
-    paddingBottom: Spacing.sm,
-    paddingTop: Spacing.sm,
-    shadowColor: "rgba(0, 0, 0, 0.1)",
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    alignItems: "center",
+    paddingBottom: Spacing.lg,
+  },
+  tabPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#1E1E1E",
+    borderRadius: 999,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    minWidth: 260,
+    maxWidth: 360,
+    width: "78%",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
     elevation: 8,
   },
-  tabItem: {
-    marginHorizontal: Spacing.xs,
+  tabButton: {
+    width: 54,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  tabLabel: {
-    ...Typography.caption,
-    fontWeight: "600",
-    color: "white",
+  tabButtonFocused: {
+    backgroundColor: "#2B2B2B",
+  },
+  scanButton: {
+    width: 54,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scanButtonFocused: {
+    backgroundColor: "#2B2B2B",
   },
 });

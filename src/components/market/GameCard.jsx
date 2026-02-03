@@ -76,7 +76,7 @@ const unixTimeConverter = {
   },
 };
 
-export default function GameCard({ event }) {
+export default function GameCard({ event, competitionFallback }) {
   const navigation = useNavigation();
 
   const [chartLoading, setChartLoading] = useState(true);
@@ -468,6 +468,15 @@ export default function GameCard({ event }) {
     displayTiePercentage = null;
   }
 
+  // Filter out if any percentage is NaN
+  if (
+    Number.isNaN(displayYesPercentage) ||
+    Number.isNaN(displayNoPercentage) ||
+    (displayTiePercentage !== null && Number.isNaN(displayTiePercentage))
+  ) {
+    return null;
+  }
+
   const changePercentage = 2.05; // Calculate from historical data
   const isPositive = changePercentage > 0;
 
@@ -518,6 +527,12 @@ export default function GameCard({ event }) {
     >
       <View style={styles.card}>
         <GameCardDetails event={event} />
+        {/* Competition label - top left (event data or current tab as fallback) */}
+        {(event?.competition || event?.league || competitionFallback) && (
+          <Text style={styles.competitionLabel} numberOfLines={1}>
+            {event?.competition || event?.league || competitionFallback}
+          </Text>
+        )}
         {/* Market Options */}
         <View style={styles.optionsContainer}>
           {/* Left Option */}
@@ -618,6 +633,15 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 20,
     lineHeight: 22,
+  },
+  competitionLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "rgba(255, 255, 255, 0.6)",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+    bottom: 15,
   },
   optionsContainer: {
     flexDirection: "row",

@@ -38,8 +38,8 @@ export default function DepositAmountScreen() {
       return;
     }
 
-    // Navigate to MoonPay screen with the amount, walletAddress, and userId
-    navigation.navigate("MoonPay", {
+    // Navigate to AddFunds screen (Crossmint) with the amount, walletAddress, and userId
+    navigation.navigate("AddFunds", {
       amount: amount,
       walletAddress: walletAddress,
       userId: userId,
@@ -230,7 +230,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: Spacing.lg,
     alignItems: "center",
-    marginTop: "auto",
+
     marginBottom: Spacing.xl,
   },
   submitButtonDisabled: {
@@ -239,9 +239,8 @@ const styles = StyleSheet.create({
   },
   submitButtonText: {
     ...Typography.body,
-    color: Colors.textPrimary,
+    color: Colors.background,
     fontWeight: "600",
     fontSize: 16,
   },
 });
-
