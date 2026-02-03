@@ -28,6 +28,7 @@ export default function EventDetail() {
   const event = route.params.event;
 
 
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [candlestickData1, setCandlestickData1] = useState(null);
@@ -114,6 +115,9 @@ export default function EventDetail() {
         const marketTicker1 = marketTickers[0];
         const marketTicker2 = marketTickers[1];
 
+        console.log('marketTicker1', marketTicker1)
+        console.log('marketTicker2', marketTicker2)
+
         const endTs = Math.floor(Date.now() / 1000);
         const startTs = endTs - 5 * 24 * 60 * 60;
         const periodInterval = 60;
@@ -137,6 +141,7 @@ export default function EventDetail() {
 
         const data1 = await response1.json();
         const data2 = await response2.json();
+
 
         const candlesticks1 = Array.isArray(data1)
           ? data1

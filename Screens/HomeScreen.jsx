@@ -42,6 +42,7 @@ export default function HomeScreen() {
 
   const isDataBackedScope = useMemo(
     () =>
+      selectedCompetition === "Pro Football" ||
       [
         "Games",
         "Fights",
@@ -53,7 +54,7 @@ export default function HomeScreen() {
         "Divisions",
         "League Leader",
       ].includes(selectedScope),
-    [selectedScope]
+    [selectedScope, selectedCompetition]
   );
 
   const eventsList = useMemo(() => {
@@ -67,13 +68,12 @@ export default function HomeScreen() {
   }, [eventsData]);
 
   const shouldHideScopeForCompetition = (competitionName, scope) => {
-    // Only hide these scopes on NFL ("Pro Football")
+    // Only hide these scopes on NFL ("Pro Football") - Games is shown like NBA
     if (competitionName !== "Pro Football") return false;
     const normalized = String(scope || "")
       .trim()
       .toLowerCase();
     return (
-      normalized === "games" ||
       normalized === "receiving yards" ||
       normalized === "rushing yards" ||
       normalized === "rushing"
@@ -167,7 +167,7 @@ export default function HomeScreen() {
             if (competitionName === "UFC") {
               competitionScopes = ["Fights"]; // Override UFC to use "Fights" instead of "Games"
             } else if (competitionName === "Pro Football") {
-              // Hide Receiving Yards / Rushing scopes on NFL
+              // Hide Receiving Yards / Rushing scopes on NFL (Games is shown)
               competitionScopes = competitionScopes.filter(
                 (scope) =>
                   !shouldHideScopeForCompetition(competitionName, scope)
@@ -237,6 +237,11 @@ export default function HomeScreen() {
 
   // Helper function to build the correct URL based on competition and scope
   const buildApiUrl = useCallback((competition, scope) => {
+    // NFL always uses current-events route (no scope selection)
+    if (competition === "Pro Football") {
+      return `${API_BASE_URL}/api/current-events/nfl`;
+    }
+
     // Dynamic route selection for games, fights, and futures
     let url = `${API_BASE_URL}/api/events`; // Default fallback
 
@@ -377,18 +382,19 @@ export default function HomeScreen() {
   // Fetch Events function - can be called from anywhere
   const fetchEventsData = useCallback(
     async (forceRefresh = false) => {
-      // Only fetch data for known scopes that have routes
-      if (
-        selectedScope !== "Games" &&
-        selectedScope !== "Fights" &&
-        selectedScope !== "Futures" &&
-        selectedScope !== "Awards" &&
-        selectedScope !== "Draft" &&
-        selectedScope !== "Events" &&
-        selectedScope !== "Win totals" &&
-        selectedScope !== "Divisions" &&
-        selectedScope !== "League Leader"
-      ) {
+      // NFL has no scope selection - always fetch. Others need a valid scope.
+      const hasValidScope = [
+        "Games",
+        "Fights",
+        "Futures",
+        "Awards",
+        "Draft",
+        "Events",
+        "Win totals",
+        "Divisions",
+        "League Leader",
+      ].includes(selectedScope);
+      if (selectedCompetition !== "Pro Football" && !hasValidScope) {
         setLoading(false);
         return;
       }
@@ -454,17 +460,6 @@ export default function HomeScreen() {
   useEffect(() => {
     fetchEventsData();
   }, [fetchEventsData]);
-
-  // When NFL is selected and scope is "Games" (now hidden), switch to Futures
-  useEffect(() => {
-    if (selectedCompetition !== "Pro Football" || selectedScope !== "Games")
-      return;
-    const nfl = flattenedCompetitions.find((c) => c.name === "Pro Football");
-    const useFutures =
-      nfl?.scopes?.includes("Futures");
-    if (useFutures) setSelectedScope("Futures");
-    else if (nfl?.scopes?.[0]) setSelectedScope(nfl.scopes[0]);
-  }, [selectedCompetition, selectedScope, flattenedCompetitions]);
 
   // Scroll to top when competition or scope changes
   useEffect(() => {
@@ -560,16 +555,11 @@ export default function HomeScreen() {
                     }}
                     onPress={() => {
                       setSelectedCompetition(competition.name);
-                      // For NFL, default to Futures (Games is hidden); otherwise first available scope
                       const scopes = competition.scopes || [];
-                      const initialScope =
-                        competition.name === "Pro Football" &&
-                        scopes.includes("Futures")
-                          ? "Futures"
-                          : scopes[0] || null;
-                      setSelectedScope(initialScope);
+                      const scope = scopes[0] || null;
+                      setSelectedScope(scope);
                       console.log("Selected Competition:", competition.name);
-                      console.log("Selected Scope:", initialScope);
+                      console.log("Selected Scope:", scope);
                     }}
                   >
                     <Text
@@ -610,7 +600,8 @@ export default function HomeScreen() {
             <Ticker />
           </View>
         ) : (
-          selectedCompetition && (
+          selectedCompetition &&
+          selectedCompetition !== "Pro Football" && (
             <View style={styles.scopesContainer}>
               <ScrollView
                 horizontal
@@ -739,6 +730,7 @@ export default function HomeScreen() {
               </View>
             ) : (
               eventsList.map((event, index) =>
+                selectedCompetition !== "Pro Football" &&
                 selectedScope === "Games" &&
                 !isSoccerCompetition(selectedCompetition) ? (
                   <GameCard

@@ -175,13 +175,6 @@ export default function EventChartData({
       return processedData;
     };
 
-    // Log raw data structure for first market to debug
-    if (candlestickData1 && candlestickData1.length > 0) {
-      console.log(
-        "Sample candlestick data point (Market 1):",
-        JSON.stringify(candlestickData1[0], null, 2)
-      );
-    }
 
     // Extract data for markets (third is optional)
     const market1Data = candlestickData1
