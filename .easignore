@@ -1,0 +1,2 @@
+# Exclude local npm cache from EAS upload (saves space, avoids ENOSPC)
+.npm-cache/
