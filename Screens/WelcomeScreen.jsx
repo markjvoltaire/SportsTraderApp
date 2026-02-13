@@ -13,6 +13,7 @@ import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
+
 const { width, height } = Dimensions.get('window');
 const GAP = 12;
 const HORIZONTAL_PADDING = 12;

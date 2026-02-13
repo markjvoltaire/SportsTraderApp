@@ -1,6 +1,14 @@
 import React, { useEffect, useCallback } from "react";
 import { StatusBar } from "expo-status-bar";
-import { StyleSheet, View, TouchableOpacity, Text } from "react-native";
+import {
+  StyleSheet,
+  View,
+  TouchableOpacity,
+  Text,
+  Alert,
+  Linking,
+  useColorScheme,
+} from "react-native";
 import * as ExpoSplashScreen from "expo-splash-screen";
 import { useFonts } from "expo-font";
 
@@ -18,10 +26,12 @@ import { PrivyProvider } from "@privy-io/expo";
 import { PrivyElements } from "@privy-io/expo/ui";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+
 import { AuthProvider, useAuth } from "./src/contexts/AuthContext";
 import { SupabaseProvider, useSupabase } from "./src/contexts/SupabaseContext";
 import WelcomeScreen from "./Screens/WelcomeScreen";
 import LoginScreen from "./Screens/LoginScreen";
+import ProofVerificationScreen from "./Screens/ProofVerificationScreen";
 import LottieLoader from "./src/components/ui/LottieLoader";
 import ForgotPasswordScreen from "./Screens/ForgotPasswordScreen";
 import HomeScreen from "./Screens/HomeScreen";
@@ -35,6 +45,7 @@ import { Colors, Spacing, Typography } from "./src/constants/theme";
 import { formatCurrency } from "./src/utils/formatters";
 import ChartScreen from "./Screens/ChartScreen";
 import ErrorBoundary from "./src/components/ErrorBoundary";
+import ProofVerificationGate from "./src/components/ProofVerificationGate";
 import SplashScreen from "./Screens/SplashScreen";
 import ScanScreen from "./Screens/ScanScreen";
 import WalletScreen from "./Screens/WalletScreen";
@@ -165,6 +176,7 @@ function AppNavigator() {
   );
 
   return (
+    <ProofVerificationGate>
     <Tab.Navigator
       tabBar={renderTabBar}
       screenOptions={{
@@ -226,10 +238,32 @@ function AppNavigator() {
         />
       )}
     </Tab.Navigator>
+    </ProofVerificationGate>
   );
 }
 
 function CustomTabBar({ state, descriptors, navigation }) {
+  const isDarkMode = useColorScheme() !== "light";
+  const tabBarTheme = React.useMemo(
+    () =>
+      isDarkMode
+        ? {
+            containerBg: "transparent",
+            pillBg: "#1E1E1E",
+            buttonFocusedBg: "#2B2B2B",
+            iconFocused: "#FFFFFF",
+            iconUnfocused: "#B0B0B0",
+          }
+        : {
+            containerBg: "transparent",
+            pillBg: "#FFFFFF",
+            buttonFocusedBg: "#E5E7EB",
+            iconFocused: "#111827",
+            iconUnfocused: "#6B7280",
+          },
+    [isDarkMode]
+  );
+
   // Check current active tab and nested screen
   const currentTabInfo = React.useMemo(() => {
     const activeTabIndex = state.index;
@@ -297,8 +331,8 @@ function CustomTabBar({ state, descriptors, navigation }) {
   }
 
   return (
-    <View style={styles.tabBarContainer}>
-      <View style={styles.tabPill}>
+    <View style={[styles.tabBarContainer, { backgroundColor: tabBarTheme.containerBg }]}>
+      <View style={[styles.tabPill, { backgroundColor: tabBarTheme.pillBg }]}>
         {state.routes.map((route, index) => {
           const { options } = descriptors[route.key];
           const isTabFocused = state.index === index;
@@ -315,7 +349,7 @@ function CustomTabBar({ state, descriptors, navigation }) {
             isFocused = isTabFocused;
           }
           
-          const color = isFocused ? "#FFFFFF" : "#B0B0B0";
+          const color = isFocused ? tabBarTheme.iconFocused : tabBarTheme.iconUnfocused;
           const size = 22;
           const onPress = () => {
             const event = navigation.emit({
@@ -414,7 +448,7 @@ function CustomTabBar({ state, descriptors, navigation }) {
               onPress={onPress}
               style={[
                 styles.tabButton,
-                isFocused && styles.tabButtonFocused,
+                isFocused && [styles.tabButtonFocused, { backgroundColor: tabBarTheme.buttonFocusedBg }],
               ]}
             >
               {iconElement}
@@ -449,14 +483,152 @@ function RootNavigator() {
     >
       <RootStack.Screen name="Splash" component={SplashScreen} />
       <RootStack.Screen name="Auth" component={AuthNavigator} />
+      <RootStack.Screen name="ProofVerification" component={ProofVerificationScreen} />
       <RootStack.Screen name="Main" component={AppNavigator} />
     </RootStack.Navigator>
   );
 }
 
+const PROOF_RETURN_SCHEME = "scoretrade";
+const PROOF_RETURN_HOST = "proof-return";
+const PROOF_RETURN_MAX_WAIT_ATTEMPTS = 8;
+const PROOF_RETURN_WAIT_MS = 250;
+
+function isProofReturnUrl(url) {
+  if (!url || typeof url !== "string") return false;
+  try {
+    const parsed = new URL(url);
+    const scheme = parsed.protocol.replace(":", "").toLowerCase();
+    const host = (parsed.host || "").toLowerCase();
+    const path = (parsed.pathname || "").toLowerCase();
+
+    if (scheme !== PROOF_RETURN_SCHEME) return false;
+    return host === PROOF_RETURN_HOST || path === `/${PROOF_RETURN_HOST}`;
+  } catch (_err) {
+    const normalized = url.toLowerCase();
+    return (
+      normalized.startsWith(`${PROOF_RETURN_SCHEME}://${PROOF_RETURN_HOST}`) ||
+      normalized.startsWith(`${PROOF_RETURN_SCHEME}:///${PROOF_RETURN_HOST}`)
+    );
+  }
+}
+
+// Handle deep link when user returns from Proof KYC verification
+function ProofDeepLinkHandler({ navigationRef }) {
+  const { session, walletAddress, checkProofStatus } = useAuth();
+  const pendingReturnUrlRef = React.useRef(null);
+  const handledReturnUrlRef = React.useRef(null);
+
+  useEffect(() => {
+    const processProofReturn = async (url) => {
+      if (!isProofReturnUrl(url)) return;
+      if (handledReturnUrlRef.current === url) return;
+      pendingReturnUrlRef.current = url;
+      console.log("Proof return URL received:", url);
+
+      let attempts = 0;
+      while (
+        attempts < PROOF_RETURN_MAX_WAIT_ATTEMPTS &&
+        (!session || !walletAddress || !navigationRef?.isReady())
+      ) {
+        attempts += 1;
+        await new Promise((resolve) => setTimeout(resolve, PROOF_RETURN_WAIT_MS));
+      }
+
+      if (!session || !walletAddress || !navigationRef?.isReady()) {
+        return;
+      }
+
+      handledReturnUrlRef.current = url;
+      pendingReturnUrlRef.current = null;
+      try {
+        const proofResult = await checkProofStatus();
+        console.log("Proof return verification result:", proofResult?.status);
+        if (proofResult?.status === "error") {
+          Alert.alert(
+            "Verification Check Failed",
+            "Returned from Proof, but we could not confirm verification status. Please try again."
+          );
+          navigationRef.reset({
+            index: 0,
+            routes: [{ name: "ProofVerification" }],
+          });
+        } else if (proofResult?.status === "unverified") {
+          Alert.alert(
+            "Verification Incomplete",
+            "Your identity verification is not complete yet. You can retry when ready."
+          );
+          navigationRef.reset({
+            index: 0,
+            routes: [{ name: "ProofVerification" }],
+          });
+        } else {
+          navigationRef.reset({
+            index: 0,
+            routes: [{ name: "Main" }],
+          });
+        }
+      } catch (_e) {
+        Alert.alert(
+          "Verification Check Failed",
+          "Returned from Proof, but we could not confirm verification status. Please try again."
+        );
+        navigationRef.reset({
+          index: 0,
+          routes: [{ name: "ProofVerification" }],
+        });
+      }
+    };
+
+    const handleUrl = async (event) => {
+      await processProofReturn(event?.url);
+    };
+
+    const subscription = Linking.addEventListener("url", handleUrl);
+
+    // Handle case when app was opened from cold start via deep link
+    Linking.getInitialURL()
+      .then((url) => {
+        if (url) processProofReturn(url);
+      })
+      .catch(() => {});
+
+    return () => subscription.remove();
+  }, [session, walletAddress, checkProofStatus, navigationRef]);
+
+  useEffect(() => {
+    const pendingUrl = pendingReturnUrlRef.current;
+    if (!pendingUrl || handledReturnUrlRef.current === pendingUrl) return;
+    if (!session || !walletAddress || !navigationRef?.isReady()) return;
+
+    const retryPending = async () => {
+      if (!isProofReturnUrl(pendingUrl)) return;
+      handledReturnUrlRef.current = pendingUrl;
+      pendingReturnUrlRef.current = null;
+      const proofResult = await checkProofStatus();
+      if (proofResult?.status === "verified") {
+        navigationRef.reset({
+          index: 0,
+          routes: [{ name: "Main" }],
+        });
+      } else {
+        navigationRef.reset({
+          index: 0,
+          routes: [{ name: "ProofVerification" }],
+        });
+      }
+    };
+
+    retryPending().catch(() => {});
+  }, [session, walletAddress, checkProofStatus, navigationRef]);
+
+  return null;
+}
+
 // Component to handle navigation based on auth state changes
 function NavigationHandler({ navigationRef }) {
-  const { session, loading } = useAuth();
+  const { session, loading, user } = useAuth();
+  const { supabase } = useSupabase();
   const lastSessionRef = React.useRef(null);
   const isInitialMount = React.useRef(true);
 
@@ -493,6 +665,88 @@ function NavigationHandler({ navigationRef }) {
 
     // If user signs in (session becomes truthy) and we're on Auth stack, navigate to Main
     if (signedIn && sessionChanged && isOnAuthRoute) {
+      const userToLog = user ?? session?.user;
+      if (userToLog) {
+        const { id, created_at, has_accepted_terms, is_guest, linked_accounts, mfa_methods } = userToLog;
+        const flat = {
+          id,
+          created_at,
+          has_accepted_terms,
+          is_guest,
+          mfa_methods,
+        };
+        // users table currently supports linked_account_0_* and linked_account_1_*
+        (linked_accounts ?? []).slice(0, 2).forEach((acc, i) => {
+          const { type, first_verified_at, latest_verified_at, verified_at } = acc;
+          const pre = `linked_account_${i}_`;
+          flat[pre + "type"] = type;
+          flat[pre + "first_verified_at"] = first_verified_at;
+          flat[pre + "latest_verified_at"] = latest_verified_at;
+          flat[pre + "verified_at"] = verified_at;
+          if (type === "phone") {
+            const { number, phoneNumber } = acc;
+            flat[pre + "number"] = number;
+            // Unquoted SQL identifiers are lowercase in Postgres
+            flat[pre + "phonenumber"] = phoneNumber;
+          } else if (type === "wallet") {
+            const { address, chain_id, chain_type, connector_type, delegated, id: accountId, imported, public_key, recovery_method, wallet_client, wallet_client_type, wallet_index } = acc;
+            flat[pre + "address"] = address;
+            flat[pre + "chain_id"] = chain_id;
+            flat[pre + "chain_type"] = chain_type;
+            flat[pre + "connector_type"] = connector_type;
+            flat[pre + "delegated"] = delegated;
+            flat[pre + "id"] = accountId;
+            flat[pre + "imported"] = imported;
+            flat[pre + "public_key"] = public_key;
+            flat[pre + "recovery_method"] = recovery_method;
+            flat[pre + "wallet_client"] = wallet_client;
+            flat[pre + "wallet_client_type"] = wallet_client_type;
+            flat[pre + "wallet_index"] = wallet_index;
+          } else {
+            Object.entries(acc).forEach(([k, v]) => { flat[pre + k] = v; });
+          }
+        });
+        console.log("Login/signup successful, user:", flat);
+        const fromTable = supabase?.from?.("users");
+        if (typeof fromTable?.upsert === "function") {
+          fromTable.upsert(flat, { onConflict: "id" }).then(({ error }) => {
+            if (error) {
+              console.warn("Supabase users upsert failed:", error.message);
+            }
+          });
+        }
+        if (id && typeof supabase?.from === "function") {
+          supabase
+            .from("users")
+            .select("*")
+            .eq("id", id)
+            .single()
+            .then(({ data, error }) => {
+              if (error) {
+                console.warn("Supabase users fetch by id failed:", error.message);
+                navigationRef.reset({
+                  index: 0,
+                  routes: [{ name: "Main" }],
+                });
+                return;
+              }
+              console.log("Fetched user by id:", data);
+              if (data?.proof === false) {
+                navigationRef.reset({
+                  index: 0,
+                  routes: [{ name: "ProofVerification" }],
+                });
+                return;
+              }
+              navigationRef.reset({
+                index: 0,
+                routes: [{ name: "Main" }],
+              });
+            });
+          lastSessionRef.current = session;
+          return; // Navigation will happen after fetch result
+        }
+      }
       navigationRef.reset({
         index: 0,
         routes: [{ name: "Main" }],
@@ -515,7 +769,7 @@ function NavigationHandler({ navigationRef }) {
 
     // Update the ref to track session changes
     lastSessionRef.current = session;
-  }, [session, loading, navigationRef]);
+  }, [session, loading, navigationRef, user, supabase]);
 
   return null;
 }
@@ -613,6 +867,7 @@ export default function App() {
                 <SafeAreaProvider>
                   <NavigationContainer ref={navigationRef}>
                     <NavigationHandler navigationRef={navigationRef} />
+                    <ProofDeepLinkHandler navigationRef={navigationRef} />
                     <StatusBar style="light" />
                     <RootNavigator />
                     <PrivyElements />

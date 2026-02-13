@@ -1,5 +1,11 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
-import { StyleSheet, Text, View, TouchableOpacity, Image } from "react-native";
+import {
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  useColorScheme,
+} from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import Svg, { Polyline } from "react-native-svg";
 import { getNFLTeamColor, getNBATeamColor } from "../../constants/teamColors";
@@ -77,6 +83,40 @@ const unixTimeConverter = {
 };
 
 export default function GameCard({ event, competitionFallback }) {
+  const isDarkMode = useColorScheme() !== "light";
+  const theme = useMemo(
+    () =>
+      isDarkMode
+        ? {
+            cardBackground: "#000000",
+            cardBorder: "rgba(255, 255, 255, 0.1)",
+            primaryText: "#FFFFFF",
+            secondaryText: "rgba(255, 255, 255, 0.7)",
+            subtleText: "rgba(255, 255, 255, 0.6)",
+            accentText: "#6552FE",
+            buttonBackground: "rgba(0, 0, 0, 0.3)",
+            buttonBorder: "#FFFFFF",
+            progressTrack: "rgba(255, 255, 255, 0.1)",
+            tradeButtonBackground: "#FFFFFF",
+            tradeButtonText: "#000000",
+          }
+        : {
+            cardBackground: "#FFFFFF",
+            cardBorder: "rgba(17, 24, 39, 0.12)",
+            primaryText: "#111827",
+            secondaryText: "#4B5563",
+            subtleText: "#6B7280",
+            accentText: "#8E7BFF",
+            buttonBackground: "#F3F4F6",
+            buttonBorder: "rgba(17, 24, 39, 0.2)",
+            progressTrack: "rgba(17, 24, 39, 0.12)",
+            tradeButtonBackground: "#111827",
+            tradeButtonText: "#FFFFFF",
+          },
+    [isDarkMode]
+  );
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   const navigation = useNavigation();
 
   const [chartLoading, setChartLoading] = useState(true);
@@ -526,7 +566,7 @@ export default function GameCard({ event, competitionFallback }) {
       activeOpacity={0.9}
     >
       <View style={styles.card}>
-        <GameCardDetails event={event} />
+ 
         {/* Competition label - top left (event data or current tab as fallback) */}
         {(event?.competition || event?.league || competitionFallback) && (
           <Text style={styles.competitionLabel} numberOfLines={1}>
@@ -595,14 +635,16 @@ export default function GameCard({ event, competitionFallback }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) =>
+  StyleSheet.create({
   card: {
     borderRadius: 16,
     padding: 20,
     marginVertical: 8,
-    backgroundColor: "#000000",
+    backgroundColor: theme.cardBackground,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.1)",
+    borderColor: theme.cardBorder,
+    
   },
   eventInfo: {
     marginBottom: 16,
@@ -610,26 +652,26 @@ const styles = StyleSheet.create({
   eventTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: theme.primaryText,
     marginBottom: 8,
     lineHeight: 22,
   },
   eventVolume: {
     fontSize: 14,
     fontWeight: "500",
-    color: "rgba(255, 255, 255, 0.7)",
+    color: theme.secondaryText,
     marginBottom: 4,
   },
   countdownText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#6552FE",
+    color: theme.accentText,
     marginTop: 4,
   },
   marketTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: theme.primaryText,
     textAlign: "center",
     marginBottom: 20,
     lineHeight: 22,
@@ -637,11 +679,12 @@ const styles = StyleSheet.create({
   competitionLabel: {
     fontSize: 12,
     fontWeight: "600",
-    color: "rgba(255, 255, 255, 0.6)",
+    color: theme.subtleText,
     textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: 8,
     bottom: 15,
+    marginTop: 10
   },
   optionsContainer: {
     flexDirection: "row",
@@ -657,7 +700,7 @@ const styles = StyleSheet.create({
   optionTeamName: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#FFFFFF",
+    color: theme.primaryText,
     marginBottom: 4,
   },
   optionPercentage: {
@@ -673,9 +716,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   priceButton: {
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
+    backgroundColor: theme.buttonBackground,
     borderWidth: 1,
-    borderColor: "#FFFFFF",
+    borderColor: theme.buttonBorder,
     borderRadius: 24,
     paddingVertical: 12,
     paddingHorizontal: 32,
@@ -686,12 +729,12 @@ const styles = StyleSheet.create({
   priceText: {
     fontSize: 15,
     fontWeight: "500",
-    color: "#FFFFFF",
+    color: theme.primaryText,
   },
   progressBarBackground: {
     height: 8,
     borderRadius: 4,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: theme.progressTrack,
     flexDirection: "row",
     overflow: "hidden",
   },
@@ -711,7 +754,7 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 4,
   },
   tradeButton: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: theme.tradeButtonBackground,
     borderRadius: 24,
     paddingVertical: 14,
     alignItems: "center",
@@ -720,6 +763,6 @@ const styles = StyleSheet.create({
   tradeButtonText: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#000000",
+    color: theme.tradeButtonText,
   },
 });

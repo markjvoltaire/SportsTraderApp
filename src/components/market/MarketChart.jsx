@@ -1,5 +1,11 @@
 import React, { useState, useMemo, useCallback } from "react";
-import { StyleSheet, View, Text, Dimensions } from "react-native";
+import {
+  StyleSheet,
+  View,
+  Text,
+  Dimensions,
+  useColorScheme,
+} from "react-native";
 import {
   VictoryChart,
   VictoryLine,
@@ -25,7 +31,27 @@ const generateSmoothData = (currentVal, points = 60, volatility = 1.5) => {
   return data;
 };
 
-export default function MarketChart({ market }) {
+export default function MarketChart({ market, theme = null }) {
+  const isDarkMode = useColorScheme() !== "light";
+  const chartTheme = useMemo(
+    () =>
+      theme ||
+      (isDarkMode
+        ? {
+            background: "#000000",
+            guideLineColor: "rgba(255,255,255,0.12)",
+            pointStroke: "#000000",
+            textShadowColor: "rgba(0, 0, 0, 0.3)",
+          }
+        : {
+            background: "#F5F7FB",
+            guideLineColor: "rgba(17,24,39,0.18)",
+            pointStroke: "#FFFFFF",
+            textShadowColor: "rgba(255, 255, 255, 0.45)",
+          }),
+    [theme, isDarkMode]
+  );
+  const styles = useMemo(() => createStyles(chartTheme), [chartTheme]);
   const { awayTeam, homeTeam } = market;
 
   const awayData = useMemo(
@@ -84,26 +110,28 @@ export default function MarketChart({ market }) {
     () => ({
       data: {
         fill: awayTeam.color,
-        stroke: "#000",
+        stroke: chartTheme.pointStroke,
         strokeWidth: 1.5,
       },
     }),
-    [awayTeam.color]
+    [awayTeam.color, chartTheme.pointStroke]
   );
 
   const homeScatterStyle = useMemo(
     () => ({
       data: {
         fill: homeTeam.color,
-        stroke: "#000",
+        stroke: chartTheme.pointStroke,
         strokeWidth: 1.5,
       },
     }),
-    [homeTeam.color]
+    [homeTeam.color, chartTheme.pointStroke]
   );
 
   return (
-    <View style={styles.container}>
+    <View
+      style={styles.container}
+    >
       <View style={styles.chartWrapper}>
         <VictoryChart
           height={CHART_HEIGHT}
@@ -127,7 +155,7 @@ export default function MarketChart({ market }) {
             x={() => currentAway.x}
             style={{
               data: {
-                stroke: "rgba(255,255,255,0.12)",
+                stroke: chartTheme.guideLineColor,
                 strokeWidth: 1.5,
               },
             }}
@@ -212,9 +240,10 @@ export default function MarketChart({ market }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (chartTheme) =>
+  StyleSheet.create({
   container: {
-    backgroundColor: "#000",
+    backgroundColor: chartTheme.background,
   },
   chartWrapper: {
     flexDirection: "row",
@@ -244,7 +273,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginTop: -4,
     fontVariant: ["tabular-nums"],
-    textShadowColor: "rgba(0, 0, 0, 0.3)",
+    textShadowColor: chartTheme.textShadowColor,
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },

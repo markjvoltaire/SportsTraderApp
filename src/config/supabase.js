@@ -1,8 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 
-// Get Supabase credentials from environment variables
-const supabaseUrl = process.env.SUPABASE_URL || "";
+// Get Supabase credentials from environment variables (Expo: use EXPO_PUBLIC_ prefix)
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "";
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "";
+
 
 // Helper function to create a mock query builder
 const createMockQueryBuilder = () => ({

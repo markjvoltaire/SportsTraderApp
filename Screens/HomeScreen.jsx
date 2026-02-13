@@ -16,9 +16,9 @@ import {
   Image,
   Animated,
   RefreshControl,
-  TextInput,
+  Linking,
+  useColorScheme,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 // Custom Constants & Components
@@ -33,6 +33,10 @@ import API_BASE_URL from "../src/config/api";
 const { width } = Dimensions.get("window");
 
 export default function HomeScreen() {
+  const isDarkMode = useColorScheme() !== "light";
+  const theme = isDarkMode ? DARK_THEME : LIGHT_THEME;
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   const [sportsFilters, setSportsFilters] = useState(null);
   const [selectedCompetition, setSelectedCompetition] = useState("Trending");
   const [selectedScope, setSelectedScope] = useState("Games");
@@ -496,36 +500,35 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container} edges={["top"]}>
       {/* HEADER SECTION */}
       <View style={styles.header}>
-        {/* Top Row: Icon, Search, Discord */}
+        {/* Top Row: Logo + Name, Discord */}
         <View style={styles.headerTopRow}>
-          {/* Left: Logo */}
-          <Image
-            source={require("../assets/images/ScoretradeBlack.png")}
-            style={styles.headerLogo}
-            resizeMode="contain"
-          />
-
-          {/* Center: Search Bar */}
-          <TouchableOpacity 
-            style={styles.searchBar}
-            onPress={() => {
-              // TODO: Navigate to search screen
-              console.log("Search pressed");
-            }}
-          >
-            <Ionicons
-              name="search"
-              size={18}
-              color="#888888"
-              style={styles.searchIcon}
+          {/* Left: Logo + Scoretrade */}
+          <View style={styles.headerBrand}>
+            <Image
+              source={
+                isDarkMode
+                  ? require("../assets/images/whiteTrade.png")
+                  : require("../assets/images/blackTrade.png")
+              }
+              style={styles.headerLogo}
+              resizeMode="contain"
             />
-            <Text style={styles.searchPlaceholder}>Search</Text>
-          </TouchableOpacity>
+            <Text style={styles.headerBrandName}>Scoretrade</Text>
+          </View>
+
+          <View style={styles.headerSpacer} />
 
           {/* Right: Discord Icon */}
-          <TouchableOpacity style={styles.settingsIcon}>
+          <TouchableOpacity
+            style={styles.settingsIcon}
+            onPress={() => Linking.openURL("https://discord.gg/e7zGDnNcRF")}
+          >
             <Image
-              source={require("../assets/images/discord.png")}
+              source={
+                isDarkMode
+                  ? require("../assets/images/discord.png")
+                  : require("../assets/images/DiscordBlack.png")
+              }
               style={styles.discordIcon}
               resizeMode="contain"
             />
@@ -587,10 +590,10 @@ export default function HomeScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={["#BB86FC"]}
-            tintColor="#BB86FC"
+            colors={[theme.accent]}
+            tintColor={theme.accent}
             title="Refreshing markets..."
-            titleColor="#CCCCCC"
+            titleColor={theme.secondaryText}
           />
         }
       >
@@ -733,16 +736,17 @@ export default function HomeScreen() {
                 selectedCompetition !== "Pro Football" &&
                 selectedScope === "Games" &&
                 !isSoccerCompetition(selectedCompetition) ? (
+                <View style={{margin: 10}} key={event.ticker || event.id || index}>
                   <GameCard
                     key={event.ticker || event.id || index}
                     event={event}
                     competitionFallback={selectedCompetition}
                   />
+                  </View>
                 ) : (
-                  <EventCard
-                    key={event.ticker || event.id || index}
-                    event={event}
-                  />
+                  <View style={{margin: 10}} key={event.ticker || event.id || index}>
+                    <EventCard event={event} />
+                  </View>
                 )
               )
             )
@@ -771,13 +775,54 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const DARK_THEME = {
+  background: "#000000",
+  headerBackground: "#000000",
+  primaryText: "#FFFFFF",
+  secondaryText: "#CCCCCC",
+  mutedText: "#AAAAAA",
+  subtleText: "#8A8A8A",
+  categoryBorder: "rgba(255, 255, 255, 0.1)",
+  chipBackground: "#18181B",
+  chipActiveBackground: "#FFFFFF",
+  chipText: "#FFFFFF",
+  chipActiveText: "#000000",
+  accent: "#BB86FC",
+  scopeChipBorder: "#555555",
+  scopeChipSelectedBorder: "#000000",
+  scopeChipSelectedBackground: "#FFFFFF",
+  scopeChipText: "#CCCCCC",
+  scopeChipSelectedText: "#000000",
+};
+
+const LIGHT_THEME = {
+  background: "#F5F7FB",
+  headerBackground: "#FFFFFF",
+  primaryText: "#111827",
+  secondaryText: "#4B5563",
+  mutedText: "#6B7280",
+  subtleText: "#6B7280",
+  categoryBorder: "rgba(0, 0, 0, 0.1)",
+  chipBackground: "#E5E7EB",
+  chipActiveBackground: "#111827",
+  chipText: "#111827",
+  chipActiveText: "#FFFFFF",
+  accent: "#7C3AED",
+  scopeChipBorder: "#D1D5DB",
+  scopeChipSelectedBorder: "#111827",
+  scopeChipSelectedBackground: "#111827",
+  scopeChipText: "#6B7280",
+  scopeChipSelectedText: "#FFFFFF",
+};
+
+const createStyles = (theme) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "black",
+    backgroundColor: theme.background,
   },
   header: {
-    backgroundColor: "black",
+    backgroundColor: theme.headerBackground,
     paddingTop: 8,
     paddingBottom: 12,
   },
@@ -788,28 +833,23 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     gap: 12,
   },
-  headerLogo: {
-    width: 39,
-    height: 39,
-
-    borderRadius: 18,
-  },
-  searchBar: {
-    flex: 1,
+  headerBrand: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#2A2A2A",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 40,
+    gap: 10,
   },
-  searchIcon: {
-    marginRight: 8,
+  headerLogo: {
+    width: 20,
+    height: 20,
+
+      },
+  headerBrandName: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: theme.primaryText,
   },
-  searchPlaceholder: {
+  headerSpacer: {
     flex: 1,
-    color: "#888888",
-    fontSize: 16,
   },
   settingsIcon: {
     width: 36,
@@ -824,7 +864,7 @@ const styles = StyleSheet.create({
   categoryContainer: {
     position: "relative",
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 255, 255, 0.1)",
+    borderBottomColor: theme.categoryBorder,
   },
   categoryRow: {
     paddingHorizontal: 16,
@@ -836,12 +876,12 @@ const styles = StyleSheet.create({
   },
   categoryText: {
     fontSize: 16,
-    color: "grey",
+    color: theme.subtleText,
     fontWeight: "700",
   },
   categoryTextActive: {
     fontWeight: "700",
-    color: "white",
+    color: theme.primaryText,
   },
   scopesContainer: {
     flexDirection: "row",
@@ -854,7 +894,7 @@ const styles = StyleSheet.create({
   competitionLabel: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: theme.primaryText,
     minWidth: 50,
   },
   scopesRow: {
@@ -865,20 +905,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: "transparent",
     borderWidth: 0,
-    backgroundColor: "#18181B",
+    backgroundColor: theme.chipBackground,
   },
   scopeButtonActive: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: theme.chipActiveBackground,
   },
   scopeButtonText: {
     fontSize: 14,
     fontWeight: "700",
-    color: "white",
+    color: theme.chipText,
   },
   scopeButtonTextActive: {
-    color: "#000000",
+    color: theme.chipActiveText,
     fontWeight: "700",
   },
   tickerWrapper: {
@@ -909,19 +948,19 @@ const styles = StyleSheet.create({
 
     marginRight: 8,
     borderWidth: 1,
-    borderColor: "#555555",
+    borderColor: theme.scopeChipBorder,
   },
   scopeChipSelected: {
-    borderColor: "black",
-    backgroundColor: "white",
+    borderColor: theme.scopeChipSelectedBorder,
+    backgroundColor: theme.scopeChipSelectedBackground,
   },
   scopeText: {
     fontSize: 12,
     fontWeight: "500",
-    color: "#CCCCCC",
+    color: theme.scopeChipText,
   },
   scopeTextSelected: {
-    color: "black",
+    color: theme.scopeChipSelectedText,
     fontWeight: "700",
   },
   eventsContainer: {
@@ -934,13 +973,13 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 10,
-    color: "#CCCCCC",
+    color: theme.secondaryText,
     fontSize: 14,
   },
   emptyText: {
     textAlign: "center",
     marginTop: 40,
-    color: "#AAAAAA",
+    color: theme.mutedText,
     fontSize: 16,
   },
   comingSoonContainer: {
@@ -952,13 +991,13 @@ const styles = StyleSheet.create({
   comingSoonText: {
     fontSize: 24,
     fontWeight: "600",
-    color: "#CCCCCC",
+    color: theme.secondaryText,
     textAlign: "center",
     marginBottom: 12,
   },
   comingSoonSubtext: {
     fontSize: 16,
-    color: "#AAAAAA",
+    color: theme.mutedText,
     textAlign: "center",
     lineHeight: 22,
   },

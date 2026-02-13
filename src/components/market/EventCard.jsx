@@ -1,12 +1,13 @@
 import React, { useMemo } from "react";
-import { StyleSheet, Text, View, TouchableOpacity, Image } from "react-native";
-import { useNavigation } from "@react-navigation/native";
 import {
-  Colors,
-  Spacing,
-  Typography,
-  BorderRadius,
-} from "../../constants/theme";
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  useColorScheme,
+} from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import { Spacing, Typography, BorderRadius } from "../../constants/theme";
 import { getNFLTeamColor, getNBATeamColor } from "../../constants/teamColors";
 
 // Helper function to convert percentage to text format
@@ -16,6 +17,32 @@ const toPercentText = (percent) => {
 };
 
 export default function EventCard({ event }) {
+  const isDarkMode = useColorScheme() !== "light";
+  const theme = useMemo(
+    () =>
+      isDarkMode
+        ? {
+            cardBackground: "#000000",
+            cardBorder: "rgba(255, 255, 255, 0.1)",
+            primaryText: "#FFFFFF",
+            pillBackground: "rgba(0, 0, 0, 0.3)",
+            pillBorder: "#FFFFFF",
+            tradeButtonBackground: "#FFFFFF",
+            tradeButtonText: "#000000",
+          }
+        : {
+            cardBackground: "#FFFFFF",
+            cardBorder: "rgba(17, 24, 39, 0.12)",
+            primaryText: "#111827",
+            pillBackground: "#F3F4F6",
+            pillBorder: "rgba(17, 24, 39, 0.2)",
+            tradeButtonBackground: "#111827",
+            tradeButtonText: "#FFFFFF",
+          },
+    [isDarkMode]
+  );
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   const navigation = useNavigation();
 
 
@@ -218,19 +245,20 @@ export default function EventCard({ event }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) =>
+  StyleSheet.create({
   card: {
     borderRadius: 16,
     padding: 20,
     marginVertical: 8,
-    backgroundColor: "#000000",
+    backgroundColor: theme.cardBackground,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.1)",
+    borderColor: theme.cardBorder,
   },
   marketTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: theme.primaryText,
     textAlign: "center",
     marginBottom: 20,
     lineHeight: 22,
@@ -247,7 +275,7 @@ const styles = StyleSheet.create({
   marketLabel: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#FFFFFF",
+    color: theme.primaryText,
     flex: 1,
   },
   marketPercentage: {
@@ -255,9 +283,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   percentagePill: {
-    backgroundColor: "#000000",
+    backgroundColor: theme.pillBackground,
     borderWidth: 1,
-    borderColor: "#FFFFFF",
+    borderColor: theme.pillBorder,
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -268,10 +296,10 @@ const styles = StyleSheet.create({
   percentagePillText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#FFFFFF",
+    color: theme.primaryText,
   },
   tradeButton: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: theme.tradeButtonBackground,
     borderRadius: 24,
     paddingVertical: 14,
     alignItems: "center",
@@ -280,6 +308,6 @@ const styles = StyleSheet.create({
   tradeButtonText: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#000000",
+    color: theme.tradeButtonText,
   },
 });

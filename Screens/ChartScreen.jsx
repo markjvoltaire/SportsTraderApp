@@ -12,6 +12,7 @@ import {
   Platform,
   Image,
   Animated as RNAnimated,
+  useColorScheme,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -38,6 +39,29 @@ import Orders from "../src/components/market/Orders";
 import BuyButtons from "../src/components/market/BuyButtons";
 
 export default function ChartScreen() {
+  const isDarkMode = useColorScheme() !== "light";
+  const screenColors = useMemo(
+    () =>
+      isDarkMode
+        ? {
+            background: "#000000",
+            primaryText: "#FFFFFF",
+            secondaryText: "#D1D5DB",
+            tertiaryText: "#9CA3AF",
+            iconButtonBg: "rgba(255,255,255,0.06)",
+            iconButtonBorder: "rgba(255,255,255,0.08)",
+          }
+        : {
+            background: "#F5F7FB",
+            primaryText: "#111827",
+            secondaryText: "#374151",
+            tertiaryText: "#6B7280",
+            iconButtonBg: "rgba(17,24,39,0.06)",
+            iconButtonBorder: "rgba(17,24,39,0.12)",
+          },
+    [isDarkMode]
+  );
+
   const navigation = useNavigation();
   const route = useRoute();
 
@@ -822,42 +846,62 @@ export default function ChartScreen() {
   }, [displayPctHome]);
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: screenColors.background }]}>
       {/* Top bar */}
       <View style={styles.topBar}>
         <TouchableOpacity
-          style={styles.topBarIcon}
+          style={[
+            styles.topBarIcon,
+            {
+              backgroundColor: screenColors.iconButtonBg,
+              borderColor: screenColors.iconButtonBorder,
+            },
+          ]}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
+          <Ionicons name="chevron-back" size={22} color={screenColors.primaryText} />
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
           <Image
-            source={require("../assets/images/ScoretradeBlack.png")}
+            source={
+              isDarkMode
+                ? require("../assets/images/whiteTrade.png")
+                : require("../assets/images/blackTrade.png")
+            }
             style={styles.logoImage}
             resizeMode="contain"
           />
         </View>
 
-        <TouchableOpacity style={styles.topBarIcon}>
-          <Ionicons name="share-outline" size={20} color={Colors.textPrimary} />
+        <TouchableOpacity
+          style={[
+            styles.topBarIcon,
+            {
+              backgroundColor: screenColors.iconButtonBg,
+              borderColor: screenColors.iconButtonBorder,
+            },
+          ]}
+        >
+          <Ionicons name="share-outline" size={20} color={screenColors.primaryText} />
         </TouchableOpacity>
       </View>
       <ScrollView
-        style={styles.container}
+        style={[styles.container, { backgroundColor: screenColors.background }]}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
         {!!competitionLabel && (
           <View style={styles.competitionRow}>
-            <Text style={styles.competitionText}>{competitionLabel}</Text>
+            <Text style={[styles.competitionText, { color: screenColors.secondaryText }]}>
+              {competitionLabel}
+            </Text>
           </View>
         )}
 
         <Text
           style={{
-            color: "#FFFFFF",
+            color: screenColors.primaryText,
             fontWeight: "700",
             fontSize: 30,
             marginBottom: 15,
@@ -869,7 +913,7 @@ export default function ChartScreen() {
         {volume > 0 && (
           <Text
             style={{
-              color: Colors.textTertiary,
+              color: screenColors.tertiaryText,
               fontSize: 16,
               fontWeight: "500",
               marginBottom: 20,
@@ -900,8 +944,10 @@ export default function ChartScreen() {
     
         {/* About */}
         <View style={styles.about}>
-          <Text style={styles.aboutTitle}>About</Text>
-          <Text style={styles.aboutBody}>{match.about}</Text>
+          <Text style={[styles.aboutTitle, { color: screenColors.primaryText }]}>About</Text>
+          <Text style={[styles.aboutBody, { color: screenColors.secondaryText }]}>
+            {match.about}
+          </Text>
         </View>
       </ScrollView>
 
@@ -954,8 +1000,8 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   logoImage: {
-    width: 54,
-    height: 54,
+    width: 30,
+    height: 30,
   },
   headerTitle: {
     ...Typography.body,

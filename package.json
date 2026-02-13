@@ -9,6 +9,8 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "bs58": "^6.0.0",
+    "buffer": "^6.0.3",
     "@crossmint/client-sdk-react-native-ui": "^0.13.15",
     "@dome-api/sdk": "^0.16.0",
     "@ethersproject/shims": "^5.8.0",

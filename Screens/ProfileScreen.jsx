@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -6,16 +6,18 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
+  useColorScheme,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 
 import { useAuth } from "../src/contexts/AuthContext";
+import { checkProofVerification } from "../src/services/proofService";
 import LottieLoader from "../src/components/ui/LottieLoader";
 
 import {
-  Colors,
   Spacing,
   Typography,
   BorderRadius,
@@ -23,8 +25,15 @@ import {
 import { normalizeFont } from "../src/utils/dimensions";
 
 export default function ProfileScreen() {
-  const { signOut, user, loading } = useAuth();
+  const isDarkMode = useColorScheme() !== "light";
+  const theme = isDarkMode ? DARK_THEME : LIGHT_THEME;
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
+  const { signOut, user, loading, walletAddress, checkProofStatus } = useAuth();
   const navigation = useNavigation();
+  const [verifying, setVerifying] = useState(false);
+
+  console.log(user);
 
   // Get username from user object
   const username =
@@ -50,10 +59,45 @@ export default function ProfileScreen() {
   };
 
   // -------------------------
-  // Handle Deposit
+  // Handle Verify - hit Proof verify route to check KYC status
+  // -------------------------
+  const handleVerify = async () => {
+    if (!walletAddress) {
+      Alert.alert("No Wallet", "Wallet not ready yet. Please wait or try again.");
+      return;
+    }
+    setVerifying(true);
+    try {
+      const { data, error } = await checkProofVerification(walletAddress);
+      if (error) throw error;
+      const verified = !!data?.verified;
+      await checkProofStatus();
+      if (verified) {
+        Alert.alert("Verified", "Your wallet is Proof (KYC) verified.");
+        return;
+      }
+
+      let rootNav = navigation;
+      while (rootNav.getParent()) {
+        rootNav = rootNav.getParent();
+      }
+      rootNav.navigate("ProofVerification");
+    } catch (err) {
+      Alert.alert("Error", err?.message || "Failed to check verification status.");
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  // -------------------------
+  // Handle Deposit - go to Proof (KYC) verification
   // -------------------------
   const handleDeposit = () => {
-    Alert.alert("Coming Soon", "Deposit functionality is coming soon.");
+    let rootNav = navigation;
+    while (rootNav.getParent()) {
+      rootNav = rootNav.getParent();
+    }
+    rootNav.navigate("ProofVerification");
   };
 
   // -------------------------
@@ -124,7 +168,7 @@ export default function ProfileScreen() {
             {/* Profile Picture */}
             <View style={styles.profilePictureContainer}>
             <View style={styles.profilePicture}>
-              <Ionicons name="headset-outline" size={48} color={Colors.textPrimary} />
+              <Ionicons name="headset-outline" size={48} color={theme.textPrimary} />
             </View>
             </View>
 
@@ -164,6 +208,21 @@ export default function ProfileScreen() {
                 <Text style={styles.shareProfileText}>Deposit</Text>
               </TouchableOpacity>
             </View>
+            <TouchableOpacity
+              style={[styles.verifyButton, verifying && styles.verifyButtonDisabled]}
+              onPress={handleVerify}
+              disabled={verifying}
+              activeOpacity={0.85}
+            >
+              {verifying ? (
+                <ActivityIndicator size="small" color={theme.accentTeal} />
+              ) : (
+                <>
+                  <Ionicons name="shield-checkmark-outline" size={18} color={theme.accentTeal} style={styles.verifyIcon} />
+                  <Text style={styles.verifyText}>Verify</Text>
+                </>
+              )}
+            </TouchableOpacity>
 
             {/* Sign Out Button */}
             <TouchableOpacity
@@ -174,7 +233,7 @@ export default function ProfileScreen() {
               <Ionicons
                 name="log-out-outline"
                 size={16}
-                color={Colors.danger}
+                color={theme.danger}
                 style={styles.signOutIcon}
               />
               <Text style={styles.signOutText}>Sign Out</Text>
@@ -204,12 +263,44 @@ export default function ProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const DARK_THEME = {
+  background: "#000000",
+  textPrimary: "#FFFFFF",
+  textSecondary: "#D1D5DB",
+  textTertiary: "#9CA3AF",
+  border: "rgba(255, 255, 255, 0.12)",
+  surface: "rgba(255, 255, 255, 0.1)",
+  primaryButtonBg: "#FFFFFF",
+  primaryButtonText: "#000000",
+  danger: "#FF6B6B",
+  success: "#10B981",
+  warning: "#F59E0B",
+  accentTeal: "#14B8A6",
+  primaryLight: "#8B5CF6",
+};
+
+const LIGHT_THEME = {
+  background: "#F5F7FB",
+  textPrimary: "#111827",
+  textSecondary: "#374151",
+  textTertiary: "#6B7280",
+  border: "rgba(17, 24, 39, 0.15)",
+  surface: "rgba(17, 24, 39, 0.06)",
+  primaryButtonBg: "#111827",
+  primaryButtonText: "#FFFFFF",
+  danger: "#DC2626",
+  success: "#059669",
+  warning: "#D97706",
+  accentTeal: "#0D9488",
+  primaryLight: "#7C3AED",
+};
+
+const createStyles = (theme) => StyleSheet.create({
   container: {
     flex: 1,
     width: "100%",
     height: "100%",
-    backgroundColor: Colors.background,
+    backgroundColor: theme.background,
   },
   safeArea: {
     flex: 1,
@@ -233,7 +324,7 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: normalizeFont(18),
     fontWeight: "600",
-    color: Colors.textPrimary,
+    color: theme.textPrimary,
     textAlign: "center",
   },
   profileSection: {
@@ -248,11 +339,11 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: theme.surface,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: theme.border,
   },
   statsContainer: {
     flexDirection: "row",
@@ -267,19 +358,19 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: normalizeFont(18),
     fontWeight: "600",
-    color: Colors.textPrimary,
+    color: theme.textPrimary,
     marginBottom: Spacing.xs,
   },
   statLabel: {
     ...Typography.caption,
     fontSize: normalizeFont(14),
-    color: Colors.textTertiary,
+    color: theme.textTertiary,
   },
   username: {
     ...Typography.body,
     fontSize: normalizeFont(18),
     fontWeight: "600",
-    color: Colors.textPrimary,
+    color: theme.textPrimary,
     marginBottom: Spacing.lg,
   },
   actionButtonsContainer: {
@@ -289,7 +380,7 @@ const styles = StyleSheet.create({
   },
   editProfileButton: {
     flex: 1,
-    backgroundColor: Colors.primary,
+    backgroundColor: theme.primaryButtonBg,
     borderRadius: BorderRadius.md,
     paddingVertical: Spacing.md,
     alignItems: "center",
@@ -299,35 +390,59 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: normalizeFont(16),
     fontWeight: "600",
-    color: Colors.background,
+    color: theme.primaryButtonText,
   },
   shareProfileButton: {
     flex: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: theme.surface,
     borderRadius: BorderRadius.md,
     paddingVertical: Spacing.md,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: theme.border,
   },
   shareProfileText: {
     ...Typography.body,
     fontSize: normalizeFont(16),
     fontWeight: "600",
-    color: Colors.textPrimary,
+    color: theme.textPrimary,
   },
-  signOutButton: {
+  verifyButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: theme.surface,
     borderRadius: BorderRadius.md,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.lg,
     marginBottom: Spacing.xl,
     borderWidth: 1,
-    borderColor: Colors.danger,
+    borderColor: theme.accentTeal,
+  },
+  verifyButtonDisabled: {
+    opacity: 0.6,
+  },
+  verifyIcon: {
+    marginRight: Spacing.sm,
+  },
+  verifyText: {
+    ...Typography.body,
+    fontSize: normalizeFont(16),
+    fontWeight: "600",
+    color: theme.accentTeal,
+  },
+  signOutButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.surface,
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    marginBottom: Spacing.xl,
+    borderWidth: 1,
+    borderColor: theme.danger,
   },
   signOutIcon: {
     marginRight: Spacing.sm,
@@ -336,7 +451,7 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: normalizeFont(16),
     fontWeight: "600",
-    color: Colors.danger,
+    color: theme.danger,
   },
   activitySection: {
     paddingHorizontal: Spacing.xl,
@@ -346,7 +461,7 @@ const styles = StyleSheet.create({
     ...Typography.sectionTitle,
     fontSize: normalizeFont(20),
     fontWeight: "600",
-    color: Colors.textPrimary,
+    color: theme.textPrimary,
     marginBottom: Spacing.lg,
   },
   emptyStateContainer: {
@@ -366,7 +481,7 @@ const styles = StyleSheet.create({
   iconShape1: {
     width: 40,
     height: 40,
-    backgroundColor: Colors.primary,
+    backgroundColor: theme.primaryButtonBg,
     top: 10,
     left: 20,
     transform: [{ rotate: "45deg" }],
@@ -375,7 +490,7 @@ const styles = StyleSheet.create({
   iconShape2: {
     width: 30,
     height: 30,
-    backgroundColor: Colors.success,
+    backgroundColor: theme.success,
     top: 30,
     right: 15,
     transform: [{ rotate: "45deg" }],
@@ -383,7 +498,7 @@ const styles = StyleSheet.create({
   iconShape3: {
     width: 35,
     height: 35,
-    backgroundColor: Colors.warning,
+    backgroundColor: theme.warning,
     bottom: 30,
     left: 15,
     borderRadius: 18,
@@ -391,7 +506,7 @@ const styles = StyleSheet.create({
   iconShape4: {
     width: 25,
     height: 25,
-    backgroundColor: Colors.accentTeal,
+    backgroundColor: theme.accentTeal,
     top: 50,
     left: 50,
     transform: [{ rotate: "45deg" }],
@@ -399,7 +514,7 @@ const styles = StyleSheet.create({
   iconShape5: {
     width: 30,
     height: 30,
-    backgroundColor: Colors.primaryLight,
+    backgroundColor: theme.primaryLight,
     bottom: 20,
     right: 25,
     borderRadius: 15,
@@ -407,7 +522,7 @@ const styles = StyleSheet.create({
   emptyStateText: {
     ...Typography.body,
     fontSize: normalizeFont(16),
-    color: Colors.textTertiary,
+    color: theme.textTertiary,
   },
   loadingContainer: {
     flex: 1,
@@ -418,7 +533,7 @@ const styles = StyleSheet.create({
   loadingText: {
     ...Typography.body,
     fontSize: normalizeFont(16),
-    color: Colors.textSecondary,
+    color: theme.textSecondary,
     marginTop: Spacing.lg,
   },
 });

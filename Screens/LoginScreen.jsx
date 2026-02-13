@@ -8,7 +8,7 @@ import {
   Platform,
   Alert,
 } from "react-native";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -54,7 +54,8 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [phoneDigits, setPhoneDigits] = useState("");
   const [error, setError] = useState(null);
-  const { session, loading: authLoading } = useAuth();
+  const { session, loading: authLoading, user } = useAuth();
+  const justLoggedInRef = useRef(false);
 
   // Check if user is already authenticated with Privy
   const privyContext = usePrivy();
@@ -71,24 +72,30 @@ export default function LoginScreen() {
   // This is a fallback in case NavigationHandler doesn't catch it
   useEffect(() => {
     if (!authLoading && session && !isLoading) {
-      // Get root navigator by traversing parent navigators
-      let rootNavigator = navigation;
-      while (rootNavigator.getParent()) {
-        rootNavigator = rootNavigator.getParent();
+      const loggedInUser = user ?? session?.user;
+      if (justLoggedInRef.current && loggedInUser) {
+        console.log("Login/signup successful, user:", loggedInUser);
+        justLoggedInRef.current = false;
       }
-
-      // Small delay to ensure navigation state is ready and avoid conflicts with NavigationHandler
-      const timer = setTimeout(() => {
-        if (rootNavigator?.reset) {
-          rootNavigator.reset({
-            index: 0,
-            routes: [{ name: "Main" }],
-          });
+      // Navigate when not waiting for fresh login, or when we just logged and have user
+      const shouldNavigate = !justLoggedInRef.current || !!loggedInUser;
+      if (shouldNavigate) {
+        let rootNavigator = navigation;
+        while (rootNavigator.getParent()) {
+          rootNavigator = rootNavigator.getParent();
         }
-      }, 200);
-      return () => clearTimeout(timer);
+        const timer = setTimeout(() => {
+          if (rootNavigator?.reset) {
+            rootNavigator.reset({
+              index: 0,
+              routes: [{ name: "Main" }],
+            });
+          }
+        }, 200);
+        return () => clearTimeout(timer);
+      }
     }
-  }, [session, authLoading, navigation, isLoading]);
+  }, [session, authLoading, navigation, isLoading, user]);
 
   const handlePhoneChange = (text) => {
     const formatted = formatPhoneNumber(text);
@@ -163,6 +170,7 @@ export default function LoginScreen() {
       } else {
         await loginWithCode({ code: verificationCode, phone: phoneNumber });
       }
+      justLoggedInRef.current = true;
       console.log("Verification successful");
     } catch (error) {
       console.error("Verification error:", error);

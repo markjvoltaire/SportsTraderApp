@@ -1,4 +1,8 @@
-// Import required polyfills first
+// Buffer must be first — some deps (Privy/Solana) use it before other polyfills run
+const { Buffer } = require('buffer');
+global.Buffer = Buffer;
+
+// Import required polyfills
 import 'fast-text-encoding';
 import 'react-native-get-random-values';
 import '@ethersproject/shims';

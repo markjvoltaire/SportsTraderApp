@@ -1,7 +1,13 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { StyleSheet, Text, View, TouchableOpacity } from "react-native";
+import {
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  useColorScheme,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Colors, Spacing } from "../../constants/theme";
+import { Spacing } from "../../constants/theme";
 import { formatPrice } from "../../utils/formatters";
 import API_BASE_URL from "../../config/api";
 
@@ -13,6 +19,26 @@ export default function BuyButtons({
   event,
   onSideSelect,
 }) {
+  const isDarkMode = useColorScheme() !== "light";
+  const theme = useMemo(
+    () =>
+      isDarkMode
+        ? {
+            background: "#000000",
+            borderTop: "rgba(255, 255, 255, 0.1)",
+            selectionBorder: "#FFFFFF",
+            buttonText: "#FFFFFF",
+          }
+        : {
+            background: "#F5F7FB",
+            borderTop: "rgba(17, 24, 39, 0.15)",
+            selectionBorder: "#111827",
+            buttonText: "#FFFFFF",
+          },
+    [isDarkMode]
+  );
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   const [selectedSide, setSelectedSide] = useState(null);
   const wsRef = useRef(null);
   const [realtimePrices, setRealtimePrices] = useState({});
@@ -260,7 +286,7 @@ export default function BuyButtons({
           ]}
           onPress={() => handleSideSelect("away")}
         >
-          <Text style={[styles.buttonText, styles.buttonTextWhite]}>
+          <Text style={styles.buttonText}>
             Buy {awayTeam.code} {displayAwayPrice}
           </Text>
         </TouchableOpacity>
@@ -272,7 +298,7 @@ export default function BuyButtons({
           ]}
           onPress={() => handleSideSelect("home")}
         >
-          <Text style={[styles.buttonText, styles.buttonTextWhite]}>
+          <Text style={styles.buttonText}>
             Buy {homeTeam.code} {displayHomePrice}
           </Text>
         </TouchableOpacity>
@@ -281,18 +307,19 @@ export default function BuyButtons({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) =>
+  StyleSheet.create({
   container: {
-    backgroundColor: "black",
+    backgroundColor: theme.background,
     borderTopWidth: 1,
-    borderTopColor: "rgba(255, 255, 255, 0.1)",
+    borderTopColor: theme.borderTop,
   },
   buttonRow: {
     flexDirection: "row",
     gap: Spacing.md,
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
-    backgroundColor: "black",
+    backgroundColor: theme.background,
   },
   button: {
     flex: 1,
@@ -303,15 +330,12 @@ const styles = StyleSheet.create({
   },
   buttonSelected: {
     borderWidth: 3,
-    borderColor: "#FFFFFF",
+    borderColor: theme.selectionBorder,
   },
   buttonText: {
     fontSize: 15,
     fontWeight: "800",
-    color: "black",
+    color: theme.buttonText,
     letterSpacing: 0.2,
-  },
-  buttonTextWhite: {
-    color: "#FFFFFF",
   },
 });

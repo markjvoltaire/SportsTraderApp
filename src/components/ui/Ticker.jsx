@@ -5,9 +5,10 @@ import {
   PanResponder,
   Easing,
   Text,
+  useColorScheme,
 } from "react-native";
-import React, { useEffect, useRef, useState } from "react";
-import { Colors, Spacing, Typography } from "../../constants/theme";
+import React, { useEffect, useRef, useState, useMemo } from "react";
+import { Spacing } from "../../constants/theme";
 import API_BASE_URL from "../../config/api";
 
 const DEFAULT_HEADLINES = [
@@ -22,6 +23,11 @@ const DEFAULT_HEADLINES = [
 ];
 
 export default function Ticker({ items }) {
+  const isDarkMode = useColorScheme() !== "light";
+  const textColor = isDarkMode ? "#FFFFFF" : "#111827";
+  const skeletonColor = isDarkMode ? "rgba(255, 255, 255, 0.3)" : "rgba(17, 24, 39, 0.25)";
+  const styles = useMemo(() => createStyles(textColor, skeletonColor), [textColor, skeletonColor]);
+
   const [tickerItems, setTickerItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -39,10 +45,6 @@ export default function Ticker({ items }) {
         const response = await fetch(`${API_BASE_URL}/api/futures/nfl`);
         const data = await response.json();
 
-        console.log('data', data)
-
-        console.log("NFL Futures Data:", data);
-        
         if (data.events && data.events.length > 0) {
           // Collect all markets from all events where percentage > 0
           const allMarkets = [];
@@ -242,7 +244,7 @@ export default function Ticker({ items }) {
               <Animated.View
                 style={[
                   styles.skeletonItem,
-                  { opacity: skeletonOpacity },
+                  { opacity: skeletonOpacity, backgroundColor: skeletonColor },
                 ]}
               />
             </View>
@@ -281,32 +283,33 @@ export default function Ticker({ items }) {
   );
 }
 
-const styles = StyleSheet.create({
-  tickerContainer: {
-    height: 20,
-    marginBottom: 10,
-    bottom: 5,
-    overflow: "hidden",
-    justifyContent: "center",
-  },
-  tickerContent: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  tickerBox: {
-    marginRight: Spacing.xl,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tickerText: {
-    color: "white",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  skeletonItem: {
-    height: 14,
-    backgroundColor: "rgba(255, 255, 255, 0.3)",
-    borderRadius: 4,
-    width: "80%",
-  },
-});
+const createStyles = (textColor, skeletonColor) =>
+  StyleSheet.create({
+    tickerContainer: {
+      height: 20,
+      marginBottom: 10,
+      bottom: 5,
+      overflow: "hidden",
+      justifyContent: "center",
+    },
+    tickerContent: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    tickerBox: {
+      marginRight: Spacing.xl,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    tickerText: {
+      color: textColor,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    skeletonItem: {
+      height: 14,
+      backgroundColor: skeletonColor,
+      borderRadius: 4,
+      width: "80%",
+    },
+  });

@@ -5,7 +5,13 @@ import React, {
   useEffect,
   useRef,
 } from "react";
-import { View, Text, StyleSheet, Dimensions } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Dimensions,
+  useColorScheme,
+} from "react-native";
 import {
   VictoryChart,
   VictoryLine,
@@ -80,6 +86,26 @@ export default function MyChart({
   colorBoost = 0.22,
   realtimePrices = {},
 }) {
+  const isDarkMode = useColorScheme() !== "light";
+  const uiTheme = useMemo(
+    () =>
+      isDarkMode
+        ? {
+            background: "#000000",
+            textPrimary: "#FFFFFF",
+            textSecondary: "#D1D5DB",
+            tooltipChipBg: "rgba(0, 0, 0, 0.5)",
+          }
+        : {
+            background: "#F5F7FB",
+            textPrimary: "#111827",
+            textSecondary: "#374151",
+            tooltipChipBg: "rgba(255, 255, 255, 0.85)",
+          },
+    [isDarkMode]
+  );
+  const styles = useMemo(() => createStyles(uiTheme), [uiTheme]);
+
   const route = useRoute();
   // Prefer explicitly passed market; fall back to navigation params
   const market = marketProp || route.params?.game || route.params?.market;
@@ -395,7 +421,7 @@ export default function MyChart({
           tokenId: null,
           abbreviation: "Home",
           name: "Home",
-          color: "#FFFFFF",
+          color: "#3B82F6",
         },
         conditionId: null,
       };
@@ -1100,7 +1126,7 @@ export default function MyChart({
                 domain={{ y: yDomain }}
                 scale={{ x: "linear", y: "linear" }}
                 style={{
-                  background: { fill: Colors.background },
+                  background: { fill: uiTheme.background },
                 }}
               >
                 <VictoryAxis
@@ -1135,8 +1161,8 @@ export default function MyChart({
                       data: {
                         stroke: marketData.awayTeam.color,
                         strokeWidth: 3,
-                        strokeLinecap: "round",
-                        strokeLinejoin: "round",
+                        strokeLinecap: "butt",
+                        strokeLinejoin: "butt",
                         strokeDasharray: "0",
                       },
                     }}
@@ -1160,8 +1186,8 @@ export default function MyChart({
                       data: {
                         stroke: marketData.homeTeam.color,
                         strokeWidth: 3,
-                        strokeLinecap: "round",
-                        strokeLinejoin: "round",
+                        strokeLinecap: "butt",
+                        strokeLinejoin: "butt",
                         strokeDasharray: "0",
                       },
                     }}
@@ -1278,11 +1304,12 @@ const cursorWidth = normalize(2);
 const cursorHeight = normalize(180);
 const padding = Spacing.xl;
 
-const styles = StyleSheet.create({
+const createStyles = (uiTheme) =>
+  StyleSheet.create({
   chartContainer: {
     width: "100%",
     position: "relative",
-    backgroundColor: Colors.background,
+    backgroundColor: uiTheme.background,
   },
   skeletonContainer: {
     position: "absolute",
@@ -1304,7 +1331,7 @@ const styles = StyleSheet.create({
   cursorLine: {
     position: "absolute",
     width: cursorWidth,
-    backgroundColor: Colors.textPrimary,
+    backgroundColor: uiTheme.textPrimary,
     opacity: 0.5,
     height: cursorHeight,
     top: padding - 10,
@@ -1343,7 +1370,7 @@ const styles = StyleSheet.create({
   },
   dateText: {
     ...Typography.caption,
-    color: Colors.textSecondary,
+    color: uiTheme.textSecondary,
     fontWeight: "600",
     bottom: 15,
   },
@@ -1351,8 +1378,8 @@ const styles = StyleSheet.create({
     ...Typography.bodyLarge,
     fontWeight: "700",
     marginBottom: Spacing.xs / 2,
-    color: Colors.textPrimary,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    color: uiTheme.textPrimary,
+    backgroundColor: uiTheme.tooltipChipBg,
     paddingHorizontal: Spacing.xs,
     paddingVertical: 2,
     borderRadius: BorderRadius.sm,
@@ -1361,7 +1388,7 @@ const styles = StyleSheet.create({
   tooltipLabel: {
     ...Typography.label,
     fontSize: 10,
-    color: "#FFFFFF",
+    color: uiTheme.textPrimary,
     textAlign: "center",
     fontWeight: "900",
   },
@@ -1376,6 +1403,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: Colors.background,
+    backgroundColor: uiTheme.background,
   },
 });

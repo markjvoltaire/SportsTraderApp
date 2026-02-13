@@ -9,7 +9,12 @@ const { width, height } = Dimensions.get("window");
 
 export default function SplashScreen() {
   const navigation = useNavigation();
-  const { session, loading } = useAuth();
+  const {
+    session,
+    loading,
+    walletAddress,
+    proofStatus,
+  } = useAuth();
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
   // Hide the native splash screen when this component mounts
@@ -28,8 +33,8 @@ export default function SplashScreen() {
     // Only proceed with fade and navigation once auth has finished loading
     if (loading) return;
 
-    // Fade out animation after showing logo for 2 seconds (from when auth finishes loading)
-    const minDisplayTime = 1000; // Minimum 2 seconds to show logo
+    // Fade out animation after showing logo
+    const minDisplayTime = 1000;
     const fadeDuration = 800;
 
     const timer = setTimeout(() => {
@@ -38,17 +43,35 @@ export default function SplashScreen() {
         duration: fadeDuration,
         useNativeDriver: true,
       }).start(() => {
-        // Navigate to appropriate screen based on auth status
-        if (session) {
-          navigation.replace("Main");
-        } else {
+        if (!session) {
           navigation.replace("Auth");
+          return;
+        }
+
+        // Signed in: check if Proof KYC verification is needed
+        const proofResolved =
+          proofStatus.status !== "idle" && proofStatus.status !== "loading";
+        const needsProof =
+          walletAddress && proofResolved && proofStatus.verified === false;
+
+        if (needsProof) {
+          navigation.replace("ProofVerification");
+        } else {
+          navigation.replace("Main");
         }
       });
     }, minDisplayTime);
 
     return () => clearTimeout(timer);
-  }, [navigation, fadeAnim, session, loading]);
+  }, [
+    navigation,
+    fadeAnim,
+    session,
+    loading,
+    walletAddress,
+    proofStatus.status,
+    proofStatus.verified,
+  ]);
 
   return (
     <View style={styles.container}>

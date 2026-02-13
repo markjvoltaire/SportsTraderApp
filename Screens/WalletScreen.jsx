@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  useColorScheme,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -15,7 +16,6 @@ import { usePrivy, useEmbeddedEthereumWallet } from "@privy-io/expo";
 import { useAuth } from "../src/contexts/AuthContext";
 import LottieLoader from "../src/components/ui/LottieLoader";
 import {
-  Colors,
   Spacing,
   Typography,
   BorderRadius,
@@ -25,6 +25,10 @@ import { truncateHash, formatCurrency } from "../src/utils/formatters";
 import { getWalletBalance } from "../src/services/walletService";
 
 export default function WalletScreen() {
+  const isDarkMode = useColorScheme() !== "light";
+  const theme = isDarkMode ? DARK_THEME : LIGHT_THEME;
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   const { user, session } = useAuth();
   const navigation = useNavigation();
   const { user: privyUser } = usePrivy();
@@ -132,7 +136,7 @@ export default function WalletScreen() {
               <Ionicons
                 name="refresh"
                 size={20}
-                color={Colors.textPrimary}
+                color={theme.textPrimary}
                 style={loadingBalance && styles.refreshing}
               />
             </TouchableOpacity>
@@ -165,7 +169,7 @@ export default function WalletScreen() {
                 <Ionicons
                   name="add-circle-outline"
                   size={24}
-                  color={Colors.background}
+                  color={theme.primaryButtonText}
                 />
               </View>
               <Text style={styles.actionButtonText}>Deposit</Text>
@@ -187,7 +191,7 @@ export default function WalletScreen() {
                 <Ionicons
                   name="arrow-up-outline"
                   size={24}
-                  color={Colors.textPrimary}
+                  color={theme.textPrimary}
                 />
               </View>
               <Text style={styles.actionButtonTextSecondary}>Withdraw</Text>
@@ -202,7 +206,7 @@ export default function WalletScreen() {
                 <Ionicons
                   name="receipt-outline"
                   size={48}
-                  color={Colors.textTertiary}
+                  color={theme.textTertiary}
                 />
               </View>
               <Text style={styles.emptyStateText}>
@@ -219,12 +223,38 @@ export default function WalletScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const DARK_THEME = {
+  background: "#000000",
+  textPrimary: "#FFFFFF",
+  textSecondary: "#D1D5DB",
+  textTertiary: "#9CA3AF",
+  border: "rgba(255, 255, 255, 0.12)",
+  surface: "rgba(255, 255, 255, 0.1)",
+  subtleSurface: "rgba(255, 255, 255, 0.05)",
+  iconOverlay: "rgba(0, 0, 0, 0.2)",
+  primaryButtonBg: "#FFFFFF",
+  primaryButtonText: "#000000",
+};
+
+const LIGHT_THEME = {
+  background: "#F5F7FB",
+  textPrimary: "#111827",
+  textSecondary: "#374151",
+  textTertiary: "#6B7280",
+  border: "rgba(17, 24, 39, 0.15)",
+  surface: "rgba(17, 24, 39, 0.06)",
+  subtleSurface: "rgba(17, 24, 39, 0.04)",
+  iconOverlay: "rgba(17, 24, 39, 0.08)",
+  primaryButtonBg: "#111827",
+  primaryButtonText: "#FFFFFF",
+};
+
+const createStyles = (theme) => StyleSheet.create({
   container: {
     flex: 1,
     width: "100%",
     height: "100%",
-    backgroundColor: Colors.background,
+    backgroundColor: theme.background,
   },
   safeArea: {
     flex: 1,
@@ -247,35 +277,35 @@ const styles = StyleSheet.create({
   headerTitle: {
     ...Typography.pageTitle,
     fontSize: normalizeFont(32),
-    color: Colors.textPrimary,
+    color: theme.textPrimary,
   },
   refreshButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: theme.surface,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: theme.border,
   },
   refreshing: {
     opacity: 0.5,
   },
   balanceCard: {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: theme.surface,
     borderRadius: BorderRadius.lg,
     padding: Spacing.xl,
     marginHorizontal: Spacing.xl,
     marginBottom: Spacing.lg,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: theme.border,
     alignItems: "center",
   },
   balanceLabel: {
     ...Typography.caption,
     fontSize: normalizeFont(14),
-    color: Colors.textTertiary,
+    color: theme.textTertiary,
     marginBottom: Spacing.sm,
     textTransform: "uppercase",
     letterSpacing: 1.2,
@@ -283,7 +313,7 @@ const styles = StyleSheet.create({
   balanceAmount: {
     ...Typography.heroPrice,
     fontSize: normalizeFont(48),
-    color: Colors.textPrimary,
+    color: theme.textPrimary,
   },
   balanceLoading: {
     height: 60,
@@ -291,13 +321,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   addressCard: {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: theme.surface,
     borderRadius: BorderRadius.lg,
     padding: Spacing.lg,
     marginHorizontal: Spacing.xl,
     marginBottom: Spacing.lg,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: theme.border,
   },
   addressHeader: {
     flexDirection: "row",
@@ -308,7 +338,7 @@ const styles = StyleSheet.create({
   addressLabel: {
     ...Typography.caption,
     fontSize: normalizeFont(12),
-    color: Colors.textTertiary,
+    color: theme.textTertiary,
     textTransform: "uppercase",
     letterSpacing: 1.2,
   },
@@ -316,14 +346,14 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: theme.surface,
     alignItems: "center",
     justifyContent: "center",
   },
   addressText: {
     ...Typography.body,
     fontSize: normalizeFont(16),
-    color: Colors.textPrimary,
+    color: theme.textPrimary,
     fontFamily: "monospace",
   },
   actionsContainer: {
@@ -334,7 +364,7 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
-    backgroundColor: Colors.primary,
+    backgroundColor: theme.primaryButtonBg,
     borderRadius: BorderRadius.md,
     paddingVertical: Spacing.lg,
     paddingHorizontal: Spacing.md,
@@ -344,32 +374,32 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   actionButtonSecondary: {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: theme.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: theme.border,
   },
   actionIconContainer: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "rgba(0, 0, 0, 0.2)",
+    backgroundColor: theme.iconOverlay,
     alignItems: "center",
     justifyContent: "center",
   },
   actionIconContainerSecondary: {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: theme.surface,
   },
   actionButtonText: {
     ...Typography.body,
     fontSize: normalizeFont(16),
     fontWeight: "600",
-    color: Colors.background,
+    color: theme.primaryButtonText,
   },
   actionButtonTextSecondary: {
     ...Typography.body,
     fontSize: normalizeFont(16),
     fontWeight: "600",
-    color: Colors.textPrimary,
+    color: theme.textPrimary,
   },
   transactionsSection: {
     paddingHorizontal: Spacing.xl,
@@ -379,7 +409,7 @@ const styles = StyleSheet.create({
     ...Typography.sectionTitle,
     fontSize: normalizeFont(20),
     fontWeight: "600",
-    color: Colors.textPrimary,
+    color: theme.textPrimary,
     marginBottom: Spacing.lg,
   },
   emptyStateContainer: {
@@ -391,7 +421,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    backgroundColor: theme.subtleSurface,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: Spacing.lg,
@@ -399,13 +429,13 @@ const styles = StyleSheet.create({
   emptyStateText: {
     ...Typography.body,
     fontSize: normalizeFont(16),
-    color: Colors.textSecondary,
+    color: theme.textSecondary,
     marginBottom: Spacing.xs,
   },
   emptyStateSubtext: {
     ...Typography.caption,
     fontSize: normalizeFont(14),
-    color: Colors.textTertiary,
+    color: theme.textTertiary,
   },
   loadingContainer: {
     flex: 1,
@@ -416,7 +446,7 @@ const styles = StyleSheet.create({
   loadingText: {
     ...Typography.body,
     fontSize: normalizeFont(16),
-    color: Colors.textSecondary,
+    color: theme.textSecondary,
     marginTop: Spacing.lg,
   },
 });

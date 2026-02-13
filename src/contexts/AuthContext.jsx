@@ -5,12 +5,15 @@ import React, {
   useEffect,
   useRef,
   useState,
+  useCallback,
 } from "react";
-import { usePrivy, useEmbeddedEthereumWallet } from "@privy-io/expo";
+import { Buffer } from "buffer";
+import { usePrivy, useEmbeddedSolanaWallet } from "@privy-io/expo";
 import { setupPrivyUser } from "../services/walletService";
 import { getPolicyIds } from "../config/privy";
 import API_BASE_URL from "../config/api";
 import { useSupabase } from "./SupabaseContext";
+import { checkProofVerification } from "../services/proofService";
 
 const AuthContext = createContext({});
 
@@ -30,12 +33,8 @@ export const AuthProvider = ({ children }) => {
   // Supabase (DB) context
   const { supabase, isInitialized: supabaseInitialized } = useSupabase();
 
-  // Get wallet context
-  const walletContext = useEmbeddedEthereumWallet();
-  const wallets = walletContext?.wallets ?? [];
-  const createWallet = walletContext?.create ?? null; // Fix: should be 'create', not 'createWallet'
-  const embeddedWallet =
-    Array.isArray(wallets) && wallets.length > 0 ? wallets[0] : null;
+  // Embedded Solana wallet context for Proof signing.
+  const solanaWalletContext = useEmbeddedSolanaWallet();
 
   // Supabase user row (DB user profile)
   const [supabaseUser, setSupabaseUser] = useState(null);
@@ -49,6 +48,13 @@ export const AuthProvider = ({ children }) => {
     error: null,
     lastAttemptAt: null,
     lastSuccessAt: null,
+  });
+
+  // Proof (KYC) verification state - required for prediction market buying
+  const [proofStatus, setProofStatus] = useState({
+    status: "idle", // idle | loading | verified | unverified | error
+    verified: null,
+    lastCheckedAt: null,
   });
 
   // Prevent repeated backend setup calls for the same user
@@ -85,14 +91,40 @@ export const AuthProvider = ({ children }) => {
     setSupabaseUserError(null);
 
     try {
-      // IMPORTANT: Do NOT fetch `polymarket_credentials` into the client context
-      const { data, error } = await supabase
+      // IMPORTANT: Do NOT fetch `polymarket_credentials` into the client context.
+      // Support both legacy users schema (wallet_address) and flat Privy schema
+      // (linked_account_*_address) to avoid breaking proof/wallet flows.
+      let data = null;
+      let error = null;
+
+      const legacyResult = await supabase
         .from("users")
         .select(
-          "id, privy_wallet_id, wallet_address, polymarket_linked_at, created_at, updated_at"
+          "id, privy_wallet_id, wallet_address, polymarket_linked_at, created_at, updated_at, proof"
         )
         .eq("id", privyUserId)
         .single();
+
+      const legacyErrorMessage = legacyResult?.error?.message || "";
+      const hasSchemaMismatch =
+        legacyErrorMessage.includes("Could not find the") ||
+        legacyErrorMessage.includes("column") ||
+        legacyErrorMessage.includes("schema cache");
+
+      if (legacyResult?.error && hasSchemaMismatch) {
+        const flatResult = await supabase
+          .from("users")
+          .select(
+            "id, created_at, row_created_at, row_updated_at, proof, linked_account_0_type, linked_account_0_address, linked_account_1_type, linked_account_1_address"
+          )
+          .eq("id", privyUserId)
+          .single();
+        data = flatResult?.data ?? null;
+        error = flatResult?.error ?? null;
+      } else {
+        data = legacyResult?.data ?? null;
+        error = legacyResult?.error ?? null;
+      }
 
       if (error) {
         // "not configured" is not an app error
@@ -117,8 +149,23 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      setSupabaseUser(data ?? null);
-      setSupabaseUserStatus(data ? "success" : "not_found");
+      // Normalize wallet address regardless of which schema was returned.
+      const linkedWallet =
+        data?.linked_account_0_type === "wallet"
+          ? data?.linked_account_0_address
+          : data?.linked_account_1_type === "wallet"
+            ? data?.linked_account_1_address
+            : data?.linked_account_1_address || data?.linked_account_0_address;
+
+      const normalizedUser = data
+        ? {
+            ...data,
+            wallet_address: data?.wallet_address || linkedWallet || null,
+          }
+        : null;
+
+      setSupabaseUser(normalizedUser);
+      setSupabaseUserStatus(normalizedUser ? "success" : "not_found");
       setSupabaseUserError(null);
     } catch (e) {
       const message =
@@ -141,6 +188,9 @@ export const AuthProvider = ({ children }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [privyUser?.id, supabaseInitialized]);
 
+  // Privy user row sync now lives in App navigation sign-in handler,
+  // where the full flattened payload is available.
+
   const retryBackendSetup = () => {
     // allow the next effect run to attempt again
     lastSetupKeyRef.current = null;
@@ -152,6 +202,86 @@ export const AuthProvider = ({ children }) => {
       lastAttemptAt: null,
     }));
   };
+
+  const privyLinkedWalletAddress = useMemo(() => {
+    const linkedAccounts = Array.isArray(privyUser?.linked_accounts)
+      ? privyUser.linked_accounts
+      : [];
+    const linkedSolanaWallet =
+      linkedAccounts.find(
+        (account) => account?.type === "wallet" && account?.chain_type === "solana"
+      ) || linkedAccounts.find((account) => account?.type === "wallet");
+    return linkedSolanaWallet?.address || null;
+  }, [privyUser?.linked_accounts]);
+
+  const walletAddress = useMemo(
+    () =>
+      supabaseUser?.wallet_address ||
+      backendSetup?.data?.wallet_address ||
+      privyLinkedWalletAddress ||
+      null,
+    [
+      supabaseUser?.wallet_address,
+      backendSetup?.data?.wallet_address,
+      privyLinkedWalletAddress,
+    ]
+  );
+
+  const checkProofStatus = useCallback(async () => {
+    if (!walletAddress) {
+      setProofStatus({ status: "idle", verified: null, lastCheckedAt: null });
+      return { status: "idle", verified: null };
+    }
+
+    setProofStatus((prev) => ({ ...prev, status: "loading" }));
+    try {
+      const authToken = await privy.getAccessToken?.();
+      if (!authToken) {
+        const nextState = {
+          status: "error",
+          verified: false,
+          lastCheckedAt: Date.now(),
+        };
+        setProofStatus(nextState);
+        return { status: nextState.status, verified: nextState.verified };
+      }
+
+      const { data, error } = await checkProofVerification(
+        walletAddress,
+        authToken
+      );
+
+      if (error) {
+        const nextState = {
+          status: "error",
+          verified: false,
+          lastCheckedAt: Date.now(),
+        };
+        setProofStatus(nextState);
+        return { status: nextState.status, verified: nextState.verified };
+      }
+
+      const verified = !!data?.verified;
+      const nextState = {
+        status: verified ? "verified" : "unverified",
+        verified,
+        lastCheckedAt: Date.now(),
+      };
+      setProofStatus(nextState);
+      return { status: nextState.status, verified: nextState.verified };
+    } catch (e) {
+      const nextState = {
+        status: "error",
+        verified: false,
+        lastCheckedAt: Date.now(),
+      };
+      setProofStatus(nextState);
+      return { status: nextState.status, verified: nextState.verified };
+    }
+  }, [
+    walletAddress,
+    privy,
+  ]);
 
   // After profile creation (Privy login/signup), call backend to provision wallet + optionally link Polymarket.
   // Backend should be idempotent and return wallet info if already provisioned.
@@ -264,6 +394,9 @@ export const AuthProvider = ({ children }) => {
           lastAttemptAt: Date.now(),
           lastSuccessAt: Date.now(),
         });
+
+        // Refresh Supabase user so we get wallet_address for Proof KYC
+        refreshSupabaseUser();
       } catch (e) {
         const message =
           e?.message ||
@@ -280,7 +413,18 @@ export const AuthProvider = ({ children }) => {
 
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady, privyUser?.id]);
+  }, [isReady, privyUser?.id, refreshSupabaseUser]);
+
+  // Check Proof (KYC) verification status when we have a wallet
+  useEffect(() => {
+    if (walletAddress && proofStatus.status === "idle") {
+      checkProofStatus();
+    }
+  }, [
+    walletAddress,
+    proofStatus.status,
+    checkProofStatus,
+  ]);
 
   // Create a session-like object for compatibility with existing code
   // Session is truthy when user is authenticated, null when not
@@ -310,6 +454,46 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const getAccessToken = useCallback(async () => {
+    const token = await privy.getAccessToken?.();
+    return token ?? null;
+  }, [privy]);
+
+  const getProofSigningWallet = useCallback(async () => {
+    const wallets = Array.isArray(solanaWalletContext?.wallets)
+      ? solanaWalletContext.wallets
+      : [];
+    const embeddedSolanaWallet = wallets.find(
+      (wallet) => typeof wallet?.getProvider === "function" && wallet?.address
+    );
+
+    if (!embeddedSolanaWallet) {
+      throw new Error(
+        "No embedded Solana wallet is available. Please create or reconnect your wallet."
+      );
+    }
+
+    const provider = await embeddedSolanaWallet.getProvider();
+
+    return {
+      publicKey: {
+        toBase58: () => embeddedSolanaWallet.address,
+      },
+      signMessage: async (messageBytes) => {
+        const messageBase64 = Buffer.from(messageBytes).toString("base64");
+        const result = await provider.request({
+          method: "signMessage",
+          params: { message: messageBase64 },
+        });
+        const signatureBase64 = result?.signature;
+        if (!signatureBase64) {
+          throw new Error("Wallet signature was not returned.");
+        }
+        return Uint8Array.from(Buffer.from(signatureBase64, "base64"));
+      },
+    };
+  }, [solanaWalletContext]);
+
   const value = {
     session,
     user,
@@ -321,6 +505,11 @@ export const AuthProvider = ({ children }) => {
     supabaseUserStatus,
     supabaseUserError,
     refreshSupabaseUser,
+    proofStatus,
+    walletAddress,
+    checkProofStatus,
+    getAccessToken,
+    getProofSigningWallet,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

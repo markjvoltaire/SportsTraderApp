@@ -5,7 +5,13 @@ import React, {
   useEffect,
   useRef,
 } from "react";
-import { View, Text, StyleSheet, Dimensions } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Dimensions,
+  useColorScheme,
+} from "react-native";
 import {
   VictoryChart,
   VictoryLine,
@@ -26,12 +32,7 @@ import Animated, {
 } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
 import { normalize } from "../../utils/dimensions";
-import {
-  Colors,
-  Spacing,
-  BorderRadius,
-  Typography,
-} from "../../constants/theme";
+import { Spacing, BorderRadius, Typography } from "../../constants/theme";
 import ChartSkeleton from "./ChartSkeleton";
 import LottieView from "lottie-react-native";
 
@@ -81,6 +82,26 @@ export default function EventChartData({
   market2Ticker = null,
   market3Ticker = null,
 }) {
+  const isDarkMode = useColorScheme() !== "light";
+  const theme = useMemo(
+    () =>
+      isDarkMode
+        ? {
+            background: "#000000",
+            textPrimary: "#FFFFFF",
+            textSecondary: "#D1D5DB",
+            tooltipChipBg: "rgba(0, 0, 0, 0.5)",
+          }
+        : {
+            background: "#F5F7FB",
+            textPrimary: "#111827",
+            textSecondary: "#374151",
+            tooltipChipBg: "rgba(255, 255, 255, 0.85)",
+          },
+    [isDarkMode]
+  );
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   const { width } = Dimensions.get("window");
   const hasThirdMarket = candlestickData3 && Array.isArray(candlestickData3) && candlestickData3.length > 0;
 
@@ -838,7 +859,7 @@ export default function EventChartData({
                 domain={{ y: yDomain }}
                 scale={{ x: "linear", y: "linear" }}
                 style={{
-                  background: { fill: Colors.background },
+                  background: { fill: theme.background },
                 }}
               >
                 <VictoryAxis
@@ -989,7 +1010,7 @@ export default function EventChartData({
                     <Text
                       style={{ ...Typography.label,
                         fontSize: 10,
-                        color: "#FFFFFF",
+                        color: theme.textPrimary,
                         textAlign: "center",
                         fontWeight: "900",}}
                       numberOfLines={2}
@@ -1067,11 +1088,12 @@ const cursorWidth = normalize(2);
 const cursorHeight = normalize(180);
 const padding = Spacing.xl;
 
-const styles = StyleSheet.create({
+const createStyles = (theme) =>
+  StyleSheet.create({
   chartContainer: {
     width: "100%",
     position: "relative",
-    backgroundColor: Colors.background,
+    backgroundColor: theme.background,
     minHeight: normalize(200),
   },
   skeletonContainer: {
@@ -1083,7 +1105,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     zIndex: 1000,
-    backgroundColor: Colors.background,
+    backgroundColor: theme.background,
   },
   chartAnimatedContainer: {
     width: "100%",
@@ -1096,7 +1118,7 @@ const styles = StyleSheet.create({
   cursorLine: {
     position: "absolute",
     width: cursorWidth,
-    backgroundColor: Colors.textPrimary,
+    backgroundColor: theme.textPrimary,
     opacity: 0.5,
     height: cursorHeight,
     top: padding - 10,
@@ -1135,7 +1157,7 @@ const styles = StyleSheet.create({
   },
   dateText: {
     ...Typography.caption,
-    color: Colors.textSecondary,
+    color: theme.textSecondary,
     fontWeight: "600",
     bottom: 15,
   },
@@ -1143,8 +1165,8 @@ const styles = StyleSheet.create({
     ...Typography.bodyLarge,
     fontWeight: "700",
     marginBottom: Spacing.xs / 2,
-    color: Colors.textPrimary,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    color: theme.textPrimary,
+    backgroundColor: theme.tooltipChipBg,
     paddingHorizontal: Spacing.xs,
     paddingVertical: 2,
     borderRadius: BorderRadius.sm,
@@ -1153,7 +1175,7 @@ const styles = StyleSheet.create({
   tooltipLabel: {
     ...Typography.label,
     fontSize: 10,
-    color: "#FFFFFF",
+    color: theme.textPrimary,
     textAlign: "center",
     fontWeight: "900",
   },
@@ -1167,6 +1189,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: Colors.background,
+    backgroundColor: theme.background,
   },
 });

@@ -1,12 +1,12 @@
 import { StyleSheet, Text, View } from "react-native";
 import React from "react";
 
-export default function TeamHeader({ market }) {
+export default function TeamHeader({ market, textColor = "#FFFFFF" }) {
   return (
     <View style={styles.container}>
-      <Text style={styles.teamName}>{market.awayTeam.name}</Text>
-      <Text style={styles.atSymbol}>@</Text>
-      <Text style={styles.teamName}>{market.homeTeam.name}</Text>
+      <Text style={[styles.teamName, { color: textColor }]}>{market.awayTeam.name}</Text>
+      <Text style={[styles.atSymbol, { color: textColor }]}>@</Text>
+      <Text style={[styles.teamName, { color: textColor }]}>{market.homeTeam.name}</Text>
     </View>
   );
 }
@@ -22,12 +22,10 @@ const styles = StyleSheet.create({
   teamName: {
     fontSize: 30,
     fontWeight: "bold",
-    color: "white",
   },
   atSymbol: {
     fontSize: 20,
     fontWeight: "bold",
-    color: "white",
     opacity: 0.6,
   },
 });

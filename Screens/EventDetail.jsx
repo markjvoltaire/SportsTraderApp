@@ -5,13 +5,13 @@ import {
   TouchableOpacity,
   Image,
   ScrollView,
+  useColorScheme,
 } from "react-native";
 import React, { useEffect, useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import {
-  Colors,
   Spacing,
   Typography,
   BorderRadius,
@@ -23,6 +23,34 @@ import { useCallback, useMemo } from "react";
 import LottieView from "lottie-react-native";
 
 export default function EventDetail() {
+  const isDarkMode = useColorScheme() !== "light";
+  const theme = useMemo(
+    () =>
+      isDarkMode
+        ? {
+            background: "#000000",
+            primaryText: "#FFFFFF",
+            secondaryText: "#D1D5DB",
+            mutedText: "#9CA3AF",
+            iconButtonBg: "rgba(255,255,255,0.06)",
+            iconButtonBorder: "rgba(255,255,255,0.08)",
+            cardBg: "rgba(255,255,255,0.06)",
+            cardBorder: "rgba(255,255,255,0.08)",
+          }
+        : {
+            background: "#F5F7FB",
+            primaryText: "#111827",
+            secondaryText: "#374151",
+            mutedText: "#6B7280",
+            iconButtonBg: "rgba(17,24,39,0.06)",
+            iconButtonBorder: "rgba(17,24,39,0.12)",
+            cardBg: "rgba(17,24,39,0.04)",
+            cardBorder: "rgba(17,24,39,0.10)",
+          },
+    [isDarkMode]
+  );
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   const navigation = useNavigation();
   const route = useRoute();
   const event = route.params.event;
@@ -171,7 +199,7 @@ export default function EventDetail() {
           style={styles.topBarIcon}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="chevron-back" size={22} color="white" />
+          <Ionicons name="chevron-back" size={22} color={theme.primaryText} />
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
@@ -183,7 +211,7 @@ export default function EventDetail() {
         </View>
 
         <TouchableOpacity style={styles.topBarIcon}>
-          <Ionicons name="share-outline" size={20} color="white" />
+          <Ionicons name="share-outline" size={20} color={theme.primaryText} />
         </TouchableOpacity>
       </View>
       {/* Header */}
@@ -191,7 +219,7 @@ export default function EventDetail() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <Text
           style={{
-            color: "#FFFFFF",
+            color: theme.primaryText,
             fontWeight: "700",
             fontSize: 30,
             marginBottom: 15,
@@ -238,10 +266,11 @@ export default function EventDetail() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "black",
+    backgroundColor: theme.background,
   },
   logoImage: {
     width: 54,
@@ -262,9 +291,9 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.round,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: theme.iconButtonBg,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: theme.iconButtonBorder,
   },
   headerCenter: {
     position: "absolute",
@@ -278,7 +307,7 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: 16,
     fontWeight: "600",
-    color: "white",
+    color: theme.primaryText,
     textAlign: "center",
   },
   content: {
@@ -286,7 +315,7 @@ const styles = StyleSheet.create({
   },
   placeholderText: {
     ...Typography.body,
-    color: "white",
+    color: theme.primaryText,
   },
   marketsContainer: {
     marginTop: Spacing.lg,
@@ -295,28 +324,28 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: 20,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: theme.primaryText,
     marginBottom: Spacing.md,
   },
   marketCard: {
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: theme.cardBg,
     borderRadius: BorderRadius.md,
     padding: Spacing.md,
     marginBottom: Spacing.md,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: theme.cardBorder,
   },
   marketName: {
     ...Typography.body,
     fontSize: 18,
     fontWeight: "600",
-    color: "#FFFFFF",
+    color: theme.primaryText,
     marginBottom: Spacing.xs,
   },
   marketTicker: {
     ...Typography.caption,
     fontSize: 12,
-    color: "rgba(255,255,255,0.6)",
+    color: theme.mutedText,
     marginBottom: Spacing.sm,
   },
   marketInfo: {
@@ -325,13 +354,13 @@ const styles = StyleSheet.create({
   marketPrice: {
     ...Typography.body,
     fontSize: 14,
-    color: "rgba(255,255,255,0.8)",
+    color: theme.secondaryText,
     marginBottom: Spacing.xs / 2,
   },
   marketVolume: {
     ...Typography.caption,
     fontSize: 12,
-    color: "rgba(255,255,255,0.6)",
+    color: theme.mutedText,
     marginTop: Spacing.xs,
   },
   about: {
@@ -341,13 +370,13 @@ const styles = StyleSheet.create({
   },
   aboutTitle: {
     ...Typography.bodyLarge,
-    color: Colors.textPrimary,
+    color: theme.primaryText,
     marginBottom: Spacing.sm,
     fontWeight: "700",
   },
   aboutBody: {
     ...Typography.body,
-    color: Colors.textSecondary,
+    color: theme.secondaryText,
     lineHeight: 22,
   },
 });

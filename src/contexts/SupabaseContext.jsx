@@ -95,15 +95,16 @@ export const SupabaseProvider = ({ children }) => {
   const [supabase, setSupabase] = useState(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [error, setError] = useState(null);
+  const [connectionVerified, setConnectionVerified] = useState(false);
 
   useEffect(() => {
-    const initializeSupabase = () => {
+    const initializeSupabase = async () => {
       // Get Supabase credentials from environment variables
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || "";
       const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "";
 
       if (!supabaseUrl || !supabaseAnonKey) {
-        // Create a mock client when Supabase is not configured
+        setError("Supabase not configured: set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in .env");
         const mockClient = {
           auth: {
             getSession: async () => ({ data: { session: null }, error: null }),
@@ -117,6 +118,7 @@ export const SupabaseProvider = ({ children }) => {
         };
         setSupabase(mockClient);
         setIsInitialized(true);
+        setConnectionVerified(false);
         return;
       }
 
@@ -129,9 +131,20 @@ export const SupabaseProvider = ({ children }) => {
         });
         setSupabase(client);
         setError(null);
+
+        // Verify connection with a minimal query (RLS may return empty; we only check reachability)
+        try {
+          const { error: pingError } = await client.from("users").select("id").limit(1).maybeSingle();
+          const connected = !pingError || pingError.code === "PGRST116";
+          setConnectionVerified(connected);
+          if (pingError && pingError.code !== "PGRST116") {
+            setError(pingError.message);
+          }
+        } catch {
+          setConnectionVerified(false);
+        }
       } catch (err) {
         setError(err?.message || "Failed to initialize Supabase");
-        // Create a mock client that won't crash but will return errors
         const mockClient = {
           auth: {
             getSession: async () => ({
@@ -147,6 +160,7 @@ export const SupabaseProvider = ({ children }) => {
           from: () => createMockQueryBuilder(),
         };
         setSupabase(mockClient);
+        setConnectionVerified(false);
       } finally {
         setIsInitialized(true);
       }
@@ -160,12 +174,13 @@ export const SupabaseProvider = ({ children }) => {
       supabase,
       isInitialized,
       error,
+      connectionVerified,
       isConfigured: !!(
         process.env.EXPO_PUBLIC_SUPABASE_URL &&
         process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
       ),
     }),
-    [supabase, isInitialized, error]
+    [supabase, isInitialized, error, connectionVerified]
   );
 
   return (

@@ -5,6 +5,7 @@ import {
   View,
   ScrollView,
   TouchableOpacity,
+  useColorScheme,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -142,6 +143,10 @@ const normalizeMarket = (market) => {
 ======================= */
 
 export default function MarketDetailScreen({ route: routeProp }) {
+  const isDarkMode = useColorScheme() !== "light";
+  const theme = isDarkMode ? DARK_THEME : LIGHT_THEME;
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   const navigation = useNavigation();
   const routeHook = useRoute();
   const rawData = routeHook?.params?.market || routeProp?.params?.market;
@@ -194,7 +199,7 @@ export default function MarketDetailScreen({ route: routeProp }) {
           style={styles.headerButton}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
+          <Ionicons name="chevron-back" size={22} color={theme.textPrimary} />
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
@@ -204,12 +209,12 @@ export default function MarketDetailScreen({ route: routeProp }) {
         </View>
 
         <TouchableOpacity style={styles.headerButton}>
-          <Ionicons name="share-outline" size={20} color={Colors.textPrimary} />
+          <Ionicons name="share-outline" size={20} color={theme.textPrimary} />
         </TouchableOpacity>
       </View>
 
-      <TeamHeader market={market} />
-      <MarketChart market={market} />
+      <TeamHeader market={market} textColor={theme.textPrimary} />
+      <MarketChart market={market} theme={theme} />
 
       {/* Trade buttons - Buy Away / Buy Home */}
       <View style={styles.tradeSection}>
@@ -233,10 +238,29 @@ export default function MarketDetailScreen({ route: routeProp }) {
    Styles
 ======================= */
 
-const styles = StyleSheet.create({
+const DARK_THEME = {
+  background: "#000000",
+  textPrimary: "#FFFFFF",
+  textSecondary: "#CCCCCC",
+  headerButtonBg: "rgba(255,255,255,0.06)",
+  headerButtonBorder: "rgba(255,255,255,0.08)",
+  guideLineColor: "rgba(255,255,255,0.12)",
+};
+
+const LIGHT_THEME = {
+  background: "#F5F7FB",
+  textPrimary: "#111827",
+  textSecondary: "#4B5563",
+  headerButtonBg: "rgba(17,24,39,0.06)",
+  headerButtonBorder: "rgba(17,24,39,0.12)",
+  guideLineColor: "rgba(17,24,39,0.18)",
+};
+
+const createStyles = (theme) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: theme.background,
   },
   header: {
     flexDirection: "row",
@@ -253,9 +277,9 @@ const styles = StyleSheet.create({
     borderRadius: 19,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: theme.headerButtonBg,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: theme.headerButtonBorder,
   },
   headerCenter: {
     position: "absolute",
@@ -274,14 +298,14 @@ const styles = StyleSheet.create({
   countdownText: {
     fontSize: 14,
     fontWeight: "700",
-    color: Colors.textPrimary,
+    color: theme.textPrimary,
     letterSpacing: 0.3,
     textAlign: "center",
   },
   countdown: {
     fontSize: 16,
     fontWeight: "700",
-    color: Colors.textPrimary,
+    color: theme.textPrimary,
     letterSpacing: 0.3,
   },
   centerContainer: {
@@ -297,7 +321,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     ...Typography.body,
-    color: Colors.textSecondary,
+    color: theme.textSecondary,
     textAlign: "center",
   },
 });
