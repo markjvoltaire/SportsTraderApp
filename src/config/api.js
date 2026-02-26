@@ -9,6 +9,9 @@ const getApiBaseUrl = () => {
     return process.env.EXPO_PUBLIC_API_BASE_URL.replace(/\/$/, "");
   }
   return __DEV__ ? "http://localhost:3000" : "http://localhost:3000";
+  // return __DEV__ ? "https://scoretradebackend.onrender.com" : "https://scoretradebackend.onrender.com";
+
+ 
 };
 
 const API_BASE_URL = getApiBaseUrl();

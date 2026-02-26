@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import { usePrivy, useEmbeddedEthereumWallet } from "@privy-io/expo";
+import { usePrivy, useEmbeddedSolanaWallet } from "@privy-io/expo";
 
 import { useAuth } from "../src/contexts/AuthContext";
 import LottieLoader from "../src/components/ui/LottieLoader";
@@ -23,20 +23,22 @@ import {
 import { normalizeFont } from "../src/utils/dimensions";
 import { truncateHash, formatCurrency } from "../src/utils/formatters";
 import { getWalletBalance } from "../src/services/walletService";
+import API_BASE_URL from "../src/config/api";
 
 export default function WalletScreen() {
   const isDarkMode = useColorScheme() !== "light";
   const theme = isDarkMode ? DARK_THEME : LIGHT_THEME;
   const styles = useMemo(() => createStyles(theme), [theme]);
 
-  const { user, session } = useAuth();
+  const { user, session, checkProofStatus, walletAddress: authWalletAddress, proofStatus } = useAuth();
   const navigation = useNavigation();
   const { user: privyUser } = usePrivy();
-  const { wallets } = useEmbeddedEthereumWallet();
+  const solanaWalletCtx = useEmbeddedSolanaWallet();
   
   const [balance, setBalance] = useState(null);
   const [loadingBalance, setLoadingBalance] = useState(false);
   const [walletAddress, setWalletAddress] = useState(null);
+  const [coinflowConfig, setCoinflowConfig] = useState(null);
 
   // Log wallet address when it changes
   useEffect(() => {
@@ -45,20 +47,55 @@ export default function WalletScreen() {
     }
   }, [walletAddress]);
 
-  // Get wallet address from Privy
+  // Fetch Coinflow session key + merchant config from backend
   useEffect(() => {
-    const embeddedWallet = privyUser?.linked_accounts?.find(
-      (account) =>
-        account.type === "wallet" && account.wallet_client_type === "privy"
-    ) || wallets?.[0];
+    if (!walletAddress) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const url = `${API_BASE_URL}/api/coinflow/auth/session-key?walletAddress=${encodeURIComponent(walletAddress)}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!cancelled && res.ok) {
+          const key = data?.sessionKey ?? data?.key ?? data?.session_key;
+          console.log("[WalletScreen] Coinflow session key:", key);
+          if (key && data?.merchantId) {
+            setCoinflowConfig({
+              sessionKey: key,
+              merchantId: data.merchantId,
+              env: data.env || "sandbox",
+            });
+          }
+        }
+      } catch (err) {
+        if (!cancelled) console.warn("Coinflow session-key fetch failed:", err?.message);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [walletAddress]);
 
-    if (embeddedWallet?.address) {
-      console.log("💼 Wallet Address:", embeddedWallet.address);
-      setWalletAddress(embeddedWallet.address);
-    } else {
-      console.log("⚠️ No wallet address found");
+  // Get Solana wallet address from Privy
+  useEffect(() => {
+    const solanaWallet = solanaWalletCtx?.wallets?.[0];
+    if (solanaWallet?.address) {
+      console.log("💼 Solana Wallet Address:", solanaWallet.address);
+      setWalletAddress(solanaWallet.address);
+      return;
     }
-  }, [privyUser, wallets]);
+
+    const linkedSolana = privyUser?.linked_accounts?.find(
+      (account) =>
+        account.type === "wallet" &&
+        account.chain_type === "solana"
+    );
+    if (linkedSolana?.address) {
+      console.log("💼 Linked Solana Address:", linkedSolana.address);
+      setWalletAddress(linkedSolana.address);
+      return;
+    }
+
+    console.log("⚠️ No Solana wallet address found");
+  }, [privyUser, solanaWalletCtx]);
 
   // Fetch wallet balance
   useEffect(() => {
@@ -90,8 +127,36 @@ export default function WalletScreen() {
     }
   };
 
-  const handleDeposit = () => {
-    Alert.alert("Coming Soon", "Deposit functionality is coming soon.");
+  const handleDeposit = async () => {
+    if (!authWalletAddress) {
+      Alert.alert("Wallet not ready", "Please wait for wallet setup and try again.");
+      return;
+    }
+
+    try {
+      const proofResult =
+        proofStatus?.status === "verified"
+          ? { status: "verified", verified: true }
+          : await checkProofStatus();
+      if (proofResult?.verified || proofResult?.status === "verified") {
+        navigation.navigate("Deposit", {
+          walletAddress: authWalletAddress,
+          coinflowConfig,
+        });
+        return;
+      }
+      let rootNav = navigation;
+      while (rootNav.getParent()) {
+        rootNav = rootNav.getParent();
+      }
+      rootNav.navigate("ProofVerification");
+    } catch (_err) {
+      let rootNav = navigation;
+      while (rootNav.getParent()) {
+        rootNav = rootNav.getParent();
+      }
+      rootNav.navigate("ProofVerification");
+    }
   };
 
   const handleCopyAddress = () => {

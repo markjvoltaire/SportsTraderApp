@@ -292,7 +292,7 @@ const rightColumnDuplicated = [...rightColumn, ...rightColumn, ...rightColumn, .
           ]}
         >
           <Pressable
-            onPress={() => navigation.navigate('Login')}
+              onPress={() => navigation.navigate('Login')}
             style={[
               styles.getStartedButton,
               isDarkMode ? styles.getStartedButtonDark : styles.getStartedButtonLight,
@@ -304,10 +304,10 @@ const rightColumnDuplicated = [...rightColumn, ...rightColumn, ...rightColumn, .
                 isDarkMode ? styles.getStartedTextDark : styles.getStartedTextLight,
               ]}
             >
-              Get Started
+             Get Started
             </Text>
           </Pressable>
-     
+
         </Animated.View>
       </View>
     
@@ -418,6 +418,32 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 16,
     elevation: 8,
+  },
+  loginButton: {
+    marginTop: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    borderRadius: 32,
+    borderWidth: 1,
+  },
+  loginButtonDark: {
+    borderColor: "#FFFFFF",
+    backgroundColor: "transparent",
+  },
+  loginButtonLight: {
+    borderColor: "#111827",
+    backgroundColor: "transparent",
+  },
+  loginButtonText: {
+    fontSize: 17,
+    fontWeight: "700",
+  },
+  loginButtonTextDark: {
+    color: "#FFFFFF",
+  },
+  loginButtonTextLight: {
+    color: "#111827",
   },
   getStartedButtonDark: {
     backgroundColor: 'white',

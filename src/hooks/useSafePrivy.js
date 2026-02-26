@@ -1,4 +1,4 @@
-import { usePrivy, useEmbeddedEthereumWallet } from "@privy-io/expo";
+import { usePrivy, useEmbeddedSolanaWallet } from "@privy-io/expo";
 
 /**
  * Safe wrapper for Privy hooks that handles cases where PrivyProvider
@@ -16,16 +16,13 @@ export function useSafePrivy() {
   }
 
   try {
-    walletContext = useEmbeddedEthereumWallet();
+    walletContext = useEmbeddedSolanaWallet();
   } catch (err) {
-    // If wallet context fails, that's okay - we'll continue without it
     if (!error) {
       error = err;
     }
   }
 
-  // Safely extract values with null checks
-  // Privy Expo SDK uses 'isReady' (not 'ready') and 'user' for authentication status
   const privyReady = privyContext?.isReady ?? false;
   const privyAuthenticated = !!privyContext?.user;
   const privyWallets = walletContext?.wallets ?? null;

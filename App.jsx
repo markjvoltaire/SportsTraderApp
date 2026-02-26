@@ -29,16 +29,15 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AuthProvider, useAuth } from "./src/contexts/AuthContext";
 import { SupabaseProvider, useSupabase } from "./src/contexts/SupabaseContext";
+import { OnboardingProvider } from "./src/contexts/OnboardingContext";
 import WelcomeScreen from "./Screens/WelcomeScreen";
 import LoginScreen from "./Screens/LoginScreen";
 import ProofVerificationScreen from "./Screens/ProofVerificationScreen";
 import LottieLoader from "./src/components/ui/LottieLoader";
 import ForgotPasswordScreen from "./Screens/ForgotPasswordScreen";
-import HomeScreen from "./Screens/HomeScreen";
+import NewHome from "./Screens/NewHome";
 import PortfolioScreen from "./Screens/PortfolioScreen";
 import ProfileScreen from "./Screens/ProfileScreen";
-import AddFundsScreen from "./Screens/AddFundsScreen";
-import DepositAmountScreen from "./Screens/DepositAmountScreen";
 import MarketDetailScreen from "./Screens/MarketDetailScreen";
 import EventDetail from "./Screens/EventDetail";
 import { Colors, Spacing, Typography } from "./src/constants/theme";
@@ -50,9 +49,13 @@ import SplashScreen from "./Screens/SplashScreen";
 import ScanScreen from "./Screens/ScanScreen";
 import WalletScreen from "./Screens/WalletScreen";
 import DepositScreen from "./Screens/DepositScreen";
+import FinOnboardingBasicInfoScreen from "./Screens/FinOnboardingBasicInfoScreen";
+import FinOnboardingAddressScreen from "./Screens/FinOnboardingAddressScreen";
+import FinOnboardingFinancialScreen from "./Screens/FinOnboardingFinancialScreen";
+import FinOnboardingDocumentsScreen from "./Screens/FinOnboardingDocumentsScreen";
+import FinOnboardingPhoneScreen from "./Screens/FinOnboardingPhoneScreen";
 
-// 1. Import Crossmint Provider
-import { CrossmintProvider } from "@crossmint/client-sdk-react-native-ui";
+import HomeScreen from "./Screens/HomeScreen";
 
 const Tab = createBottomTabNavigator();
 const HomeStack = createNativeStackNavigator();
@@ -60,6 +63,7 @@ const ProfileStack = createNativeStackNavigator();
 const ScanStack = createNativeStackNavigator();
 const WalletStack = createNativeStackNavigator();
 const AuthStack = createNativeStackNavigator();
+const OnboardingStack = createNativeStackNavigator();
 const RootStack = createNativeStackNavigator();
 
 function HomeStackScreen() {
@@ -67,7 +71,7 @@ function HomeStackScreen() {
     <HomeStack.Navigator initialRouteName="HomeMain">
       <HomeStack.Screen
         name="HomeMain"
-        component={HomeScreen}
+        component={NewHome}
         options={{ headerShown: false, headerBackTitle: "Home" }}
       />
 
@@ -137,16 +141,6 @@ function ProfileStackScreen() {
         component={ProfileScreen}
         options={{ headerShown: false }}
       />
-      <ProfileStack.Screen
-        name="DepositAmount"
-        component={DepositAmountScreen}
-        options={{ headerShown: false }}
-      />
-      <ProfileStack.Screen
-        name="AddFunds"
-        component={AddFundsScreen}
-        options={{ headerShown: false }}
-      />
   
     </ProfileStack.Navigator>
   );
@@ -159,12 +153,25 @@ function AuthNavigator() {
       initialRouteName="Welcome"
     >
       <AuthStack.Screen name="Welcome" component={WelcomeScreen} />
+      <AuthStack.Screen name="Onboarding" component={OnboardingStackScreen} />
       <AuthStack.Screen name="Login" component={LoginScreen} />
       <AuthStack.Screen
         name="ForgotPassword"
         component={ForgotPasswordScreen}
       />
     </AuthStack.Navigator>
+  );
+}
+
+function OnboardingStackScreen() {
+  return (
+    <OnboardingStack.Navigator initialRouteName="OnboardingBasicInfo" screenOptions={{ headerShown: false }}>
+      <OnboardingStack.Screen name="OnboardingBasicInfo" component={FinOnboardingBasicInfoScreen} />
+      <OnboardingStack.Screen name="OnboardingAddress" component={FinOnboardingAddressScreen} />
+      <OnboardingStack.Screen name="OnboardingFinancial" component={FinOnboardingFinancialScreen} />
+      <OnboardingStack.Screen name="OnboardingDocuments" component={FinOnboardingDocumentsScreen} />
+      <OnboardingStack.Screen name="OnboardingPhone" component={FinOnboardingPhoneScreen} />
+    </OnboardingStack.Navigator>
   );
 }
 
@@ -724,20 +731,11 @@ function NavigationHandler({ navigationRef }) {
             .then(({ data, error }) => {
               if (error) {
                 console.warn("Supabase users fetch by id failed:", error.message);
-                navigationRef.reset({
-                  index: 0,
-                  routes: [{ name: "Main" }],
-                });
-                return;
+              } else {
+                console.log("Fetched user by id:", data);
               }
-              console.log("Fetched user by id:", data);
-              if (data?.proof === false) {
-                navigationRef.reset({
-                  index: 0,
-                  routes: [{ name: "ProofVerification" }],
-                });
-                return;
-              }
+              // Always go to Main after login. Proof verification only shown
+              // during onboarding and when user attempts to deposit.
               navigationRef.reset({
                 index: 0,
                 routes: [{ name: "Main" }],
@@ -795,9 +793,6 @@ export default function App() {
   // Get Privy App ID and Client ID from environment variables
   const PRIVY_APP_ID = process.env.EXPO_PUBLIC_PRIVY_APP_ID;
   const PRIVY_CLIENT_ID = process.env.EXPO_PUBLIC_PRIVY_CLIENT_ID;
-  const CROSSMINT_API_KEY =
-    process.env.EXPO_PUBLIC_CROSSMINT_CLIENT_SIDE_API_KEY || "";
-
   // Validate critical environment variables in production builds
   // This helps catch configuration issues early
   if (!__DEV__) {
@@ -844,7 +839,6 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <CrossmintProvider apiKey={CROSSMINT_API_KEY}>
  <PrivyProvider
    appId={PRIVY_APP_ID || "placeholder-app-id"}
    clientId={PRIVY_CLIENT_ID || "placeholder-client-id"}
@@ -864,20 +858,21 @@ export default function App() {
           <SupabaseProvider>
             <SupabaseInitializedWrapper>
               <AuthProvider>
-                <SafeAreaProvider>
-                  <NavigationContainer ref={navigationRef}>
-                    <NavigationHandler navigationRef={navigationRef} />
-                    <ProofDeepLinkHandler navigationRef={navigationRef} />
-                    <StatusBar style="light" />
-                    <RootNavigator />
-                    <PrivyElements />
-                  </NavigationContainer>
-                </SafeAreaProvider>
+                <OnboardingProvider>
+                  <SafeAreaProvider>
+                    <NavigationContainer ref={navigationRef}>
+                      <NavigationHandler navigationRef={navigationRef} />
+                      <ProofDeepLinkHandler navigationRef={navigationRef} />
+                      <StatusBar style="light" />
+                      <RootNavigator />
+                      <PrivyElements />
+                    </NavigationContainer>
+                  </SafeAreaProvider>
+                </OnboardingProvider>
               </AuthProvider>
             </SupabaseInitializedWrapper>
           </SupabaseProvider>
         </PrivyProvider>
-      </CrossmintProvider>
     </ErrorBoundary>
   );
 }

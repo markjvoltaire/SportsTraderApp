@@ -11,6 +11,7 @@ import Svg, { Polyline } from "react-native-svg";
 import { getNFLTeamColor, getNBATeamColor } from "../../constants/teamColors";
 import { formatCurrency } from "../../utils/formatters";
 import GameCardDetails from "./GameCardDetails";
+import BasketballIcon from "../ui/BasketballIcon";
 
 const WEBSOCKET_URL = "wss://dev-prediction-markets-api.dflow.net/api/v1/ws";
 
@@ -235,6 +236,7 @@ export default function GameCard({ event, competitionFallback }) {
       event?.seriesTicker,
       market?.ticker,
       event?.ticker,
+      competitionFallback,
     ]
       .filter(Boolean)
       .join(" ");
@@ -281,8 +283,9 @@ export default function GameCard({ event, competitionFallback }) {
       homeColor: homeColor ? brightenColor(homeColor, colorBoost) : null,
       yesColor: yesColor ? brightenColor(yesColor, colorBoost) : null,
       noColor: noColor ? brightenColor(noColor, colorBoost) : null,
+      isProBasketball,
     };
-  }, [teamData, market, event]);
+  }, [teamData, market, event, competitionFallback]);
 
   // Get market tickers for WebSocket subscription
   const marketTickers = useMemo(() => {
@@ -577,12 +580,34 @@ export default function GameCard({ event, competitionFallback }) {
         <View style={styles.optionsContainer}>
           {/* Left Option */}
           <View style={styles.optionLeft}>
-            <Text style={styles.optionTeamName}>{leftTeam}</Text>
+            {teamColors.isProBasketball ? (
+              <View style={styles.optionTeamRow}>
+                <BasketballIcon
+                  size={24}
+                  bgColor={leftTeamColor}
+                  iconColor="white"
+                />
+                <Text style={styles.optionTeamName}>{leftTeam}</Text>
+              </View>
+            ) : (
+              <Text style={styles.optionTeamName}>{leftTeam}</Text>
+            )}
           </View>
 
           {/* Right Option */}
           <View style={styles.optionRight}>
-            <Text style={styles.optionTeamName}>{rightTeam}</Text>
+            {teamColors.isProBasketball ? (
+              <View style={styles.optionTeamRow}>
+                <BasketballIcon
+                  size={24}
+                  bgColor={rightTeamColor}
+                  iconColor="white"
+                />
+                <Text style={styles.optionTeamName}>{rightTeam}</Text>
+              </View>
+            ) : (
+              <Text style={styles.optionTeamName}>{rightTeam}</Text>
+            )}
           </View>
         </View>
         {/* Progress Bar */}
@@ -696,6 +721,11 @@ const createStyles = (theme) =>
   },
   optionRight: {
     alignItems: "flex-end",
+  },
+  optionTeamRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   optionTeamName: {
     fontSize: 16,

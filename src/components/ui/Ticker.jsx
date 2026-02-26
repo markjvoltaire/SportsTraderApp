@@ -2,7 +2,6 @@ import {
   StyleSheet,
   View,
   Animated,
-  PanResponder,
   Easing,
   Text,
   useColorScheme,
@@ -39,31 +38,32 @@ export default function Ticker({ items }) {
       return;
     }
 
-    // Fetch NFL futures data
-    const fetchNFLData = async () => {
+    // Fetch sports markets (events with nested markets)
+    const fetchData = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/futures/nfl`);
+        const response = await fetch(`${API_BASE_URL}/api/sports-markets`);
         const data = await response.json();
 
-        if (data.events && data.events.length > 0) {
+        const events = Array.isArray(data.events) ? data.events : [];
+        if (events.length > 0) {
           // Collect all markets from all events where percentage > 0
           const allMarkets = [];
-          
-          data.events.forEach(event => {
+
+          events.forEach(event => {
             if (event.markets && event.markets.length > 0) {
-              event.markets.forEach(market => {
-                if (market.yesBid) {
-                  const price = Math.round(parseFloat(market.yesBid) * 100);
-                  // Only include markets with percentage > 0
-                  if (price > 0) {
-                    allMarkets.push({
-                      eventTitle: event.title,
-                      marketTitle: market.yesSubTitle,
-                      price: price,
-                    });
-                  }
-                }
-              });
+              const withPrice = event.markets
+                .filter(m => m.yesBid)
+                .map(market => ({
+                  eventTitle: event.title,
+                  marketTitle: market.yesSubTitle,
+                  price: Math.round(parseFloat(market.yesBid) * 100),
+                }))
+                .filter(m => m.price > 0);
+              // Top 3 per event: sort by price descending, take 3
+              const top3 = withPrice
+                .sort((a, b) => b.price - a.price)
+                .slice(0, 3);
+              allMarkets.push(...top3);
             }
           });
           
@@ -75,21 +75,19 @@ export default function Ticker({ items }) {
           setTickerItems(formattedItems);
         }
       } catch (error) {
-        console.error('Error fetching NFL data:', error);
+        console.error('Error fetching ticker data:', error);
         setTickerItems([]);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchNFLData();
+    fetchData();
   }, [items]);
 
   const displayItems = items || tickerItems;
   const tickerAnim = useRef(new Animated.Value(0)).current;
   const tickerAnimationRef = useRef(null);
-  const dragStartValue = useRef(0);
-  const isDragging = useRef(false);
 
   // 1. DIMENSIONS (Must be consistent for the math to work)
   const ITEM_WIDTH = 320;
@@ -100,29 +98,6 @@ export default function Ticker({ items }) {
   // Speed control: pixels per millisecond (lower = slower)
   const SPEED = 0.04;
 
-  const normalizePosition = (value) => {
-    // Normalize to range (-SINGLE_SET_WIDTH, 0]
-    if (value > 0) {
-      // Positive value (dragged backward) - convert to equivalent negative position
-      // Use modulo to wrap it to the negative range
-      const mod = value % SINGLE_SET_WIDTH;
-      if (mod === 0) {
-        return 0;
-      }
-      return mod - SINGLE_SET_WIDTH;
-    } else if (value <= -SINGLE_SET_WIDTH) {
-      // Too far negative - wrap around to the valid range
-      const mod =
-        ((value % SINGLE_SET_WIDTH) + SINGLE_SET_WIDTH) % SINGLE_SET_WIDTH;
-      if (mod === 0) {
-        return 0;
-      }
-      return mod - SINGLE_SET_WIDTH;
-    }
-    // Already in valid range
-    return value;
-  };
-
   const startTicker = (startValue) => {
     // Stop any current animation
     if (tickerAnimationRef.current) {
@@ -130,18 +105,11 @@ export default function Ticker({ items }) {
       tickerAnimationRef.current = null;
     }
 
-    // Normalize the start position
-    const normalizedStart = normalizePosition(startValue);
-    tickerAnim.setValue(normalizedStart);
-
-    // Calculate duration based on the distance remaining in this loop
-    // If normalizedStart is 0, we want to go the full distance
+    tickerAnim.setValue(startValue);
     const targetValue = -SINGLE_SET_WIDTH;
-    const distanceToGo = Math.abs(targetValue - normalizedStart);
+    const distanceToGo = Math.abs(targetValue - startValue);
 
-    // Ensure we have a valid distance (should always be > 0 unless already at target)
     if (distanceToGo < 1) {
-      // Already at target, snap to 0 and restart
       tickerAnim.setValue(0);
       startTicker(0);
       return;
@@ -164,37 +132,6 @@ export default function Ticker({ items }) {
       }
     });
   };
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
-        // Stop animation and capture current position
-        isDragging.current = true;
-        tickerAnimationRef.current?.stop();
-        tickerAnim.stopAnimation((value) => {
-          dragStartValue.current = value;
-        });
-      },
-      onPanResponderMove: (evt, gestureState) => {
-        if (isDragging.current) {
-          // Update position based on drag
-          const newValue = dragStartValue.current + gestureState.dx;
-          tickerAnim.setValue(newValue);
-        }
-      },
-      onPanResponderRelease: (evt, gestureState) => {
-        if (isDragging.current) {
-          // Get final position after drag
-          const finalValue = dragStartValue.current + gestureState.dx;
-          isDragging.current = false;
-          // Resume animation from final position
-          startTicker(finalValue);
-        }
-      },
-    })
-  ).current;
 
   useEffect(() => {
     if (!loading && displayItems.length > 0) {
@@ -260,7 +197,7 @@ export default function Ticker({ items }) {
   }
 
   return (
-    <View style={styles.tickerContainer} {...panResponder.panHandlers}>
+    <View style={styles.tickerContainer} pointerEvents="none">
       <Animated.View
         style={[
           styles.tickerContent,
@@ -287,10 +224,14 @@ const createStyles = (textColor, skeletonColor) =>
   StyleSheet.create({
     tickerContainer: {
       height: 20,
-      marginBottom: 10,
+      marginBottom: 1,
+      marginTop: 1,
       bottom: 5,
       overflow: "hidden",
       justifyContent: "center",
+      marginHorizontal: 15,
+      marginVertical: 8,
+   
     },
     tickerContent: {
       flexDirection: "row",
@@ -303,8 +244,9 @@ const createStyles = (textColor, skeletonColor) =>
     },
     tickerText: {
       color: textColor,
-      fontSize: 14,
+      fontSize: 15,
       fontWeight: "600",
+      fontFamily: "SubwayTickerGrid",
     },
     skeletonItem: {
       height: 14,

@@ -11,6 +11,8 @@ import {
   Platform,
   TouchableWithoutFeedback,
   Keyboard,
+  ActivityIndicator,
+  PanResponder,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -26,18 +28,26 @@ export default function PurchaseModal({
   price,
   color,
   market,
+  onConfirm,
+  loading = false,
+  error = null,
 }) {
   const [quantity, setQuantity] = useState("10");
   const [isVisible, setIsVisible] = useState(false);
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
   const keyboardOffset = useRef(new Animated.Value(0)).current;
+  const panY = useRef(new Animated.Value(0)).current;
+  const lastPanY = useRef(0);
 
   useEffect(() => {
     if (visible) {
       setIsVisible(true);
       // Reset quantity when modal opens
       setQuantity("10");
+      // Reset pan values
+      panY.setValue(0);
+      lastPanY.current = 0;
       // Slide up and fade in backdrop
       Animated.parallel([
         Animated.spring(slideAnim, {
@@ -112,18 +122,24 @@ export default function PurchaseModal({
   };
 
   const numQuantity = parseInt(quantity) || 0;
-  const totalCost = numQuantity * price;
+  // Calculate total cost from quantity and price
+  const totalCost = numQuantity > 0 && price > 0 
+    ? Math.round(numQuantity * price * 1e6) / 1e6 
+    : 0;
+  // Potential payout: if team wins, each share is worth $1
+  // So payout = quantity * $1
+  const potentialPayout = numQuantity * 1;
+  const potentialProfit = potentialPayout - totalCost;
 
   const handleConfirmPurchase = () => {
-    console.log("Purchase confirmed:", {
-      team,
-      price,
+    const payload = {
       quantity: numQuantity,
       totalCost,
+      team,
+      price,
       market,
-    });
-    // Add your purchase logic here
-    handleClose();
+    };
+    onConfirm?.(payload);
   };
 
   const handleQuantityChange = (text) => {
@@ -141,8 +157,79 @@ export default function PurchaseModal({
     const current = parseInt(quantity) || 0;
     if (current > 10) {
       setQuantity(String(current - 10));
+    } else if (current > 0) {
+      setQuantity("0");
     }
   };
+
+  // Pan responder for swipe down gesture
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        // Only respond to downward vertical gestures
+        return gestureState.dy > 10 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx) * 2;
+      },
+      onPanResponderGrant: () => {
+        // Stop any ongoing animations and capture current position
+        panY.setOffset(lastPanY.current);
+        panY.setValue(0);
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        // Only allow downward swipes
+        if (gestureState.dy > 0) {
+          panY.setValue(gestureState.dy);
+          // Update backdrop opacity based on drag distance
+          const dragProgress = Math.min(gestureState.dy / 300, 1);
+          backdropAnim.setValue(1 - dragProgress * 0.6);
+        }
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        panY.flattenOffset();
+        lastPanY.current = gestureState.dy;
+
+        // If swiped down more than 150px, close the modal
+        const dismissThreshold = 150;
+        if (gestureState.dy > dismissThreshold || gestureState.vy > 0.5) {
+          // Dismiss modal
+          Animated.parallel([
+            Animated.timing(panY, {
+              toValue: SCREEN_HEIGHT,
+              duration: 250,
+              useNativeDriver: true,
+            }),
+            Animated.timing(backdropAnim, {
+              toValue: 0,
+              duration: 250,
+              useNativeDriver: true,
+            }),
+          ]).start(() => {
+            setIsVisible(false);
+            onClose();
+            panY.setValue(0);
+            lastPanY.current = 0;
+          });
+        } else {
+          // Snap back to original position
+          Animated.parallel([
+            Animated.spring(panY, {
+              toValue: 0,
+              useNativeDriver: true,
+              tension: 65,
+              friction: 11,
+            }),
+            Animated.timing(backdropAnim, {
+              toValue: 1,
+              duration: 250,
+              useNativeDriver: true,
+            }),
+          ]).start(() => {
+            lastPanY.current = 0;
+          });
+        }
+      },
+    })
+  ).current;
 
   return (
     <Modal
@@ -171,6 +258,7 @@ export default function PurchaseModal({
             {
               transform: [
                 { translateY: slideAnim },
+                { translateY: panY },
                 { translateY: keyboardOffset },
               ],
             },
@@ -192,11 +280,16 @@ export default function PurchaseModal({
             pointerEvents="none"
           />
 
-          {/* Handle Bar */}
-          <View style={styles.handleBar} />
+          {/* Handle Bar - Draggable Area */}
+          <View 
+            style={styles.handleBarContainer}
+            {...panResponder.panHandlers}
+          >
+            <View style={styles.handleBar} />
+          </View>
 
           {/* Header */}
-          <View style={styles.header}>
+          <View style={styles.header} {...panResponder.panHandlers}>
             <View style={styles.headerLeft}>
               <View
                 style={[styles.colorIndicator, { backgroundColor: color }]}
@@ -259,32 +352,54 @@ export default function PurchaseModal({
             </View>
           </View>
 
-          {/* Potential Return */}
-          <View style={styles.infoBox}>
-            <Ionicons
-              name="information-circle-outline"
-              size={20}
-              color={Colors.textSecondary}
-            />
-            <Text style={styles.infoText}>
-              Potential return: {formatCurrency(numQuantity)} if {team} wins
-            </Text>
+          {/* Potential Payout */}
+          <View style={styles.payoutBox}>
+            <View style={styles.payoutHeader}>
+              <Ionicons
+                name="trophy-outline"
+                size={20}
+                color={color}
+              />
+              <Text style={styles.payoutHeaderText}>Potential Payout</Text>
+            </View>
+            <View style={styles.payoutRow}>
+              <Text style={styles.payoutLabel}>If {team} wins:</Text>
+              <Text style={styles.payoutValue}>
+                {formatCurrency(potentialPayout)}
+              </Text>
+            </View>
+            <View style={styles.payoutRow}>
+              <Text style={styles.profitLabel}>Potential Profit:</Text>
+              <Text style={[styles.profitValue, { color: color }]}>
+                {formatCurrency(potentialProfit)}
+              </Text>
+            </View>
           </View>
+
+          {error ? (
+            <Text style={styles.errorText} numberOfLines={2}>
+              {error}
+            </Text>
+          ) : null}
 
           {/* Confirm Button */}
           <TouchableOpacity
             style={[
               styles.confirmButton,
               { backgroundColor: color },
-              numQuantity === 0 && styles.confirmButtonDisabled,
+              (numQuantity === 0 || loading) && styles.confirmButtonDisabled,
             ]}
             onPress={handleConfirmPurchase}
-            disabled={numQuantity === 0}
+            disabled={numQuantity === 0 || loading}
             activeOpacity={0.8}
           >
-            <Text style={styles.confirmButtonText}>
-              Confirm Purchase · {formatCurrency(totalCost)}
-            </Text>
+            {loading ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.confirmButtonText}>
+                Confirm Purchase · {formatCurrency(totalCost)}
+              </Text>
+            )}
           </TouchableOpacity>
         </Animated.View>
       </View>
@@ -328,13 +443,19 @@ const styles = StyleSheet.create({
     height: 150,
     zIndex: 0,
   },
+  handleBarContainer: {
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+    marginHorizontal: -Spacing.xl,
+    marginTop: -Spacing.sm,
+    zIndex: 10,
+  },
   handleBar: {
     width: 40,
     height: 4,
     backgroundColor: Colors.border,
     borderRadius: 2,
     alignSelf: "center",
-    marginBottom: Spacing.md,
     zIndex: 1,
   },
   header: {
@@ -439,21 +560,52 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: Colors.textPrimary,
   },
-  infoBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
+  payoutBox: {
     backgroundColor: Colors.background,
-    padding: Spacing.md,
+    padding: Spacing.lg,
     borderRadius: 12,
     marginBottom: Spacing.lg,
     zIndex: 1,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
-  infoText: {
-    flex: 1,
-    fontSize: 13,
+  payoutHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  payoutHeaderText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: Colors.textPrimary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  payoutRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: Spacing.xs,
+  },
+  payoutLabel: {
+    fontSize: 15,
     fontWeight: "500",
     color: Colors.textSecondary,
+  },
+  payoutValue: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: Colors.textPrimary,
+  },
+  profitLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: Colors.textPrimary,
+  },
+  profitValue: {
+    fontSize: 18,
+    fontWeight: "700",
   },
   confirmButton: {
     height: 56,
@@ -469,6 +621,13 @@ const styles = StyleSheet.create({
   },
   confirmButtonDisabled: {
     opacity: 0.5,
+  },
+  errorText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: Colors.danger || "#EF4444",
+    marginBottom: Spacing.md,
+    zIndex: 1,
   },
   confirmButtonText: {
     fontSize: 17,

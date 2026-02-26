@@ -9,12 +9,7 @@ const { width, height } = Dimensions.get("window");
 
 export default function SplashScreen() {
   const navigation = useNavigation();
-  const {
-    session,
-    loading,
-    walletAddress,
-    proofStatus,
-  } = useAuth();
+  const { session, loading } = useAuth();
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
   // Hide the native splash screen when this component mounts
@@ -48,17 +43,9 @@ export default function SplashScreen() {
           return;
         }
 
-        // Signed in: check if Proof KYC verification is needed
-        const proofResolved =
-          proofStatus.status !== "idle" && proofStatus.status !== "loading";
-        const needsProof =
-          walletAddress && proofResolved && proofStatus.verified === false;
-
-        if (needsProof) {
-          navigation.replace("ProofVerification");
-        } else {
-          navigation.replace("Main");
-        }
+        // Signed in: go to Main. Proof verification only shown during
+        // onboarding and when user attempts to deposit.
+        navigation.replace("Main");
       });
     }, minDisplayTime);
 
@@ -68,9 +55,6 @@ export default function SplashScreen() {
     fadeAnim,
     session,
     loading,
-    walletAddress,
-    proofStatus.status,
-    proofStatus.verified,
   ]);
 
   return (

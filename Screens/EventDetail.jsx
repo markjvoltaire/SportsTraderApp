@@ -204,7 +204,11 @@ export default function EventDetail() {
 
         <View style={styles.headerCenter}>
           <Image
-            source={require("../assets/images/ScoretradeBlack.png")}
+            source={
+              isDarkMode
+                ? require("../assets/images/whiteTrade.png")
+                : require("../assets/images/blackTrade.png")
+            }
             style={styles.logoImage}
             resizeMode="contain"
           />
@@ -273,8 +277,8 @@ const createStyles = (theme) =>
     backgroundColor: theme.background,
   },
   logoImage: {
-    width: 54,
-    height: 54,
+    width: 34,
+    height: 34,
   },
   header: {
     flexDirection: "row",

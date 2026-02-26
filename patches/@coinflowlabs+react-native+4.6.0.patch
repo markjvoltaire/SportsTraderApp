@@ -1,0 +1,13 @@
+diff --git a/node_modules/@coinflowlabs/react-native/build/CoinflowWebView.js b/node_modules/@coinflowlabs/react-native/build/CoinflowWebView.js
+index 9d43f44..796f02d 100644
+--- a/node_modules/@coinflowlabs/react-native/build/CoinflowWebView.js
++++ b/node_modules/@coinflowlabs/react-native/build/CoinflowWebView.js
+@@ -73,7 +73,7 @@ export function CoinflowWebView(props) {
+         }
+     }, [onLoad, props.waitForWebviewLoadedMessage, handleIframeMessages]);
+     return useMemo(function () {
+-        var enableApplePay = props.route.includes('/purchase/') && Platform.OS === 'ios';
++        var enableApplePay = props.route.includes('/purchase') && Platform.OS === 'ios';
+         return (React.createElement(View, { style: { flex: 1, position: 'relative' } },
+             isLoading && (React.createElement(CoinflowSkeleton, { loaderBackground: props.loaderBackground, style: {
+                     position: 'absolute',

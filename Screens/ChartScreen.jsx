@@ -37,8 +37,11 @@ import { getNFLTeamColor, getNBATeamColor } from "../src/constants/teamColors";
 import { formatCurrency, formatPrice } from "../src/utils/formatters";
 import Orders from "../src/components/market/Orders";
 import BuyButtons from "../src/components/market/BuyButtons";
+import { useAuth } from "../src/contexts/AuthContext";
 
 export default function ChartScreen() {
+  const { walletAddress, solanaAddress } = useAuth();
+  const userPublicKey = solanaAddress || walletAddress || null;
   const isDarkMode = useColorScheme() !== "light";
   const screenColors = useMemo(
     () =>
@@ -76,7 +79,6 @@ export default function ChartScreen() {
   const [currentPrices, setCurrentPrices] = useState(null);
   const [chartLoading, setChartLoading] = useState(true);
 
-  // Trades WebSocket state
   const tradesWsRef = useRef(null);
   const [trades, setTrades] = useState([]);
   const [realtimePrices, setRealtimePrices] = useState({});
@@ -86,8 +88,13 @@ export default function ChartScreen() {
   const [buttonPrices, setButtonPrices] = useState({});
   const lastCandlestickPricesRef = useRef({}); // Track last price for each ticker to detect changes
 
-  // Volume state - initialized with event.volume, incremented with each trade
-  const [volume, setVolume] = useState(() => event?.volume || 0);
+  // Volume state - initialized with combined Kalshi + Polymarket volume
+  const [volume, setVolume] = useState(() => {
+    const kalshi = Number(event?.volume ?? event?.volume24hr ?? event?.totalVolume ?? 0);
+    const poly = Number(event?.polymarket?.volume ?? 0);
+    return (Number.isFinite(kalshi) ? kalshi : 0) + (Number.isFinite(poly) ? poly : 0);
+  });
+
 
   const WEBSOCKET_URL = "wss://dev-prediction-markets-api.dflow.net/api/v1/ws";
 
@@ -123,10 +130,11 @@ export default function ChartScreen() {
   const isProFootball = /pro football|nfl/i.test(leagueHints);
   const isProBasketball = /pro basketball|nba/i.test(leagueHints);
 
-  // Reset volume when event changes
   useEffect(() => {
-    setVolume(event?.volume || 0);
-  }, [event?.volume]);
+    const kalshi = Number(event?.volume ?? event?.volume24hr ?? event?.totalVolume ?? 0);
+    const poly = Number(event?.polymarket?.volume ?? 0);
+    setVolume((Number.isFinite(kalshi) ? kalshi : 0) + (Number.isFinite(poly) ? poly : 0));
+  }, [event?.volume, event?.polymarket?.volume]);
 
   // Fetch candlestick data when event changes
   useEffect(() => {
@@ -148,6 +156,7 @@ export default function ChartScreen() {
     };
     fetchCandlesticks();
   }, [event?.ticker]);
+
 
   // WebSocket connection for trades
   useEffect(() => {
@@ -173,6 +182,7 @@ export default function ChartScreen() {
           tickers: marketTickers,
         })
       );
+
     };
 
     ws.onmessage = (event) => {
@@ -195,13 +205,10 @@ export default function ChartScreen() {
         );
         const amountSpent = pricePerShare * parseInt(tradeData.count);
 
-        // Increment volume with amount spent
+        // Increment volume with amount spent (still real-time)
         setVolume((prevVolume) => prevVolume + amountSpent);
 
-        // Add trade to state (prepend to show newest first)
-        setTrades((prevTrades) => {
-          return [tradeData, ...prevTrades].slice(0, 50);
-        });
+        setTrades((prev) => [tradeData, ...prev].slice(0, 50));
       } else if (message.channel === "prices") {
         // Calculate mid-price from bid and ask
         const calculateMidPrice = (bid, ask) => {
@@ -845,6 +852,31 @@ export default function ChartScreen() {
     return formatPrice(displayPctHome / 100);
   }, [displayPctHome]);
 
+  const tickerToTeam = useMemo(() => {
+    const map = {};
+    if (marketTicker1) map[marketTicker1] = match?.home?.name ?? match?.home?.code ?? "Home";
+    if (marketTicker2) map[marketTicker2] = match?.away?.name ?? match?.away?.code ?? "Away";
+    return map;
+  }, [marketTicker1, marketTicker2, match?.home, match?.away]);
+
+  const enrichedTrades = useMemo(() => {
+    return trades.map((t) => {
+      const isBuy = t.side === "yes";
+      const price = parseFloat(isBuy ? t.yesPrice : t.noPrice) || 0;
+      const shares = parseFloat(t.count) || 0;
+      return {
+        ...t,
+        outcome: tickerToTeam[t.ticker] ?? t.ticker,
+        type: isBuy ? "BUY" : "SELL",
+        priceCents: (price * 100).toFixed(1),
+        shares: shares % 1 === 0 ? shares.toString() : shares.toFixed(3),
+        amount: (price * shares).toFixed(2),
+      };
+    });
+  }, [trades, tickerToTeam]);
+
+
+
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: screenColors.background }]}>
       {/* Top bar */}
@@ -903,7 +935,7 @@ export default function ChartScreen() {
           style={{
             color: screenColors.primaryText,
             fontWeight: "700",
-            fontSize: 30,
+            fontSize: 25,
             marginBottom: 15,
           }}
         >
@@ -923,6 +955,8 @@ export default function ChartScreen() {
           </Text>
         )}
 
+
+
         {/* Chart */}
         <View style={{ right: 15 }}>
           <MyChart
@@ -940,22 +974,71 @@ export default function ChartScreen() {
             colorBoost={isProFootball ? 0.3 : 0.22}
           />
         </View>
+        
 
-    
-        {/* About */}
-        <View style={styles.about}>
-          <Text style={[styles.aboutTitle, { color: screenColors.primaryText }]}>About</Text>
-          <Text style={[styles.aboutBody, { color: screenColors.secondaryText }]}>
-            {match.about}
-          </Text>
-        </View>
+        {/* Live trade log from WebSocket */}
+        {event?.markets?.length >= 2 && (
+          <View style={styles.tradeLogSection}>
+            <View style={styles.tradeLogHeader}>
+              <Text style={[styles.tradeLogHeaderCell, styles.tradeLogOutcome, { color: screenColors.tertiaryText }]}>Outcome</Text>
+              <Text style={[styles.tradeLogHeaderCell, styles.tradeLogType, { color: screenColors.tertiaryText }]}>Type</Text>
+              <Text style={[styles.tradeLogHeaderCell, styles.tradeLogPrice, { color: screenColors.tertiaryText }]}>Price</Text>
+              <Text style={[styles.tradeLogHeaderCell, styles.tradeLogShares, { color: screenColors.tertiaryText }]}>Shares</Text>
+              <Text style={[styles.tradeLogHeaderCell, styles.tradeLogAmount, { color: screenColors.tertiaryText }]}>Amount</Text>
+            </View>
+            {enrichedTrades.length === 0 ? (
+              <View style={styles.tradeLogEmpty}>
+                <Text style={{ color: screenColors.tertiaryText, fontSize: 13 }}>Waiting for trades…</Text>
+              </View>
+            ) : (
+              enrichedTrades.slice(0, 3).map((t, i) => {
+                const typeColor = t.type === "BUY" ? "#22C55E" : "#EF4444";
+                return (
+                  <View
+                    key={`trade-${i}`}
+                    style={[styles.tradeLogRow, { borderBottomColor: screenColors.iconButtonBorder }]}
+                  >
+                    <Text style={[styles.tradeLogCell, styles.tradeLogOutcome, { color: screenColors.primaryText }]} numberOfLines={1}>
+                      {t.outcome.toUpperCase()}
+                    </Text>
+                    <Text style={[styles.tradeLogCell, styles.tradeLogType, { color: typeColor, fontWeight: "700" }]}>
+                      {t.type}
+                    </Text>
+                    <Text style={[styles.tradeLogCell, styles.tradeLogPrice, { color: screenColors.primaryText }]}>
+                      {t.priceCents}¢
+                    </Text>
+                    <Text style={[styles.tradeLogCell, styles.tradeLogShares, { color: screenColors.primaryText }]}>
+                      {t.shares}
+                    </Text>
+                    <Text style={[styles.tradeLogCell, styles.tradeLogAmount, { color: screenColors.primaryText }]}>
+                      ${t.amount}
+                    </Text>
+                  </View>
+                );
+              })
+            )}
+          </View>
+        )}
+
+       <View style={{ marginTop: 45 }}>
+        <Text style={{ color: screenColors.secondaryText, fontSize: 13 }}>
+          {market.earlyCloseCondition}
+        </Text>
+       </View>
       </ScrollView>
 
       {/* Bottom Bar - Buy Team Buttons */}
-      <BuyButtons awayTeam={match.away} homeTeam={match.home} event={event} />
+      <BuyButtons
+        awayTeam={match.away}
+        homeTeam={match.home}
+        event={event}
+        userPublicKey={userPublicKey}
+        isBasketball={isProBasketball}
+      />
     </SafeAreaView>
   );
 }
+
 
 const styles = StyleSheet.create({
   safe: {
@@ -1109,10 +1192,11 @@ const styles = StyleSheet.create({
   },
 
   predictionTitle: {
-    ...Typography.bodyLarge,
+   fontSize: 16,
+   fontWeight: "700",
     color: Colors.textPrimary,
-    marginTop: Spacing.md,
-    marginBottom: 16,
+ 
+  
   },
   pickRow: {
     flexDirection: "row",
@@ -1245,6 +1329,57 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
+  tradeLogSection: {
+ 
+    borderRadius: BorderRadius.md,
+    overflow: "hidden",
+  },
+  tradeLogHeader: {
+    flexDirection: "row",
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.08)",
+  },
+  tradeLogHeaderCell: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  tradeLogRow: {
+    flexDirection: "row",
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    alignItems: "center",
+  },
+  tradeLogCell: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  tradeLogOutcome: {
+    flex: 2.2,
+    fontWeight: "700",
+  },
+  tradeLogType: {
+    flex: 1.2,
+    textAlign: "center",
+  },
+  tradeLogPrice: {
+    flex: 1.2,
+    textAlign: "center",
+  },
+  tradeLogShares: {
+    flex: 1.2,
+    textAlign: "center",
+  },
+  tradeLogAmount: {
+    flex: 1.2,
+    textAlign: "right",
+  },
+  tradeLogEmpty: {
+    paddingVertical: 24,
+    alignItems: "center",
+  },
   about: {
     paddingBottom: Spacing.lg,
   },

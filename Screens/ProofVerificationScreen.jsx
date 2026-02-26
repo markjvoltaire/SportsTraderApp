@@ -14,7 +14,7 @@ import { useAuth } from "../src/contexts/AuthContext";
 import {
   createProofSignMessage,
   encodeBase58,
-  getProofVerificationUrl,
+  buildProofDeepLinkUrl,
 } from "../src/services/proofService";
 import {
   Spacing,
@@ -28,52 +28,43 @@ export default function ProofVerificationScreen() {
   const navigation = useNavigation();
   const {
     walletAddress,
+    solanaAddress,
     getAccessToken,
     getProofSigningWallet,
   } = useAuth();
+  const proofWalletAddress = solanaAddress || walletAddress;
   const [loading, setLoading] = useState(false);
 
   const handleStartVerification = useCallback(async () => {
-    if (!walletAddress) {
+    if (!proofWalletAddress) {
       Alert.alert("No Wallet", "Please wait for your wallet to be ready, or sign out and sign in again.");
       return;
     }
 
     setLoading(true);
     try {
-      const authToken = await getAccessToken();
-      if (!authToken) {
-        Alert.alert("Auth Error", "Could not get authentication token. Please try again.");
-        return;
-      }
+      let addressForProof = proofWalletAddress;
+      let url = null;
 
-      let proofOptions = {};
       try {
         const proofWallet = await getProofSigningWallet();
+        addressForProof = proofWallet.publicKey.toBase58();
         const timestamp = Date.now();
         const message = createProofSignMessage(timestamp);
-        const messageBytes = new TextEncoder().encode(message);
-        const signatureBytes = await proofWallet.signMessage(messageBytes);
+
+        const signatureBytes = await proofWallet.signMessage(message);
         const signature = encodeBase58(signatureBytes);
-        proofOptions = { signature, timestamp };
+
+        url = buildProofDeepLinkUrl({
+          wallet: addressForProof,
+          signature,
+          timestamp,
+        });
+
+        console.log("[Proof] url:", url);
       } catch (signErr) {
-        // Fallback path: continue without pre-signing if signer is unavailable.
-        console.warn("Proof pre-signing unavailable, using unsigned redirect:", signErr?.message);
-      }
-
-      const { data, error } = await getProofVerificationUrl(
-        walletAddress,
-        authToken,
-        proofOptions
-      );
-
-      if (error) {
-        throw error;
-      }
-
-      const url = data?.url;
-      if (!url) {
-        throw new Error("No verification URL returned");
+        console.warn("Proof pre-signing failed, using unsigned redirect:", signErr?.message);
+        url = buildProofDeepLinkUrl({ wallet: addressForProof });
       }
 
       const canOpen = await Linking.canOpenURL(url);
@@ -85,6 +76,10 @@ export default function ProofVerificationScreen() {
         return;
       }
 
+      // Open the browser FIRST, then navigate away so the user
+      // doesn't see a flash of the home screen.
+      await Linking.openURL(url);
+
       let rootNav = navigation;
       while (rootNav.getParent()) {
         rootNav = rootNav.getParent();
@@ -93,11 +88,6 @@ export default function ProofVerificationScreen() {
         index: 0,
         routes: [{ name: "Main" }],
       });
-
-      // Open Proof right after moving forward in app flow.
-      await Linking.openURL(url);
-      // User will return via scoretrade://proof-return deep link
-      // ProofDeepLinkHandler in App.jsx will call checkProofStatus
     } catch (err) {
       const rawMessage = err?.message || "Failed to start verification";
       const message =
@@ -110,7 +100,7 @@ export default function ProofVerificationScreen() {
     } finally {
       setLoading(false);
     }
-  }, [walletAddress, getAccessToken, getProofSigningWallet]);
+  }, [proofWalletAddress, getProofSigningWallet, navigation]);
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
@@ -134,7 +124,7 @@ export default function ProofVerificationScreen() {
           is required for compliance.
         </Text>
 
-        {!walletAddress ? (
+        {!proofWalletAddress ? (
           <View style={styles.walletWarning}>
             <Text style={styles.walletWarningText}>
               Loading wallet...
@@ -143,9 +133,9 @@ export default function ProofVerificationScreen() {
           </View>
         ) : (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Your wallet</Text>
+            <Text style={styles.cardTitle}>Your Solana wallet</Text>
             <Text style={styles.walletAddress} numberOfLines={1}>
-              {walletAddress}
+              {proofWalletAddress}
             </Text>
           </View>
         )}
@@ -153,7 +143,7 @@ export default function ProofVerificationScreen() {
         <TouchableOpacity
           style={[styles.button, loading && styles.buttonDisabled]}
           onPress={handleStartVerification}
-          disabled={loading || !walletAddress}
+          disabled={loading || !proofWalletAddress}
           activeOpacity={0.8}
         >
           {loading ? (

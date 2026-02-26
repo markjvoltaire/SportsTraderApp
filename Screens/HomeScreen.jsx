@@ -18,6 +18,7 @@ import {
   RefreshControl,
   Linking,
   useColorScheme,
+  InteractionManager,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -31,6 +32,35 @@ import Ticker from "../src/components/ui/Ticker";
 import API_BASE_URL from "../src/config/api";
 
 const { width } = Dimensions.get("window");
+
+const COMPETITION_TO_SLUG = {
+  "Pro Football": "nfl",
+  "Pro Baseball": "mlb",
+  "Pro Basketball (M)": "nba",
+  "Pro Hockey": "nhl",
+  "College Basketball (M)": "ncaamb",
+  "College Basketball (W)": "ncaawb",
+  "College Football": "ncaaf",
+  EPL: "epl",
+  "La Liga": "laliga",
+  "Serie A": "seriea",
+  UCL: "ucl",
+  Bundesliga: "bundesliga",
+  "Ligue 1": "ligue1",
+  Eredivisie: "eredivisie",
+  AFCON: "afcon",
+  "EFL Championship": "efl-championship",
+  "Scottish Premiership": "scottish-prem",
+  "Saudi Pro League": "saudi-pl",
+  "Liga Portugal": "liga-portugal",
+  "FA Cup": "fa-cup",
+  "Liga MX": "liga-mx",
+  "Brasileiro Serie A": "brasileiro",
+  "Australian A League": "a-league",
+  "Taca de Portugal": "taca-portugal",
+  UFC: "MMA",
+  Boxing: "boxing",
+};
 
 export default function HomeScreen() {
   const isDarkMode = useColorScheme() !== "light";
@@ -239,148 +269,14 @@ export default function HomeScreen() {
     fetchSportsFilters();
   }, []);
 
-  // Helper function to build the correct URL based on competition and scope
   const buildApiUrl = useCallback((competition, scope) => {
-    // NFL always uses current-events route (no scope selection)
-    if (competition === "Pro Football") {
-      return `${API_BASE_URL}/api/current-events/nfl`;
+    if (competition === "Trending") {
+      return `${API_BASE_URL}/api/v1/sports/nba/events?scope=Games`;
     }
-
-    // Dynamic route selection for games, fights, and futures
-    let url = `${API_BASE_URL}/api/events`; // Default fallback
-
-    // Hit specific routes when scope is one we support
-    if (
-      scope === "Games" ||
-      scope === "Fights" ||
-      scope === "Futures" ||
-      scope === "Awards" ||
-      scope === "Draft" ||
-      scope === "Events" ||
-      scope === "Win totals" ||
-      scope === "Divisions" ||
-      scope === "League Leader"
-    ) {
-      const routeMap = {
-        // American Sports
-        "Pro Football": "/api/games/nfl",
-        "Pro Baseball": "/api/games/mlb",
-        "Pro Basketball (M)": "/api/games/nba",
-
-        // College Sports
-        "College Basketball (M)": "/api/games/ncaamb",
-        "College Basketball (W)": "/api/games/ncaawb",
-
-        // Soccer Leagues (from your backend)
-        EPL: "/api/games/epl",
-        "La Liga": "/api/games/laliga",
-        "Serie A": "/api/games/seriea",
-        UCL: "/api/games/ucl",
-        Bundesliga: "/api/games/bundesliga",
-        "Ligue 1": "/api/games/ligue1",
-        Eredivisie: "/api/games/eredivisie",
-        AFCON: "/api/games/afcon",
-        "EFL Championship": "/api/games/efl-championship",
-        "Scottish Premiership": "/api/games/scottish-prem",
-        "Saudi Pro League": "/api/games/saudi-pl",
-        "Liga Portugal": "/api/games/liga-portugal",
-        "FA Cup": "/api/games/fa-cup",
-        "Liga MX": "/api/games/liga-mx",
-        "Brasileiro Serie A": "/api/games/brasileiro",
-        "Australian A League": "/api/games/a-league",
-        "Taca de Portugal": "/api/games/taca-portugal",
-
-        // UFC uses MMA fights route
-        UFC: "/api/games/MMA",
-      };
-
-      // Handle Futures and Awards scopes specifically
-      if (scope === "Futures") {
-        // Specific futures routes
-        const futuresRouteMap = {
-          "Pro Football": "/api/futures/nfl", // NFL Futures
-          "Pro Basketball (M)": "/api/futures/nba", // NBA Futures
-          "Pro Baseball": "/api/futures/mlb", // MLB Futures
-        };
-
-        const futuresRoute = futuresRouteMap[competition];
-        if (futuresRoute) {
-          url = `${API_BASE_URL}${futuresRoute}`;
-        }
-      } else if (scope === "Awards") {
-        // Specific awards routes
-        const awardsRouteMap = {
-          "Pro Football": "/api/awards/nfl", // NFL Awards
-          "Pro Basketball (M)": "/api/nba-awards/nba", // NBA Awards
-        };
-
-        const awardsRoute = awardsRouteMap[competition];
-        if (awardsRoute) {
-          url = `${API_BASE_URL}${awardsRoute}`;
-        }
-      } else if (scope === "Draft") {
-        // Specific draft routes
-        const draftRouteMap = {
-          "Pro Football": "/api/draft/nfl", // NFL Draft
-          "Pro Basketball (M)": "/api/drafts/nba", // NBA Draft
-        };
-
-        const draftRoute = draftRouteMap[competition];
-        if (draftRoute) {
-          url = `${API_BASE_URL}${draftRoute}`;
-        }
-      } else if (scope === "Events") {
-        // Current events routes
-        const currentEventsRouteMap = {
-          "Pro Football": "/api/current-events/nfl",
-          "Pro Basketball (M)": "/api/events/nba",
-        };
-
-        const currentEventsRoute = currentEventsRouteMap[competition];
-        if (currentEventsRoute) {
-          url = `${API_BASE_URL}${currentEventsRoute}`;
-        }
-      } else if (scope === "Win totals") {
-        // Specific win totals routes
-        const winTotalsRouteMap = {
-          "Pro Basketball (M)": "/api/winTotals/nba", // NBA Win Totals
-        };
-
-        const winTotalsRoute = winTotalsRouteMap[competition];
-        if (winTotalsRoute) {
-          url = `${API_BASE_URL}${winTotalsRoute}`;
-        }
-      } else if (scope === "Divisions") {
-        // Specific divisions routes
-        const divisionsRouteMap = {
-          "Pro Basketball (M)": "/api/divisions/nba", // NBA Divisions
-        };
-
-        const divisionsRoute = divisionsRouteMap[competition];
-        if (divisionsRoute) {
-          url = `${API_BASE_URL}${divisionsRoute}`;
-        }
-      } else if (scope === "League Leader") {
-        // Specific league leaders routes
-        const leagueLeadersRouteMap = {
-          "Pro Basketball (M)": "/api/leagueLeaders/nba", // NBA League Leaders
-        };
-
-        const leagueLeadersRoute = leagueLeadersRouteMap[competition];
-        if (leagueLeadersRoute) {
-          url = `${API_BASE_URL}${leagueLeadersRoute}`;
-        }
-      } else {
-        // Handle Games and Fights scopes
-        // Find the matching route for the current competition
-        const route = routeMap[competition];
-        if (route) {
-          url = `${API_BASE_URL}${route}`;
-        }
-      }
-    }
-
-    return url;
+    const slug = COMPETITION_TO_SLUG[competition];
+    if (!slug) return `${API_BASE_URL}/api/events`;
+    const s = encodeURIComponent(scope || "Games");
+    return `${API_BASE_URL}/api/v1/sports/${slug}/events?scope=${s}`;
   }, []);
 
   // Fetch Events function - can be called from anywhere
@@ -460,9 +356,12 @@ export default function HomeScreen() {
     [selectedCompetition, selectedScope, buildApiUrl]
   );
 
-  // 2. Fetch Events when sport/scope changes
+  // 2. Fetch Events when sport/scope changes (defer so tab/scope highlight updates first)
   useEffect(() => {
-    fetchEventsData();
+    const task = InteractionManager.runAfterInteractions(() => {
+      fetchEventsData();
+    });
+    return () => task.cancel();
   }, [fetchEventsData]);
 
   // Scroll to top when competition or scope changes
@@ -561,9 +460,8 @@ export default function HomeScreen() {
                       const scopes = competition.scopes || [];
                       const scope = scopes[0] || null;
                       setSelectedScope(scope);
-                      console.log("Selected Competition:", competition.name);
-                      console.log("Selected Scope:", scope);
                     }}
+                    activeOpacity={0.7}
                   >
                     <Text
                       style={[
@@ -646,12 +544,8 @@ export default function HomeScreen() {
                         ]}
                         onPress={() => {
                           setSelectedScope(scope);
-                          console.log(
-                            "Selected Competition:",
-                            selectedCompetition
-                          );
-                          console.log("Selected Scope:", scope);
                         }}
+                        activeOpacity={0.7}
                       >
                         <Text
                           style={[
@@ -720,7 +614,7 @@ export default function HomeScreen() {
           ]}
         >
           {selectedCompetition === "Trending" ? (
-            <Trending events={eventsList} loading={loading} />
+            <Trending events={eventsList} loading={loading} competition="PRO BASKETBALL (M)" />
           ) : isDataBackedScope ? (
             loading ? (
               <View style={styles.loaderContainer}>

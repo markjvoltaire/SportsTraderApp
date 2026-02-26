@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { usePrivy, useEmbeddedEthereumWallet } from "@privy-io/expo";
+import { usePrivy, useEmbeddedSolanaWallet } from "@privy-io/expo";
 import { useAuth } from "../contexts/AuthContext";
 import { syncPrivyWalletToBackend } from "../utils/privyWalletSync";
 
@@ -9,27 +9,26 @@ import { syncPrivyWalletToBackend } from "../utils/privyWalletSync";
 export function usePrivyWalletSync() {
   const { user: supabaseUser } = useAuth();
   const { ready: privyReady, authenticated: privyAuthenticated } = usePrivy();
-  const { wallets, createWallet } = useEmbeddedEthereumWallet();
+  const solanaWalletCtx = useEmbeddedSolanaWallet();
   const [syncing, setSyncing] = useState(false);
   const [synced, setSynced] = useState(false);
 
+  const wallets = solanaWalletCtx?.wallets;
+  const createWallet = solanaWalletCtx?.create;
+
   useEffect(() => {
     async function syncWallet() {
-      // Wait for both Supabase user and Privy to be ready
       if (!supabaseUser?.id || !privyReady || syncing || synced) {
         return;
       }
 
-      // Find embedded wallet
-      const embeddedWallet = wallets && wallets.length > 0 ? wallets[0] : null;
+      const embeddedWallet =
+        Array.isArray(wallets) && wallets.length > 0 ? wallets[0] : null;
 
       if (embeddedWallet && embeddedWallet.address) {
-        // Wallet exists - sync it to backend
         setSyncing(true);
         try {
-          // For Privy Expo SDK, wallet.id might be the privy_wallet_id
-          // We'll use the wallet address to identify it
-          const walletId = embeddedWallet.id || embeddedWallet.address;
+          const walletId = embeddedWallet.address;
           const result = await syncPrivyWalletToBackend(
             supabaseUser.id,
             walletId,
@@ -44,13 +43,11 @@ export function usePrivyWalletSync() {
           setSyncing(false);
         }
       } else if (privyAuthenticated && createWallet) {
-        // No embedded wallet yet - create one
         setSyncing(true);
         try {
           const newWallet = await createWallet();
           if (newWallet && newWallet.address) {
-            // Sync the newly created wallet
-            const walletId = newWallet.id || newWallet.address;
+            const walletId = newWallet.address;
             const result = await syncPrivyWalletToBackend(
               supabaseUser.id,
               walletId,

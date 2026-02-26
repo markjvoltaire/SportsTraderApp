@@ -28,6 +28,9 @@ import Animated, {
   useAnimatedStyle,
   runOnJS,
   withTiming,
+  withDelay,
+  withRepeat,
+  withSequence,
   Easing,
 } from "react-native-reanimated";
 import { useRoute } from "@react-navigation/native";
@@ -72,6 +75,113 @@ const lightenColor = (hex, amount = 0.2) => {
   return `#${toHex(mix(r))}${toHex(mix(g))}${toHex(mix(b))}`;
 };
 
+const DOT_SIZE = 8;
+const RING_SIZE = 24;
+
+function PulsingDot({ color, x, y }) {
+  const scale = useSharedValue(1);
+  const ringScale = useSharedValue(0.5);
+  const ringOpacity = useSharedValue(0);
+  const dotOpacity = useSharedValue(0);
+
+  useEffect(() => {
+    // Fade in
+    dotOpacity.value = withDelay(
+      400,
+      withTiming(1, { duration: 400, easing: Easing.out(Easing.ease) })
+    );
+
+    // Heartbeat: quick pump up, settle back, pause, repeat
+    scale.value = withDelay(
+      600,
+      withRepeat(
+        withSequence(
+          withTiming(1.45, { duration: 180, easing: Easing.out(Easing.ease) }),
+          withTiming(1, { duration: 160, easing: Easing.inOut(Easing.ease) }),
+          withTiming(1.25, { duration: 140, easing: Easing.out(Easing.ease) }),
+          withTiming(1, { duration: 200, easing: Easing.inOut(Easing.ease) }),
+          withTiming(1, { duration: 800 }) // pause
+        ),
+        -1
+      )
+    );
+
+    // Radiating ring
+    ringScale.value = withDelay(
+      600,
+      withRepeat(
+        withSequence(
+          withTiming(0.5, { duration: 0 }),
+          withTiming(2.2, { duration: 900, easing: Easing.out(Easing.ease) }),
+          withTiming(0.5, { duration: 0 })
+        ),
+        -1
+      )
+    );
+    ringOpacity.value = withDelay(
+      600,
+      withRepeat(
+        withSequence(
+          withTiming(0.5, { duration: 0 }),
+          withTiming(0, { duration: 900, easing: Easing.in(Easing.ease) }),
+          withTiming(0, { duration: 0 })
+        ),
+        -1
+      )
+    );
+  }, []);
+
+  const dotStyle = useAnimatedStyle(() => ({
+    opacity: dotOpacity.value,
+    transform: [{ scale: scale.value }],
+  }));
+
+  const ringStyle = useAnimatedStyle(() => ({
+    opacity: ringOpacity.value,
+    transform: [{ scale: ringScale.value }],
+  }));
+
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        left: x - RING_SIZE / 2,
+        top: y - RING_SIZE / 2,
+        width: RING_SIZE,
+        height: RING_SIZE,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <Animated.View
+        style={[
+          {
+            position: "absolute",
+            width: RING_SIZE,
+            height: RING_SIZE,
+            borderRadius: RING_SIZE / 2,
+            borderWidth: 2,
+            borderColor: color,
+          },
+          ringStyle,
+        ]}
+      />
+      <Animated.View
+        style={[
+          {
+            width: DOT_SIZE,
+            height: DOT_SIZE,
+            borderRadius: DOT_SIZE / 2,
+            backgroundColor: color,
+          },
+          dotStyle,
+        ]}
+      />
+    </View>
+  );
+}
+
 export default function MyChart({
   market: marketProp,
   event,
@@ -95,12 +205,14 @@ export default function MyChart({
             textPrimary: "#FFFFFF",
             textSecondary: "#D1D5DB",
             tooltipChipBg: "rgba(0, 0, 0, 0.5)",
+            gridStroke: "rgba(255, 255, 255, 0.08)",
           }
         : {
             background: "#F5F7FB",
             textPrimary: "#111827",
             textSecondary: "#374151",
             tooltipChipBg: "rgba(255, 255, 255, 0.85)",
+            gridStroke: "rgba(0, 0, 0, 0.08)",
           },
     [isDarkMode]
   );
@@ -111,16 +223,31 @@ export default function MyChart({
   const market = marketProp || route.params?.game || route.params?.market;
   const { width, height } = Dimensions.get("window");
 
+  const numMarkets = event?.markets?.length ?? 0;
+  const MAX_CHART_LINES = 3;
+
+  // Pick the top 3 markets by yesBid so we only chart the highest-probability outcomes
+  const topIndices = useMemo(() => {
+    if (!event?.markets || event.markets.length <= MAX_CHART_LINES) {
+      return event?.markets?.map((_, i) => i) ?? [];
+    }
+    return event.markets
+      .map((m, i) => ({ i, bid: parseFloat(m?.yesBid) || 0 }))
+      .sort((a, b) => b.bid - a.bid)
+      .slice(0, MAX_CHART_LINES)
+      .sort((a, b) => a.i - b.i)
+      .map((e) => e.i);
+  }, [event?.markets]);
+
   // State for price history - now process candlestickData directly
-  const [awayHistory, setAwayHistory] = useState(null);
-  const [homeHistory, setHomeHistory] = useState(null);
+  const [marketHistories, setMarketHistories] = useState(null);
   const [fetchedCandlestickData, setFetchedCandlestickData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   // Track previous prices to detect changes
-  const previousPricesRef = useRef({ away: null, home: null });
-  const PRICE_CHANGE_THRESHOLD = 0.01; // 1% change threshold
+  const previousPricesRef = useRef({});
+  const PRICE_CHANGE_THRESHOLD = 0.01;
 
   useEffect(() => {
     const fetchCandlestickData = async () => {
@@ -129,62 +256,36 @@ export default function MyChart({
         return;
       }
 
+      const tickers = topIndices.map((i) => event.markets[i]?.ticker).filter(Boolean);
+      if (tickers.length < 2) {
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
         setError(null);
 
-        const marketTicker1 = event.markets[0]?.ticker;
-        const marketTicker2 = event.markets[1]?.ticker;
-
-        if (!marketTicker1 || !marketTicker2) {
-          setLoading(false);
-          return;
-        }
-
-        // --- 1. Calculate 1-hour window ---
-        const endTs = Math.floor(Date.now() / 1000); // Now (Unix seconds)
-        const startTs = endTs - 1 * 60 * 60; // 1 hour ago
-        const periodInterval = 1; // 1-minute granularity
-
-        // --- 2. Build Query String ---
+        const endTs = Math.floor(Date.now() / 1000);
+        const startTs = endTs - 1 * 60 * 60;
+        const periodInterval = 1;
         const queryParams = `?startTs=${startTs}&endTs=${endTs}&periodInterval=${periodInterval}`;
 
-        // --- 3. Parallel API calls with query strings ---
-        const [response1, response2] = await Promise.all([
-          fetch(
-            `${API_BASE_URL}/api/v1/market/${marketTicker1}/candlesticks${queryParams}`
-          ),
-          fetch(
-            `${API_BASE_URL}/api/v1/market/${marketTicker2}/candlesticks${queryParams}`
-          ),
-        ]);
+        const responses = await Promise.all(
+          tickers.map((t) =>
+            fetch(`${API_BASE_URL}/api/v1/market/${t}/candlesticks${queryParams}`)
+          )
+        );
 
-        if (!response1.ok || !response2.ok) {
-          throw new Error(
-            `Failed to fetch candlestick data: ${
-              response1.status || response2.status
-            }`
-          );
-        }
+        const failed = responses.find((r) => !r.ok);
+        if (failed) throw new Error(`Failed to fetch candlestick data: ${failed.status}`);
 
-        const data1 = await response1.json();
-        const data2 = await response2.json();
+        const allData = await Promise.all(responses.map((r) => r.json()));
+        const allCandlesticks = allData.map((d) =>
+          Array.isArray(d) ? d : d.candlesticks || d.data || []
+        );
 
-        // --- 4. Handle different API response formats ---
-        // The API might return an array directly, or wrapped in an object
-        const candlesticks1 = Array.isArray(data1)
-          ? data1
-          : data1.candlesticks || data1.data || [];
-        const candlesticks2 = Array.isArray(data2)
-          ? data2
-          : data2.candlesticks || data2.data || [];
-
-        // --- 5. Combine data for the UI ---
-        const combinedData = {
-          market_candlesticks: [candlesticks1, candlesticks2],
-        };
-
-        setFetchedCandlestickData(combinedData);
+        setFetchedCandlestickData({ market_candlesticks: allCandlesticks });
       } catch (err) {
         console.error("Error fetching candlestick data:", err);
         setError(err.message);
@@ -198,197 +299,96 @@ export default function MyChart({
 
   // Update candlestick data only when prices change significantly
   useEffect(() => {
-    if (!event?.markets || event.markets.length < 2 || !realtimePrices) {
-      return;
-    }
+    if (!event?.markets || event.markets.length < 2 || !realtimePrices) return;
 
-    const awayMarket = event.markets[1]; // Second market is for away team
-    const homeMarket = event.markets[0]; // First market is for home team
+    let anyChanged = false;
+    const newPrevPrices = { ...previousPricesRef.current };
 
-    const currentAwayPrice = awayMarket?.ticker
-      ? realtimePrices[awayMarket.ticker]
-      : null;
-    const currentHomePrice = homeMarket?.ticker
-      ? realtimePrices[homeMarket.ticker]
-      : null;
+    topIndices.forEach((mktIdx, localIdx) => {
+      const m = event.markets[mktIdx];
+      const price = m?.ticker ? realtimePrices[m.ticker] : null;
+      if (price == null) return;
+      const prev = previousPricesRef.current[localIdx];
+      if (prev != null && Math.abs(price - prev) < PRICE_CHANGE_THRESHOLD) return;
+      newPrevPrices[localIdx] = price;
+      anyChanged = true;
+    });
 
-    // Check if prices have changed significantly
-    const awayPriceChanged =
-      currentAwayPrice !== undefined &&
-      currentAwayPrice !== null &&
-      (previousPricesRef.current.away === null ||
-        Math.abs(currentAwayPrice - previousPricesRef.current.away) >=
-          PRICE_CHANGE_THRESHOLD);
+    if (!anyChanged) return;
+    previousPricesRef.current = newPrevPrices;
 
-    const homePriceChanged =
-      currentHomePrice !== undefined &&
-      currentHomePrice !== null &&
-      (previousPricesRef.current.home === null ||
-        Math.abs(currentHomePrice - previousPricesRef.current.home) >=
-          PRICE_CHANGE_THRESHOLD);
+    if (fetchedCandlestickData?.market_candlesticks) {
+      setFetchedCandlestickData((prev) => {
+        if (!prev?.market_candlesticks) return prev;
+        const updated = { ...prev, market_candlesticks: [...prev.market_candlesticks] };
+        const now = Math.floor(Date.now() / 1000);
 
-    // Only update if prices have changed significantly
-    if (awayPriceChanged || homePriceChanged) {
-      previousPricesRef.current = {
-        away: currentAwayPrice,
-        home: currentHomePrice,
-      };
+        topIndices.forEach((mktIdx, localIdx) => {
+          const m = event.markets[mktIdx];
+          const price = m?.ticker ? realtimePrices[m.ticker] : null;
+          if (price == null) return;
+          if (!updated.market_candlesticks[localIdx]) updated.market_candlesticks[localIdx] = [];
 
-      // Add new data points to make the chart progress
-      if (fetchedCandlestickData?.market_candlesticks) {
-        setFetchedCandlestickData((prev) => {
-          if (!prev || !prev.market_candlesticks) return prev;
+          const arr = updated.market_candlesticks[localIdx];
+          const lastPoint = arr.length > 0 ? arr[arr.length - 1] : null;
+          const newPoint = {
+            price: {
+              close: price,
+              close_dollars: price.toString(),
+              open: lastPoint?.price?.close || price,
+              open_dollars: (lastPoint?.price?.close || price).toString(),
+              high: Math.max(price, lastPoint?.price?.close || price),
+              high_dollars: Math.max(price, lastPoint?.price?.close || price).toString(),
+              low: Math.min(price, lastPoint?.price?.close || price),
+              low_dollars: Math.min(price, lastPoint?.price?.close || price).toString(),
+            },
+            end_period_ts: now,
+            timestamp: now,
+            time: now,
+          };
 
-          const updated = { ...prev };
-          const now = Math.floor(Date.now() / 1000);
-
-          // Add new candlestick points for each market
-          [0, 1].forEach((index) => {
-            if (!updated.market_candlesticks[index]) {
-              updated.market_candlesticks[index] = [];
-            }
-
-            const price = index === 0 ? currentHomePrice : currentAwayPrice;
-
-            if (price !== null && price !== undefined) {
-              // Get the last point to use as reference
-              const lastPoint =
-                updated.market_candlesticks[index].length > 0
-                  ? updated.market_candlesticks[index][
-                      updated.market_candlesticks[index].length - 1
-                    ]
-                  : null;
-
-              // Create a new candlestick point
-              const newPoint = {
-                price: {
-                  close: price,
-                  close_dollars: price.toString(),
-                  open: lastPoint?.price?.close || price,
-                  open_dollars: (lastPoint?.price?.close || price).toString(),
-                  high: Math.max(price, lastPoint?.price?.close || price),
-                  high_dollars: Math.max(
-                    price,
-                    lastPoint?.price?.close || price
-                  ).toString(),
-                  low: Math.min(price, lastPoint?.price?.close || price),
-                  low_dollars: Math.min(
-                    price,
-                    lastPoint?.price?.close || price
-                  ).toString(),
-                },
-                end_period_ts: now,
-                timestamp: now,
-                time: now,
-              };
-
-              // Add the new point to the array
-              const updatedArray = [
-                ...updated.market_candlesticks[index],
-                newPoint,
-              ];
-
-              // Keep only the last hour of data (60 points for 1-minute intervals)
-              // This prevents the array from growing too large
-              const maxPoints = 60;
-              if (updatedArray.length > maxPoints) {
-                updated.market_candlesticks[index] = updatedArray.slice(
-                  -maxPoints
-                );
-              } else {
-                updated.market_candlesticks[index] = updatedArray;
-              }
-            }
-          });
-
-          return updated;
+          const newArr = [...arr, newPoint];
+          updated.market_candlesticks[localIdx] = newArr.length > 60 ? newArr.slice(-60) : newArr;
         });
-      }
+
+        return updated;
+      });
     }
   }, [realtimePrices, event?.markets, fetchedCandlestickData]);
   // Use fetched candlestickData if available, otherwise fall back to prop
   const candlestickDataToUse = fetchedCandlestickData;
 
-  // Process candlestickData when it changes
+  // Process candlestickData when it changes — supports N markets
   useEffect(() => {
     if (!candlestickDataToUse?.market_candlesticks) {
       setLoading(true);
       return;
     }
 
-    const extractTeamData = (teamData, teamIndex) => {
-      const processedData = [];
-
-      // Ensure teamData is an array
-      if (!teamData || !Array.isArray(teamData)) {
-        console.warn(
-          `Team data at index ${teamIndex} is not an array:`,
-          teamData
-        );
-        return processedData;
-      }
-
-      teamData.forEach((point, pointIndex) => {
-        let price =
-          parseFloat(point.price?.close) ||
-          parseFloat(point.price?.close_dollars) ||
-          0;
-
+    const extractTeamData = (teamData) => {
+      if (!teamData || !Array.isArray(teamData)) return [];
+      const out = [];
+      teamData.forEach((point, idx) => {
+        let price = parseFloat(point.price?.close) || parseFloat(point.price?.close_dollars) || 0;
         if (price > 1) price = price / 100;
-
         if (price > 0) {
-          processedData.push({
-            x: pointIndex,
-            y: price,
-            timestamp: point.end_period_ts || point.timestamp || point.time,
-          });
+          out.push({ x: idx, y: price, timestamp: point.end_period_ts || point.timestamp || point.time });
         }
       });
-
-      return processedData;
+      return out;
     };
 
-    // Extract data for both teams
-    const team1Data = candlestickDataToUse.market_candlesticks[0]
-      ? extractTeamData(candlestickDataToUse.market_candlesticks[0], 0)
-      : [];
-    const team2Data = candlestickDataToUse.market_candlesticks[1]
-      ? extractTeamData(candlestickDataToUse.market_candlesticks[1], 1)
-      : [];
+    const allHistories = candlestickDataToUse.market_candlesticks.map((d) => extractTeamData(d));
+    const maxLength = Math.max(...allHistories.map((h) => h.length), 0);
 
-    // Ensure both teams have the same number of data points
-    const maxLength = Math.max(team1Data.length, team2Data.length);
-
-    // Pad shorter arrays with last known values
-    while (team1Data.length < maxLength) {
-      const lastPrice =
-        team1Data.length > 0 ? team1Data[team1Data.length - 1].y : 0.5;
-      const lastTimestamp =
-        team1Data.length > 0 ? team1Data[team1Data.length - 1].timestamp : null;
-      team1Data.push({
-        x: team1Data.length,
-        y: lastPrice,
-        timestamp: lastTimestamp,
-      });
+    for (const hist of allHistories) {
+      while (hist.length < maxLength) {
+        const last = hist.length > 0 ? hist[hist.length - 1] : { y: 0.5, timestamp: null };
+        hist.push({ x: hist.length, y: last.y, timestamp: last.timestamp });
+      }
     }
 
-    while (team2Data.length < maxLength) {
-      const lastPrice =
-        team2Data.length > 0 ? team2Data[team2Data.length - 1].y : 0.5;
-      const lastTimestamp =
-        team2Data.length > 0 ? team2Data[team2Data.length - 1].timestamp : null;
-      team2Data.push({
-        x: team2Data.length,
-        y: lastPrice,
-        timestamp: lastTimestamp,
-      });
-    }
-
-    // Map candlestick data correctly:
-    // market_candlesticks[0] = home team (event.markets[0]) -> homeHistory
-    // market_candlesticks[1] = away team (event.markets[1]) -> awayHistory
-    setHomeHistory(team1Data);
-    setAwayHistory(team2Data);
+    setMarketHistories(allHistories);
     setLoading(false);
   }, [candlestickDataToUse]);
 
@@ -396,7 +396,7 @@ export default function MyChart({
     top: Spacing.md,
     bottom: Spacing.md,
     left: Spacing.xl,
-    right: Spacing.xl,
+    right: Spacing.xl + 10,
   };
 
   // Use full screen width minus horizontal padding from parent
@@ -554,6 +554,31 @@ export default function MyChart({
     };
   }, [market, awayColor, homeColor, event, colorBoost]);
 
+  const OUTCOME_COLORS = ["#3B82F6", "#EF4444", "#10B981", "#F59E0B", "#8B5CF6"];
+
+  const marketOutcomes = useMemo(() => {
+    if (!event?.markets || event.markets.length < 2) {
+      return [
+        { name: marketData.homeTeam.name, color: marketData.homeTeam.color, price: marketData.homeTeam.price, marketIdx: 0 },
+        { name: marketData.awayTeam.name, color: marketData.awayTeam.color, price: marketData.awayTeam.price, marketIdx: 1 },
+      ];
+    }
+    return topIndices.map((mktIdx, localIdx) => {
+      const m = event.markets[mktIdx];
+      const label = m?.yesSubTitle ?? m?.noSubTitle ?? m?.title ?? `Outcome ${mktIdx + 1}`;
+      let color = OUTCOME_COLORS[localIdx % OUTCOME_COLORS.length];
+      if (mktIdx === 0) color = marketData.homeTeam.color || color;
+      else if (mktIdx === 1) color = marketData.awayTeam.color || color;
+      else color = lightenColor(color, colorBoost);
+      const bid = parseFloat(m?.yesBid);
+      const ask = parseFloat(m?.yesAsk);
+      const b = Number.isFinite(bid) ? bid : 0;
+      const a = Number.isFinite(ask) ? ask : 0;
+      const initialPrice = b && a ? (b + a) / 2 : b || a || 0.5;
+      return { name: label, color, price: initialPrice, marketIdx: mktIdx };
+    });
+  }, [event?.markets, topIndices, marketData, colorBoost]);
+
   // Gesture handling for cursor
   const cursorX = useSharedValue(-1); // -1 means hidden
   const cursorYHigh = useSharedValue(0);
@@ -563,45 +588,39 @@ export default function MyChart({
   // Animation for chart fade-in
   const chartOpacity = useSharedValue(0);
   const [showTooltip, setShowTooltip] = useState(false);
+  const [cursorXPos, setCursorXPos] = useState(-1);
   const [tooltipData, setTooltipData] = useState({
     index: 0,
     awayPrice: 0,
     homePrice: 0,
+    prices: [],
     timestamp: null,
     awayTeamName: "",
     homeTeamName: "",
   });
 
-  // Process chart data from price history
+  // Process chart data from price history — supports N markets
   const chartData = useMemo(() => {
-    // Don't show default 0.5/0.5 - only show chart when we have actual data
-    if (
-      !awayHistory ||
-      !homeHistory ||
-      awayHistory.length === 0 ||
-      homeHistory.length === 0
-    ) {
-      // Return empty array - chart will show skeleton/loading state
+    if (!marketHistories || marketHistories.length < 2 || marketHistories.every((h) => h.length === 0)) {
       return [];
     }
-
-    const maxLength = Math.max(awayHistory.length, homeHistory.length);
+    const maxLength = Math.max(...marketHistories.map((h) => h.length));
     const combined = [];
-
     for (let i = 0; i < maxLength; i++) {
-      const awayPoint = awayHistory[i];
-      const homePoint = homeHistory[i];
-      combined.push({
-        x: i,
-        awayPrice: awayPoint?.y || marketData.awayTeam.price,
-        homePrice: homePoint?.y || marketData.homeTeam.price,
-        timestamp:
-          awayPoint?.timestamp || homePoint?.timestamp || Date.now() / 1000,
+      const point = { x: i, timestamp: null };
+      marketHistories.forEach((hist, idx) => {
+        const p = hist[i];
+        point[`price${idx}`] = p?.y ?? marketOutcomes[idx]?.price ?? 0.5;
+        if (!point.timestamp && p?.timestamp) point.timestamp = p.timestamp;
       });
+      if (!point.timestamp) point.timestamp = Date.now() / 1000;
+      // Keep legacy fields for backward compat with tooltips
+      point.homePrice = point.price0 ?? 0.5;
+      point.awayPrice = point.price1 ?? 0.5;
+      combined.push(point);
     }
-
     return combined;
-  }, [awayHistory, homeHistory, marketData]);
+  }, [marketHistories, marketOutcomes]);
 
   // Determine animation settings based on data size for better performance
   const animationConfig = useMemo(() => {
@@ -686,8 +705,9 @@ export default function MyChart({
 
   const yDomain = useMemo(() => {
     if (!chartData || chartData.length === 0) return [0, 1];
+    const priceKeys = Object.keys(chartData[0] || {}).filter((k) => k.startsWith("price"));
     const allPrices = chartData
-      .flatMap((d) => [d.awayPrice, d.homePrice])
+      .flatMap((d) => priceKeys.map((k) => d[k]))
       .filter((p) => p > 0 && p <= 1);
 
     if (allPrices.length === 0) return [0, 1];
@@ -789,10 +809,12 @@ export default function MyChart({
     (xPos) => {
       if (xPos < 0) {
         setShowTooltip(false);
+        setCursorXPos(-1);
         if (onTimestampChange) onTimestampChange(null);
         lastDataIndexRef.current = -1;
         return;
       }
+      setCursorXPos(xPos);
 
       // Throttle updates for large datasets
       const now = Date.now();
@@ -844,10 +866,22 @@ export default function MyChart({
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
 
+      // Build prices array for all N outcomes
+      const currentPoint = chartData[Math.floor(data.index)] || {};
+      const allPrices = marketOutcomes.map((outcome, localIdx) => {
+        const chartPrice = currentPoint[`price${localIdx}`] ?? (localIdx === 0 ? data.homePrice : localIdx === 1 ? data.awayPrice : 0);
+        const mktIdx = outcome.marketIdx;
+        if (isAtLatestPoint && event?.markets?.[mktIdx]?.ticker && realtimePrices[event.markets[mktIdx].ticker] !== undefined) {
+          return realtimePrices[event.markets[mktIdx].ticker];
+        }
+        return chartPrice;
+      });
+
       setTooltipData({
         index: data.index,
         awayPrice: displayAwayPrice,
         homePrice: displayHomePrice,
+        prices: allPrices,
         timestamp: data.timestamp,
         awayTeamName: marketData.awayTeam.name || "Away",
         homeTeamName: marketData.homeTeam.name || "Home",
@@ -871,6 +905,7 @@ export default function MyChart({
       onTimestampChange,
       onPriceChange,
       marketData,
+      marketOutcomes,
       chartData.length,
       chartData,
       event,
@@ -936,52 +971,32 @@ export default function MyChart({
   // Update tooltip with real-time prices when they change and cursor is at latest point
   useEffect(() => {
     if (!chartData || chartData.length === 0 || !showTooltip) return;
-
-    // Check if cursor is at the latest point (rightmost position)
     const isAtLatestPoint = tooltipData.index >= chartData.length - 1;
+    if (!isAtLatestPoint || !event?.markets || event.markets.length < 2) return;
 
-    if (isAtLatestPoint && event?.markets && event.markets.length >= 2) {
-      const awayMarket = event.markets[1]; // Second market is for away team
-      const homeMarket = event.markets[0]; // First market is for home team
+    let changed = false;
+    const newPrices = (tooltipData.prices || []).slice();
 
-      let displayAwayPrice = tooltipData.awayPrice;
-      let displayHomePrice = tooltipData.homePrice;
-
-      // Use real-time price if available
-      if (
-        awayMarket?.ticker &&
-        realtimePrices[awayMarket.ticker] !== undefined
-      ) {
-        displayAwayPrice = realtimePrices[awayMarket.ticker];
+    marketOutcomes.forEach((outcome, localIdx) => {
+      const m = event.markets[outcome.marketIdx];
+      if (m?.ticker && realtimePrices[m.ticker] !== undefined) {
+        const rtPrice = realtimePrices[m.ticker];
+        if (newPrices[localIdx] !== rtPrice) {
+          newPrices[localIdx] = rtPrice;
+          changed = true;
+        }
       }
-      if (
-        homeMarket?.ticker &&
-        realtimePrices[homeMarket.ticker] !== undefined
-      ) {
-        displayHomePrice = realtimePrices[homeMarket.ticker];
-      }
+    });
 
-      // Only update if prices have changed
-      if (
-        displayAwayPrice !== tooltipData.awayPrice ||
-        displayHomePrice !== tooltipData.homePrice
-      ) {
-        setTooltipData((prev) => ({
-          ...prev,
-          awayPrice: displayAwayPrice,
-          homePrice: displayHomePrice,
-        }));
-      }
+    if (changed) {
+      setTooltipData((prev) => ({
+        ...prev,
+        prices: newPrices,
+        homePrice: newPrices[0] ?? prev.homePrice,
+        awayPrice: newPrices[1] ?? prev.awayPrice,
+      }));
     }
-  }, [
-    realtimePrices,
-    chartData,
-    tooltipData.index,
-    event,
-    showTooltip,
-    tooltipData.awayPrice,
-    tooltipData.homePrice,
-  ]);
+  }, [realtimePrices, chartData, tooltipData.index, event, showTooltip, tooltipData.prices]);
 
   useEffect(() => {
     if (!loading && chartData && chartData.length > 0) {
@@ -1106,6 +1121,33 @@ export default function MyChart({
           />
         </View>
       )}
+      {/* Top 3 market percentages — only for events with 3+ markets; updates on pan */}
+      {event?.markets?.length >= 3 && marketOutcomes.length >= 3 && (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: 10,
+            paddingHorizontal: 16,
+          }}
+        >
+          {marketOutcomes.slice(0, 3).map((outcome, idx) => {
+            const priceVal = tooltipData.prices?.[idx] ?? (idx === 0 ? tooltipData.homePrice : idx === 1 ? tooltipData.awayPrice : outcome.price);
+            const pct = Math.round((Number(priceVal) ?? 0) * 100);
+            const shortName = outcome.name.length > 8 ? outcome.name.slice(0, 7).trim() + "…" : outcome.name;
+            return (
+              <Text
+                key={`header-${idx}`}
+                style={{ color: outcome.color, fontSize: 14, fontWeight: "700" }}
+                numberOfLines={1}
+              >
+                {shortName} {pct}¢
+              </Text>
+            );
+          })}
+        </View>
+      )}
       <Animated.View
         style={[
           styles.chartAnimatedContainer,
@@ -1134,7 +1176,7 @@ export default function MyChart({
                     axis: { stroke: "transparent" },
                     tickLabels: { fill: "transparent" },
                     grid: {
-                      stroke: "transparent",
+                      stroke: uiTheme.gridStroke,
                     },
                     ticks: { stroke: "transparent" },
                   }}
@@ -1145,64 +1187,59 @@ export default function MyChart({
                     axis: { stroke: "transparent" },
                     tickLabels: { fill: "transparent" },
                     grid: {
-                      stroke: "transparent",
+                      stroke: uiTheme.gridStroke,
                     },
                     ticks: { stroke: "transparent" },
                   }}
                 />
-                {chartData.length > 0 && [
-                  <VictoryLine
-                    key="away"
-                    data={chartData}
-                    x="x"
-                    y="awayPrice"
-                    interpolation={animationConfig.interpolation}
-                    style={{
-                      data: {
-                        stroke: marketData.awayTeam.color,
-                        strokeWidth: 3,
-                        strokeLinecap: "butt",
-                        strokeLinejoin: "butt",
-                        strokeDasharray: "0",
-                      },
-                    }}
-                    animate={
-                      animationConfig.enabled
-                        ? {
-                            duration: animationConfig.duration,
-                            onLoad: { duration: animationConfig.duration },
-                            easing: "back",
-                          }
-                        : undefined
-                    }
-                  />,
-                  <VictoryLine
-                    key="home"
-                    data={chartData}
-                    x="x"
-                    y="homePrice"
-                    interpolation={animationConfig.interpolation}
-                    style={{
-                      data: {
-                        stroke: marketData.homeTeam.color,
-                        strokeWidth: 3,
-                        strokeLinecap: "butt",
-                        strokeLinejoin: "butt",
-                        strokeDasharray: "0",
-                      },
-                    }}
-                    animate={
-                      animationConfig.enabled
-                        ? {
-                            duration: animationConfig.duration,
-                            onLoad: { duration: animationConfig.duration },
-                            easing: "back",
-                          }
-                        : undefined
-                    }
-                  />,
-                ]}
+                {chartData.length > 0 &&
+                  marketOutcomes.map((outcome, idx) => (
+                    <VictoryLine
+                      key={`line-${idx}`}
+                      data={chartData}
+                      x="x"
+                      y={`price${idx}`}
+                      interpolation={animationConfig.interpolation}
+                      style={{
+                        data: {
+                          stroke: outcome.color,
+                          strokeWidth: 2.5,
+                          strokeLinecap: "butt",
+                          strokeLinejoin: "butt",
+                          strokeDasharray: "0",
+                        },
+                      }}
+                      animate={
+                        animationConfig.enabled
+                          ? {
+                              duration: animationConfig.duration,
+                              onLoad: { duration: animationConfig.duration },
+                              easing: "back",
+                            }
+                          : undefined
+                      }
+                    />
+                  ))}
               </VictoryChart>
+
+              {/* Pulsing endpoint dots — use same Y scale as VictoryChart (full plot height, no extra inset) */}
+              {chartData.length > 0 &&
+                marketOutcomes.map((outcome, idx) => {
+                  const lastPoint = chartData[chartData.length - 1];
+                  const price = lastPoint[`price${idx}`] ?? 0.5;
+                  const [dMin, dMax] = yDomain;
+                  const dRange = dMax - dMin || 1;
+                  const norm = (price - dMin) / dRange;
+                  const yPos = chartPadding.top + (1 - norm) * plotHeight;
+                  return (
+                    <PulsingDot
+                      key={`pulse-${idx}`}
+                      color={outcome.color}
+                      x={chartPadding.left + plotWidth - 1}
+                      y={yPos}
+                    />
+                  );
+                })}
 
               {/* Cursor Line */}
               <Animated.View
@@ -1230,63 +1267,44 @@ export default function MyChart({
                     </Text>
                   </Animated.View>
 
-                  {/* Away Team Tooltip */}
-                  <Animated.View
-                    style={[
-                      styles.tooltip,
-                      styles.tooltipHigh,
-                      animatedTooltipHighStyle,
-                      { borderLeftColor: marketData.awayTeam.color },
-                    ]}
-                    pointerEvents="none"
-                  >
-                    <Text
-                      style={[
-                        styles.tooltipPrice,
-                        { color: marketData.awayTeam.color },
-                      ]}
-                    >
-                      {`${Math.round(
-                        (Number(tooltipData.awayPrice) || 0) * 100
-                      )}%`}
-                    </Text>
-                    <Text
-                      style={styles.tooltipLabel}
-                      numberOfLines={2}
-                      ellipsizeMode="tail"
-                    >
-                      {marketData.awayTeam.name}
-                    </Text>
-                  </Animated.View>
-
-                  {/* Home Team Tooltip */}
-                  <Animated.View
-                    style={[
-                      styles.tooltip,
-                      styles.tooltipLow,
-                      animatedTooltipLowStyle,
-                      { borderLeftColor: marketData.homeTeam.color },
-                    ]}
-                    pointerEvents="none"
-                  >
-                    <Text
-                      style={[
-                        styles.tooltipPrice,
-                        { color: marketData.homeTeam.color },
-                      ]}
-                    >
-                      {`${Math.round(
-                        (Number(tooltipData.homePrice) || 0) * 100
-                      )}%`}
-                    </Text>
-                    <Text
-                      style={styles.tooltipLabel}
-                      numberOfLines={2}
-                      ellipsizeMode="tail"
-                    >
-                      {marketData.homeTeam.name}
-                    </Text>
-                  </Animated.View>
+                  {/* Outcome Tooltips — rendered at chart end for all N outcomes */}
+                  {marketOutcomes.map((outcome, idx) => {
+                    const priceVal = tooltipData.prices?.[idx] ?? (idx === 0 ? tooltipData.homePrice : idx === 1 ? tooltipData.awayPrice : 0);
+                    const pct = Math.round((Number(priceVal) || 0) * 100);
+                    const domainPaddingY = 10;
+                    const effectivePlotHeight = plotHeight - domainPaddingY * 2;
+                    const [domainMin, domainMax] = yDomain;
+                    const domainRange = domainMax - domainMin || 1;
+                    const normalized = ((Number(priceVal) || 0.5) - domainMin) / domainRange;
+                    const yPos = chartPadding.top + domainPaddingY + (1 - normalized) * effectivePlotHeight;
+                    const isRightHalf = cursorXPos > plotWidth * 0.5;
+                    const xPos = isRightHalf ? cursorXPos - tooltipWidth : cursorXPos + tooltipMargin;
+                    return (
+                      <View
+                        key={`tip-${idx}`}
+                        style={[
+                          styles.tooltip,
+                          styles.tooltipHigh,
+                          {
+                            borderLeftColor: outcome.color,
+                            opacity: cursorXPos >= 0 ? 0.8 : 0,
+                            transform: [
+                              { translateX: xPos },
+                              { translateY: yPos - tooltipOffset },
+                            ],
+                          },
+                        ]}
+                        pointerEvents="none"
+                      >
+                        <Text style={[styles.tooltipPrice, { color: outcome.color }]}>
+                          {pct}¢
+                        </Text>
+                        <Text style={styles.tooltipLabel} numberOfLines={2} ellipsizeMode="tail">
+                          {outcome.name}
+                        </Text>
+                      </View>
+                    );
+                  })}
                 </>
               )}
             </View>

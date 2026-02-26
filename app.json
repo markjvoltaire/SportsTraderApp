@@ -1,4 +1,9 @@
 {
+  "mcpServers": {
+    "DFlow": {
+      "url": "https://pond.dflow.net/mcp"
+    }
+  },
   "expo": {
     "name": "Scoretrade",
     "slug": "scoretrade",

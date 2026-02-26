@@ -8,6 +8,7 @@ import React, {
   useCallback,
 } from "react";
 import { Buffer } from "buffer";
+import { Connection, VersionedTransaction } from "@solana/web3.js";
 import { usePrivy, useEmbeddedSolanaWallet } from "@privy-io/expo";
 import { setupPrivyUser } from "../services/walletService";
 import { getPolicyIds } from "../config/privy";
@@ -56,6 +57,8 @@ export const AuthProvider = ({ children }) => {
     verified: null,
     lastCheckedAt: null,
   });
+  // Proof token for DFlow trade authorization (set after KYC or from backend)
+  const [proofToken, setProofToken] = useState(null);
 
   // Prevent repeated backend setup calls for the same user
   const lastSetupKeyRef = useRef(null);
@@ -228,7 +231,8 @@ export const AuthProvider = ({ children }) => {
   );
 
   const checkProofStatus = useCallback(async () => {
-    if (!walletAddress) {
+    const addressToVerify = solanaAddress || walletAddress;
+    if (!addressToVerify) {
       setProofStatus({ status: "idle", verified: null, lastCheckedAt: null });
       return { status: "idle", verified: null };
     }
@@ -247,7 +251,7 @@ export const AuthProvider = ({ children }) => {
       }
 
       const { data, error } = await checkProofVerification(
-        walletAddress,
+        addressToVerify,
         authToken
       );
 
@@ -279,6 +283,7 @@ export const AuthProvider = ({ children }) => {
       return { status: nextState.status, verified: nextState.verified };
     }
   }, [
+    solanaAddress,
     walletAddress,
     privy,
   ]);
@@ -417,10 +422,12 @@ export const AuthProvider = ({ children }) => {
 
   // Check Proof (KYC) verification status when we have a wallet
   useEffect(() => {
-    if (walletAddress && proofStatus.status === "idle") {
+    const addr = solanaAddress || walletAddress;
+    if (addr && proofStatus.status === "idle") {
       checkProofStatus();
     }
   }, [
+    solanaAddress,
     walletAddress,
     proofStatus.status,
     checkProofStatus,
@@ -459,6 +466,16 @@ export const AuthProvider = ({ children }) => {
     return token ?? null;
   }, [privy]);
 
+  const solanaAddress = useMemo(() => {
+    const wallets = Array.isArray(solanaWalletContext?.wallets)
+      ? solanaWalletContext.wallets
+      : [];
+    const sw = wallets.find(
+      (w) => typeof w?.getProvider === "function" && w?.address
+    );
+    return sw?.address || null;
+  }, [solanaWalletContext]);
+
   const getProofSigningWallet = useCallback(async () => {
     const wallets = Array.isArray(solanaWalletContext?.wallets)
       ? solanaWalletContext.wallets
@@ -479,20 +496,135 @@ export const AuthProvider = ({ children }) => {
       publicKey: {
         toBase58: () => embeddedSolanaWallet.address,
       },
-      signMessage: async (messageBytes) => {
-        const messageBase64 = Buffer.from(messageBytes).toString("base64");
+      signMessage: async (messageInput) => {
+        const msgBuffer =
+          typeof messageInput === "string"
+            ? Buffer.from(messageInput, "utf-8")
+            : Buffer.from(messageInput);
+        const messageBase64 = msgBuffer.toString("base64");
+
+        console.log("[Proof:sign] address:", embeddedSolanaWallet.address);
+        console.log("[Proof:sign] msgLen:", msgBuffer.length, "b64:", messageBase64);
+
         const result = await provider.request({
           method: "signMessage",
           params: { message: messageBase64 },
         });
-        const signatureBase64 = result?.signature;
-        if (!signatureBase64) {
+
+        const sig = result?.signature;
+        if (!sig) {
           throw new Error("Wallet signature was not returned.");
         }
-        return Uint8Array.from(Buffer.from(signatureBase64, "base64"));
+
+        console.log("[Proof:sign] sig type:", typeof sig, "len:", sig.length);
+
+        let sigBytes = Buffer.from(sig, "base64");
+
+        if (sigBytes.length !== 64) {
+          console.warn(
+            "[Proof:sign] base64 decode gave",
+            sigBytes.length,
+            "bytes (expected 64), trying raw bs58 decode"
+          );
+          try {
+            const bs58Mod = require("bs58");
+            const bs58 = bs58Mod?.default || bs58Mod;
+            sigBytes = Buffer.from(bs58.decode(sig));
+            console.log("[Proof:sign] bs58 decode gave", sigBytes.length, "bytes");
+          } catch (_) {
+            console.warn("[Proof:sign] bs58 fallback failed, using base64 result");
+          }
+        }
+
+        if (sigBytes.length !== 64) {
+          console.error(
+            "[Proof:sign] FINAL signature is",
+            sigBytes.length,
+            "bytes — Ed25519 must be 64"
+          );
+        }
+
+        return new Uint8Array(sigBytes);
       },
     };
   }, [solanaWalletContext]);
+
+  const signAndSendSolanaTransaction = useCallback(
+    async (transactionBase64, options = {}) => {
+      console.log("[signAndSendSolanaTransaction] Starting sponsored transaction...");
+      
+      const wallets = Array.isArray(solanaWalletContext?.wallets)
+        ? solanaWalletContext.wallets
+        : [];
+      const wallet = wallets.find(
+        (w) => typeof w?.getProvider === "function" && w?.address
+      );
+      
+      if (!wallet) {
+        throw new Error("No embedded Solana wallet available. Please ensure your wallet is connected.");
+      }
+
+      const txBuffer = Buffer.from(transactionBase64, "base64");
+      const transaction = VersionedTransaction.deserialize(new Uint8Array(txBuffer));
+      const provider = await wallet.getProvider();
+
+      // Use RPC from options (e.g. devnet when backend used dev quote API), then env, then mainnet.
+      const rpcUrl =
+        options?.rpcUrl ||
+        (typeof process !== "undefined" && process?.env?.EXPO_PUBLIC_SOLANA_RPC_URL) ||
+        "https://api.mainnet-beta.solana.com";
+      console.log("[signAndSendSolanaTransaction] RPC:", rpcUrl.replace(/\/$/, ""));
+      const connection = new Connection(rpcUrl);
+
+      // Refresh blockhash so the transaction is valid when sent (avoids "Blockhash not found")
+      try {
+        const { blockhash } = await connection.getLatestBlockhash("finalized");
+        if (transaction.message && "recentBlockhash" in transaction.message) {
+          transaction.message.recentBlockhash = blockhash;
+        }
+      } catch (blockhashErr) {
+        console.warn("[signAndSendSolanaTransaction] Blockhash refresh failed:", blockhashErr?.message);
+      }
+
+      try {
+        console.log("Requesting sponsored signature from Privy...");
+        
+        const result = await provider.request({
+          method: "signAndSendTransaction",
+          params: {
+            transaction,
+            connection,
+            options: {
+              sponsor: true,
+              skipPreflight: false,
+              maxRetries: 3,
+            },
+          },
+        });
+
+        const signature = result?.signature || result;
+        console.log("Transaction sponsored and sent! Signature:", signature);
+        
+        return signature;
+        
+      } catch (error) {
+        console.error("Sponsored transaction failed:", error);
+        
+        if (error?.message?.includes("reject") || error?.message?.includes("cancel")) {
+          throw new Error("Transaction was cancelled.");
+        }
+        if (error?.message?.includes("Blockhash not found") || error?.message?.includes("blockhash")) {
+          throw new Error("Transaction expired. Please try again.");
+        }
+        if (error?.message?.includes("no record of a prior credit") || error?.message?.includes("debit")) {
+          throw new Error("Insufficient USDC balance. Please add funds to your wallet before making a purchase.");
+        }
+        
+        throw new Error(error?.message || "Transaction failed.");
+      }
+    },
+    [solanaWalletContext]
+  );
 
   const value = {
     session,
@@ -506,10 +638,14 @@ export const AuthProvider = ({ children }) => {
     supabaseUserError,
     refreshSupabaseUser,
     proofStatus,
+    proofToken,
+    setProofToken,
     walletAddress,
+    solanaAddress,
     checkProofStatus,
     getAccessToken,
     getProofSigningWallet,
+    signAndSendSolanaTransaction,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

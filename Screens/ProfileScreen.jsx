@@ -29,7 +29,7 @@ export default function ProfileScreen() {
   const theme = isDarkMode ? DARK_THEME : LIGHT_THEME;
   const styles = useMemo(() => createStyles(theme), [theme]);
 
-  const { signOut, user, loading, walletAddress, checkProofStatus } = useAuth();
+  const { signOut, user, loading, walletAddress, checkProofStatus, proofStatus } = useAuth();
   const navigation = useNavigation();
   const [verifying, setVerifying] = useState(false);
 
@@ -90,19 +90,38 @@ export default function ProfileScreen() {
   };
 
   // -------------------------
-  // Handle Deposit - go to Proof (KYC) verification
+  // Handle Deposit - gate with Proof (KYC), then continue to deposit flow
   // -------------------------
-  const handleDeposit = () => {
+  const handleDeposit = async () => {
     let rootNav = navigation;
     while (rootNav.getParent()) {
       rootNav = rootNav.getParent();
     }
-    rootNav.navigate("ProofVerification");
+
+    if (!walletAddress) {
+      Alert.alert("Wallet not ready", "Please wait for wallet setup and try again.");
+      return;
+    }
+
+    try {
+      const proofResult =
+        proofStatus?.status === "verified"
+          ? { status: "verified", verified: true }
+          : await checkProofStatus();
+
+      if (proofResult?.verified || proofResult?.status === "verified") {
+        let rootNav = navigation;
+        while (rootNav.getParent()) rootNav = rootNav.getParent();
+        rootNav.navigate("Main", { screen: "Wallet", params: { screen: "Deposit" } });
+        return;
+      }
+
+      rootNav.navigate("ProofVerification");
+    } catch (_err) {
+      rootNav.navigate("ProofVerification");
+    }
   };
 
-  // -------------------------
-  // Handle Fund Wallet - Navigate to Deposit Screen (kept for other callers if any)
-  // -------------------------
   const handleFundWallet = () => {
     const embeddedWallet = user?.linked_accounts?.find(
       (account) =>
@@ -114,7 +133,9 @@ export default function ProfileScreen() {
       return;
     }
 
-    navigation.navigate("DepositAmount");
+    let rootNav = navigation;
+    while (rootNav.getParent()) rootNav = rootNav.getParent();
+    rootNav.navigate("Main", { screen: "Wallet", params: { screen: "Deposit" } });
   };
 
   // -------------------------

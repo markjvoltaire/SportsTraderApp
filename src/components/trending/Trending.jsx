@@ -5,7 +5,7 @@ import LottieView from "lottie-react-native";
 import { Colors, Spacing, Typography } from "../../constants/theme";
 import TrendingCard from "./TrendingCard";
 
-export default function Trending({ events = [], loading = false }) {
+export default function Trending({ events = [], loading = false, competition = "PRO BASKETBALL (M)" }) {
   if (loading) {
     return (
       <View style={styles.loaderContainer}>
@@ -44,7 +44,7 @@ export default function Trending({ events = [], loading = false }) {
           <TrendingCard
             key={event.ticker || event.id || index}
             event={event}
-            competitionFallback="Trending"
+            competitionFallback={competition}
           />
         ))}
       </View>
