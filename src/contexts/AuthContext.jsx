@@ -8,7 +8,8 @@ import React, {
   useCallback,
 } from "react";
 import { Buffer } from "buffer";
-import { Connection, VersionedTransaction } from "@solana/web3.js";
+import bs58 from "bs58";
+import { Connection, PublicKey, VersionedTransaction } from "@solana/web3.js";
 import { usePrivy, useEmbeddedSolanaWallet } from "@privy-io/expo";
 import { setupPrivyUser } from "../services/walletService";
 import { getPolicyIds } from "../config/privy";
@@ -551,7 +552,7 @@ export const AuthProvider = ({ children }) => {
 
   const signAndSendSolanaTransaction = useCallback(
     async (transactionBase64, options = {}) => {
-      console.log("[signAndSendSolanaTransaction] Starting sponsored transaction...");
+      console.log("[signAndSendSolanaTransaction] Starting, options:", JSON.stringify(options), "txBase64 length:", transactionBase64?.length);
       
       const wallets = Array.isArray(solanaWalletContext?.wallets)
         ? solanaWalletContext.wallets
@@ -563,10 +564,32 @@ export const AuthProvider = ({ children }) => {
       if (!wallet) {
         throw new Error("No embedded Solana wallet available. Please ensure your wallet is connected.");
       }
+      console.log("[signAndSendSolanaTransaction] Wallet address:", wallet?.address);
 
       const txBuffer = Buffer.from(transactionBase64, "base64");
       const transaction = VersionedTransaction.deserialize(new Uint8Array(txBuffer));
       const provider = await wallet.getProvider();
+
+      // Log transaction account keys and user USDC ATA for debugging
+      try {
+        const staticKeys = transaction.message?.staticAccountKeys || [];
+        const keys = staticKeys.map((k) => k?.toBase58?.() || String(k));
+        console.log("[signAndSendSolanaTransaction] Tx static account keys:", keys?.length, "keys:", keys);
+        const owner = new PublicKey(wallet.address);
+        const USDC_MAINNET = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+        const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+        const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+        const usdcMint = new PublicKey(USDC_MAINNET);
+        const [ata] = PublicKey.findProgramAddressSync(
+          [owner.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), usdcMint.toBuffer()],
+          ASSOCIATED_TOKEN_PROGRAM_ID
+        );
+        const userUsdcAta = ata.toBase58();
+        const ataInTx = keys?.includes(userUsdcAta);
+        console.log("[signAndSendSolanaTransaction] User USDC ATA:", userUsdcAta, "in tx:", ataInTx);
+      } catch (decodeErr) {
+        console.warn("[signAndSendSolanaTransaction] Tx decode:", decodeErr?.message);
+      }
 
       // Use RPC from options (e.g. devnet when backend used dev quote API), then env, then mainnet.
       const rpcUrl =
@@ -575,6 +598,36 @@ export const AuthProvider = ({ children }) => {
         "https://api.mainnet-beta.solana.com";
       console.log("[signAndSendSolanaTransaction] RPC:", rpcUrl.replace(/\/$/, ""));
       const connection = new Connection(rpcUrl);
+
+      // Log Privy wallet balance (SOL + USDC)
+      try {
+        const owner = new PublicKey(wallet.address);
+        const solLamports = await connection.getBalance(owner);
+        const solBalance = solLamports / 1e9;
+        const USDC_MAINNET = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+        const USDC_DEVNET = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
+        const isDevnet = rpcUrl.includes("devnet");
+        const usdcMint = new PublicKey(isDevnet ? USDC_DEVNET : USDC_MAINNET);
+        const tokenAccounts = await connection.getParsedTokenAccountsByOwner(owner, { mint: usdcMint });
+        let usdcBalance = null;
+        let usdcTokenAccountAddress = null;
+        if (tokenAccounts.value?.length > 0) {
+          const first = tokenAccounts.value[0];
+          usdcTokenAccountAddress = first?.pubkey?.toBase58?.();
+          const info = first?.account?.data?.parsed?.info;
+          const tokenAmount = info?.tokenAmount ?? info?.uiTokenAmount;
+          usdcBalance = tokenAmount?.uiAmount ?? (tokenAmount?.amount != null ? Number(tokenAmount.amount) / 1e6 : null);
+        }
+        console.log("[Privy wallet] Balance:", {
+          address: wallet.address,
+          network: isDevnet ? "devnet" : "mainnet",
+          sol: `${solBalance.toFixed(6)} SOL`,
+          usdc: usdcBalance != null ? `${usdcBalance} USDC` : "no USDC account",
+          usdcTokenAccount: usdcTokenAccountAddress,
+        });
+      } catch (balanceErr) {
+        console.warn("[Privy wallet] Balance fetch failed:", balanceErr?.message);
+      }
 
       // Refresh blockhash so the transaction is valid when sent (avoids "Blockhash not found")
       try {
@@ -586,8 +639,50 @@ export const AuthProvider = ({ children }) => {
         console.warn("[signAndSendSolanaTransaction] Blockhash refresh failed:", blockhashErr?.message);
       }
 
+      if (options?.useSponsor) {
+        // Backend-sponsored flow: user signs, backend adds sponsor sig and broadcasts
+        try {
+          console.log("Signing for backend sponsor (user signs only)...");
+          const messageBytes = transaction.message.serialize();
+          const messageBase64 = Buffer.from(messageBytes).toString("base64");
+          const signResult = await provider.request({
+            method: "signMessage",
+            params: { message: messageBase64 },
+          });
+          const sig = signResult?.signature;
+          if (!sig) throw new Error("No signature from signMessage");
+          let sigBytes = Buffer.from(sig, "base64");
+          if (sigBytes.length !== 64) {
+            try {
+              sigBytes = Buffer.from(bs58.decode(sig));
+            } catch {
+              // keep sigBytes as is
+            }
+          }
+          transaction.addSignature(new PublicKey(wallet.address), sigBytes);
+          const serializedTx = transaction.serialize();
+          const txBase64 = Buffer.from(serializedTx).toString("base64");
+          const sponsorRes = await fetch(`${API_BASE_URL}/api/trade/sponsor-sign`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ transaction: txBase64 }),
+          });
+          const sponsorData = await sponsorRes.json().catch(() => ({}));
+          if (!sponsorRes.ok) {
+            throw new Error(sponsorData?.error || `Sponsor sign failed: ${sponsorRes.status}`);
+          }
+          const signature = sponsorData?.signature;
+          if (!signature) throw new Error("No signature from sponsor-sign");
+          console.log("Transaction sponsored and broadcast! Signature:", signature);
+          return signature;
+        } catch (sponsorErr) {
+          console.error("[signAndSendSolanaTransaction] Sponsor flow failed:", sponsorErr?.message);
+          throw sponsorErr;
+        }
+      }
+
       try {
-        console.log("Requesting sponsored signature from Privy...");
+        console.log("Requesting signature from Privy (user pays fees)...");
         
         const result = await provider.request({
           method: "signAndSendTransaction",
@@ -595,7 +690,7 @@ export const AuthProvider = ({ children }) => {
             transaction,
             connection,
             options: {
-              sponsor: true,
+              sponsor: false,
               skipPreflight: false,
               maxRetries: 3,
             },
@@ -603,12 +698,12 @@ export const AuthProvider = ({ children }) => {
         });
 
         const signature = result?.signature || result;
-        console.log("Transaction sponsored and sent! Signature:", signature);
+        console.log("Transaction sent! Signature:", signature);
         
         return signature;
         
       } catch (error) {
-        console.error("Sponsored transaction failed:", error);
+        console.error("[signAndSendSolanaTransaction] Transaction failed:", error?.message, error);
         
         if (error?.message?.includes("reject") || error?.message?.includes("cancel")) {
           throw new Error("Transaction was cancelled.");

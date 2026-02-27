@@ -62,7 +62,7 @@ export default function ChartScreen() {
             iconButtonBg: "rgba(17,24,39,0.06)",
             iconButtonBorder: "rgba(17,24,39,0.12)",
           },
-    [isDarkMode]
+    [isDarkMode],
   );
 
   const navigation = useNavigation();
@@ -90,11 +90,15 @@ export default function ChartScreen() {
 
   // Volume state - initialized with combined Kalshi + Polymarket volume
   const [volume, setVolume] = useState(() => {
-    const kalshi = Number(event?.volume ?? event?.volume24hr ?? event?.totalVolume ?? 0);
+    const kalshi = Number(
+      event?.volume ?? event?.volume24hr ?? event?.totalVolume ?? 0,
+    );
     const poly = Number(event?.polymarket?.volume ?? 0);
-    return (Number.isFinite(kalshi) ? kalshi : 0) + (Number.isFinite(poly) ? poly : 0);
+    return (
+      (Number.isFinite(kalshi) ? kalshi : 0) +
+      (Number.isFinite(poly) ? poly : 0)
+    );
   });
-
 
   const WEBSOCKET_URL = "wss://dev-prediction-markets-api.dflow.net/api/v1/ws";
 
@@ -124,16 +128,21 @@ export default function ChartScreen() {
       ]
         .filter(Boolean)
         .join(" "),
-    [market, event]
+    [market, event],
   );
 
   const isProFootball = /pro football|nfl/i.test(leagueHints);
   const isProBasketball = /pro basketball|nba/i.test(leagueHints);
 
   useEffect(() => {
-    const kalshi = Number(event?.volume ?? event?.volume24hr ?? event?.totalVolume ?? 0);
+    const kalshi = Number(
+      event?.volume ?? event?.volume24hr ?? event?.totalVolume ?? 0,
+    );
     const poly = Number(event?.polymarket?.volume ?? 0);
-    setVolume((Number.isFinite(kalshi) ? kalshi : 0) + (Number.isFinite(poly) ? poly : 0));
+    setVolume(
+      (Number.isFinite(kalshi) ? kalshi : 0) +
+        (Number.isFinite(poly) ? poly : 0),
+    );
   }, [event?.volume, event?.polymarket?.volume]);
 
   // Fetch candlestick data when event changes
@@ -143,7 +152,7 @@ export default function ChartScreen() {
       try {
         setChartLoading(true);
         const response = await fetch(
-          `${API_BASE_URL}/api/game/candlestick/${event.ticker}`
+          `${API_BASE_URL}/api/game/candlestick/${event.ticker}`,
         );
         const data = await response.json();
 
@@ -156,7 +165,6 @@ export default function ChartScreen() {
     };
     fetchCandlesticks();
   }, [event?.ticker]);
-
 
   // WebSocket connection for trades
   useEffect(() => {
@@ -171,7 +179,7 @@ export default function ChartScreen() {
           type: "subscribe",
           channel: "trades",
           tickers: marketTickers,
-        })
+        }),
       );
 
       // Subscribe to prices channel
@@ -180,9 +188,8 @@ export default function ChartScreen() {
           type: "subscribe",
           channel: "prices",
           tickers: marketTickers,
-        })
+        }),
       );
-
     };
 
     ws.onmessage = (event) => {
@@ -201,7 +208,7 @@ export default function ChartScreen() {
 
         // Calculate amount spent in dollars (price per share × number of shares)
         const pricePerShare = parseFloat(
-          tradeData.side === "yes" ? tradeData.yesPrice : tradeData.noPrice
+          tradeData.side === "yes" ? tradeData.yesPrice : tradeData.noPrice,
         );
         const amountSpent = pricePerShare * parseInt(tradeData.count);
 
@@ -269,7 +276,7 @@ export default function ChartScreen() {
                 type: "unsubscribe",
                 channel: "trades",
                 tickers: marketTickers,
-              })
+              }),
             );
             // Unsubscribe from prices
             wsToClose.send(
@@ -277,7 +284,7 @@ export default function ChartScreen() {
                 type: "unsubscribe",
                 channel: "prices",
                 tickers: marketTickers,
-              })
+              }),
             );
           } catch (error) {
             console.error("Error unsubscribing from channels:", error);
@@ -310,7 +317,7 @@ export default function ChartScreen() {
           type: "subscribe",
           channel: "prices",
           tickers: marketTickers,
-        })
+        }),
       );
     };
 
@@ -423,7 +430,7 @@ export default function ChartScreen() {
                 type: "unsubscribe",
                 channel: "prices",
                 tickers: marketTickers,
-              })
+              }),
             );
           } catch (error) {
             console.error("Error unsubscribing from prices:", error);
@@ -660,12 +667,12 @@ export default function ChartScreen() {
         const awayPriceObj = market.prices.find(
           (p) =>
             p.tokenId === awayTokenId ||
-            p.tokenId?.toString() === awayTokenId?.toString()
+            p.tokenId?.toString() === awayTokenId?.toString(),
         );
         const homePriceObj = market.prices.find(
           (p) =>
             p.tokenId === homeTokenId ||
-            p.tokenId?.toString() === homeTokenId?.toString()
+            p.tokenId?.toString() === homeTokenId?.toString(),
         );
 
         awayPrice = awayPriceObj ? parseFloat(awayPriceObj.price) : null;
@@ -854,8 +861,10 @@ export default function ChartScreen() {
 
   const tickerToTeam = useMemo(() => {
     const map = {};
-    if (marketTicker1) map[marketTicker1] = match?.home?.name ?? match?.home?.code ?? "Home";
-    if (marketTicker2) map[marketTicker2] = match?.away?.name ?? match?.away?.code ?? "Away";
+    if (marketTicker1)
+      map[marketTicker1] = match?.home?.name ?? match?.home?.code ?? "Home";
+    if (marketTicker2)
+      map[marketTicker2] = match?.away?.name ?? match?.away?.code ?? "Away";
     return map;
   }, [marketTicker1, marketTicker2, match?.home, match?.away]);
 
@@ -875,10 +884,10 @@ export default function ChartScreen() {
     });
   }, [trades, tickerToTeam]);
 
-
-
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: screenColors.background }]}>
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: screenColors.background }]}
+    >
       {/* Top bar */}
       <View style={styles.topBar}>
         <TouchableOpacity
@@ -891,7 +900,11 @@ export default function ChartScreen() {
           ]}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="chevron-back" size={22} color={screenColors.primaryText} />
+          <Ionicons
+            name="chevron-back"
+            size={22}
+            color={screenColors.primaryText}
+          />
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
@@ -915,7 +928,11 @@ export default function ChartScreen() {
             },
           ]}
         >
-          <Ionicons name="share-outline" size={20} color={screenColors.primaryText} />
+          <Ionicons
+            name="share-outline"
+            size={20}
+            color={screenColors.primaryText}
+          />
         </TouchableOpacity>
       </View>
       <ScrollView
@@ -925,7 +942,12 @@ export default function ChartScreen() {
       >
         {!!competitionLabel && (
           <View style={styles.competitionRow}>
-            <Text style={[styles.competitionText, { color: screenColors.secondaryText }]}>
+            <Text
+              style={[
+                styles.competitionText,
+                { color: screenColors.secondaryText },
+              ]}
+            >
               {competitionLabel}
             </Text>
           </View>
@@ -955,8 +977,6 @@ export default function ChartScreen() {
           </Text>
         )}
 
-
-
         {/* Chart */}
         <View style={{ right: 15 }}>
           <MyChart
@@ -974,21 +994,64 @@ export default function ChartScreen() {
             colorBoost={isProFootball ? 0.3 : 0.22}
           />
         </View>
-        
 
         {/* Live trade log from WebSocket */}
         {event?.markets?.length >= 2 && (
           <View style={styles.tradeLogSection}>
             <View style={styles.tradeLogHeader}>
-              <Text style={[styles.tradeLogHeaderCell, styles.tradeLogOutcome, { color: screenColors.tertiaryText }]}>Outcome</Text>
-              <Text style={[styles.tradeLogHeaderCell, styles.tradeLogType, { color: screenColors.tertiaryText }]}>Type</Text>
-              <Text style={[styles.tradeLogHeaderCell, styles.tradeLogPrice, { color: screenColors.tertiaryText }]}>Price</Text>
-              <Text style={[styles.tradeLogHeaderCell, styles.tradeLogShares, { color: screenColors.tertiaryText }]}>Shares</Text>
-              <Text style={[styles.tradeLogHeaderCell, styles.tradeLogAmount, { color: screenColors.tertiaryText }]}>Amount</Text>
+              <Text
+                style={[
+                  styles.tradeLogHeaderCell,
+                  styles.tradeLogOutcome,
+                  { color: screenColors.tertiaryText },
+                ]}
+              >
+                Outcome
+              </Text>
+              <Text
+                style={[
+                  styles.tradeLogHeaderCell,
+                  styles.tradeLogType,
+                  { color: screenColors.tertiaryText },
+                ]}
+              >
+                Type
+              </Text>
+              <Text
+                style={[
+                  styles.tradeLogHeaderCell,
+                  styles.tradeLogPrice,
+                  { color: screenColors.tertiaryText },
+                ]}
+              >
+                Price
+              </Text>
+              <Text
+                style={[
+                  styles.tradeLogHeaderCell,
+                  styles.tradeLogShares,
+                  { color: screenColors.tertiaryText },
+                ]}
+              >
+                Shares
+              </Text>
+              <Text
+                style={[
+                  styles.tradeLogHeaderCell,
+                  styles.tradeLogAmount,
+                  { color: screenColors.tertiaryText },
+                ]}
+              >
+                Amount
+              </Text>
             </View>
             {enrichedTrades.length === 0 ? (
               <View style={styles.tradeLogEmpty}>
-                <Text style={{ color: screenColors.tertiaryText, fontSize: 13 }}>Waiting for trades…</Text>
+                <Text
+                  style={{ color: screenColors.tertiaryText, fontSize: 13 }}
+                >
+                  Waiting for trades…
+                </Text>
               </View>
             ) : (
               enrichedTrades.slice(0, 3).map((t, i) => {
@@ -996,21 +1059,55 @@ export default function ChartScreen() {
                 return (
                   <View
                     key={`trade-${i}`}
-                    style={[styles.tradeLogRow, { borderBottomColor: screenColors.iconButtonBorder }]}
+                    style={[
+                      styles.tradeLogRow,
+                      { borderBottomColor: screenColors.iconButtonBorder },
+                    ]}
                   >
-                    <Text style={[styles.tradeLogCell, styles.tradeLogOutcome, { color: screenColors.primaryText }]} numberOfLines={1}>
+                    <Text
+                      style={[
+                        styles.tradeLogCell,
+                        styles.tradeLogOutcome,
+                        { color: screenColors.primaryText },
+                      ]}
+                      numberOfLines={1}
+                    >
                       {t.outcome.toUpperCase()}
                     </Text>
-                    <Text style={[styles.tradeLogCell, styles.tradeLogType, { color: typeColor, fontWeight: "700" }]}>
+                    <Text
+                      style={[
+                        styles.tradeLogCell,
+                        styles.tradeLogType,
+                        { color: typeColor, fontWeight: "700" },
+                      ]}
+                    >
                       {t.type}
                     </Text>
-                    <Text style={[styles.tradeLogCell, styles.tradeLogPrice, { color: screenColors.primaryText }]}>
+                    <Text
+                      style={[
+                        styles.tradeLogCell,
+                        styles.tradeLogPrice,
+                        { color: screenColors.primaryText },
+                      ]}
+                    >
                       {t.priceCents}¢
                     </Text>
-                    <Text style={[styles.tradeLogCell, styles.tradeLogShares, { color: screenColors.primaryText }]}>
+                    <Text
+                      style={[
+                        styles.tradeLogCell,
+                        styles.tradeLogShares,
+                        { color: screenColors.primaryText },
+                      ]}
+                    >
                       {t.shares}
                     </Text>
-                    <Text style={[styles.tradeLogCell, styles.tradeLogAmount, { color: screenColors.primaryText }]}>
+                    <Text
+                      style={[
+                        styles.tradeLogCell,
+                        styles.tradeLogAmount,
+                        { color: screenColors.primaryText },
+                      ]}
+                    >
                       ${t.amount}
                     </Text>
                   </View>
@@ -1020,11 +1117,11 @@ export default function ChartScreen() {
           </View>
         )}
 
-       <View style={{ marginTop: 45 }}>
-        <Text style={{ color: screenColors.secondaryText, fontSize: 13 }}>
-          {market.earlyCloseCondition}
-        </Text>
-       </View>
+        <View style={{ marginTop: 45 }}>
+          <Text style={{ color: screenColors.secondaryText, fontSize: 13 }}>
+            {market.earlyCloseCondition}
+          </Text>
+        </View>
       </ScrollView>
 
       {/* Bottom Bar - Buy Team Buttons */}
@@ -1038,7 +1135,6 @@ export default function ChartScreen() {
     </SafeAreaView>
   );
 }
-
 
 const styles = StyleSheet.create({
   safe: {
@@ -1192,11 +1288,9 @@ const styles = StyleSheet.create({
   },
 
   predictionTitle: {
-   fontSize: 16,
-   fontWeight: "700",
+    fontSize: 16,
+    fontWeight: "700",
     color: Colors.textPrimary,
- 
-  
   },
   pickRow: {
     flexDirection: "row",
@@ -1330,7 +1424,6 @@ const styles = StyleSheet.create({
   },
 
   tradeLogSection: {
- 
     borderRadius: BorderRadius.md,
     overflow: "hidden",
   },

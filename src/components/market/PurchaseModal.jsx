@@ -139,6 +139,7 @@ export default function PurchaseModal({
       price,
       market,
     };
+    console.log("[PurchaseModal] handleConfirmPurchase, payload:", JSON.stringify(payload));
     onConfirm?.(payload);
   };
 

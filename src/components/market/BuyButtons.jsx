@@ -33,7 +33,7 @@ export default function BuyButtons({
   userPublicKey,
   isBasketball = false,
 }) {
-  const { signAndSendSolanaTransaction, walletAddress: authWalletAddress, proofToken } = useAuth();
+  const { signAndSendSolanaTransaction, solanaAddress, walletAddress: authWalletAddress, proofToken } = useAuth();
   const navigation = useNavigation();
   const isDarkMode = useColorScheme() !== "light";
   const theme = useMemo(
@@ -341,8 +341,11 @@ export default function BuyButtons({
   };
 
   const handleConfirmPurchase = async (payload) => {
-    console.log("Wallet address:", userPublicKey);
-    if (!userPublicKey) {
+    // Use embedded wallet address for trade - must match the wallet that signs the transaction
+    const tradeWalletAddress = solanaAddress || userPublicKey;
+    console.log("[BuyButtons] handleConfirmPurchase called, payload:", JSON.stringify(payload));
+    console.log("[BuyButtons] tradeWalletAddress:", tradeWalletAddress, "solanaAddress:", !!solanaAddress);
+    if (!tradeWalletAddress) {
       setBuyError("Connect wallet to complete purchase.");
       return;
     }
@@ -360,27 +363,30 @@ export default function BuyButtons({
     setBuySending(true);
     const url = `${API_BASE_URL}/api/trade/buy`;
     const body = {
-      side: buyModalSide,
-      quantity: payload.quantity,
+      amount: payload.totalCost,
       totalCost: payload.totalCost,
+      quantity: payload.quantity,
+      side: buyModalSide,
       awayTicker,
       homeTicker,
       eventTicker: event?.ticker,
-      userPublicKey,
+      userPublicKey: tradeWalletAddress,
     };
     const headers = { "Content-Type": "application/json" };
     if (proofToken) headers["x-proof-token"] = proofToken;
 
     try {
-      console.log("[Trade] Using wallet for purchase:", userPublicKey, "totalCost:", payload.totalCost);
+      console.log("[BuyButtons] POST", url, "body:", JSON.stringify(body));
       setBuyError("Preparing transaction...");
       const response = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
       const text = await response.text();
+      console.log("[BuyButtons] Response status:", response.status, "body length:", text?.length);
       let data;
       try {
         data = JSON.parse(text);
       } catch {
         data = { error: text };
+        console.log("[BuyButtons] Response parse failed, raw:", text?.slice(0, 200));
       }
 
       if (!response.ok) {
@@ -390,6 +396,7 @@ export default function BuyButtons({
       }
 
       const transactionBase64 = data?.transaction;
+      console.log("[BuyButtons] Got transaction:", !!transactionBase64, "network:", data?.network, "preview:", data?.preview);
       if (!transactionBase64 || typeof transactionBase64 !== "string") {
         const detail = data?.details || data?.error || "";
         setBuyError(detail ? `No transaction: ${detail}` : "No transaction received from server.");
@@ -397,12 +404,15 @@ export default function BuyButtons({
         return;
       }
 
-      // DFlow dev-quote-api and quote-api both return mainnet transactions; always use mainnet RPC.
-      console.log("[Trade] Submitting to mainnet RPC (DFlow dev/prod both use mainnet).");
+      const network = data?.network || "mainnet-beta";
+      const rpcUrl = network === "devnet" ? "https://api.devnet.solana.com" : undefined;
+      console.log("[BuyButtons] Submitting to", network, "user pays fees");
       setBuyError("Please approve the transaction in your wallet...");
       let signature;
       try {
-        const signPromise = signAndSendSolanaTransaction(transactionBase64);
+        const signPromise = signAndSendSolanaTransaction(transactionBase64, {
+          ...(rpcUrl ? { rpcUrl } : {}),
+        });
         const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error("Signing timed out. Please try again.")), 60000)
         );
@@ -412,6 +422,7 @@ export default function BuyButtons({
         }
       } catch (signErr) {
         const msg = signErr?.message || "";
+        console.log("[BuyButtons] signAndSend error:", msg);
         if (msg.includes("reject") || msg.includes("cancel")) {
           setBuyError("Transaction was cancelled.");
         } else if (msg.includes("Insufficient") || msg.includes("balance") || msg.includes("debit") || msg.includes("no record of a prior credit") || msg.includes("Simulation failed")) {
@@ -419,7 +430,7 @@ export default function BuyButtons({
           setBuySending(false);
           Alert.alert(
             "Insufficient Funds",
-            "The wallet used for this purchase doesn't have enough USDC on Solana mainnet (or its USDC account isn't set up). Make sure the address in Wallet matches the one used here. Would you like to add funds?",
+            `The wallet used for this purchase doesn't have enough USDC on Solana ${network === "devnet" ? "devnet" : "mainnet"} (or its USDC account isn't set up). Make sure the address in Wallet matches the one used here. Would you like to add funds?`,
             [
               { text: "Cancel", style: "cancel" },
               {
@@ -431,10 +442,10 @@ export default function BuyButtons({
                     while (rootNav.getParent()) rootNav = rootNav.getParent();
                     rootNav.navigate("Main", {
                       screen: "Wallet",
-                      params: { screen: "Deposit", params: { walletAddress: authWalletAddress || userPublicKey } },
+                      params: { screen: "Deposit", params: { walletAddress: authWalletAddress || tradeWalletAddress } },
                     });
                   } catch {
-                    navigation.navigate("Wallet", { screen: "Deposit", params: { walletAddress: authWalletAddress || userPublicKey } });
+                    navigation.navigate("Wallet", { screen: "Deposit", params: { walletAddress: authWalletAddress || tradeWalletAddress } });
                   }
                 },
               },
@@ -449,12 +460,14 @@ export default function BuyButtons({
       }
 
       setBuyError("Waiting for confirmation...");
+      console.log("[BuyButtons] Signature:", signature?.slice(0, 16) + "...", "polling order-status");
       const delay = (ms) => new Promise((r) => setTimeout(r, ms));
       await delay(1500);
       let orderConfirmed = false;
       for (let attempt = 1; attempt <= 5; attempt++) {
         try {
           if (attempt > 1) await delay(3000);
+          console.log("[BuyButtons] Order status attempt", attempt, "of 5");
           const statusRes = await fetch(
             `${API_BASE_URL}/api/trade/order-status?signature=${encodeURIComponent(signature)}`
           );
@@ -462,6 +475,7 @@ export default function BuyButtons({
           const statusData = statusText ? JSON.parse(statusText) : null;
           if (statusData && statusRes.ok) {
             orderConfirmed = true;
+            console.log("[BuyButtons] Order confirmed, statusData:", statusData);
             setBuyError("Order confirmed!");
             await delay(1000);
             break;
